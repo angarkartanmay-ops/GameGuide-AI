@@ -666,3 +666,48 @@
   backdrop-filter: blur(4px);
   border: 1px solid var(--panel-border);
 }
+
+/* Responsive Design for Mobile Devices */
+@media (max-width: 768px) {
+  .main-header {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  
+  .chat-wrapper {
+    padding: 0.5rem;
+  }
+  
+  .message-bubble {
+    max-width: 95%;
+    padding: 0.9rem 1.1rem;
+  }
+  
+  .input-area-wrapper {
+    padding: 0.5rem 0;
+  }
+  
+  .chat-input {
+    padding: 0.8rem;
+    font-size: 0.95rem;
+  }
+  
+  .upload-btn, .send-btn {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .brand h1 {
+    font-size: 1.4rem;
+  }
+  
+  .message-avatar {
+    width: 30px;
+    height: 30px;
+  }
+  
+  .message-image-wrapper {
+    max-width: 100%;
+  }
+}
