@@ -1,0 +1,170 @@
+/* index.css */
+:root {
+  /* Default/Fallback Theme Variables (Cyberpunk) */
+  --bg-color: #0d0914;
+  --panel-bg: rgba(20, 15, 30, 0.6);
+  --panel-border: rgba(0, 243, 255, 0.2);
+  --text-primary: #e0e0f0;
+  --text-secondary: #9aa0af;
+  --accent-1: #00f3ff; /* Cyan */
+  --accent-2: #ff00ea; /* Magenta */
+  --accent-glow: rgba(0, 243, 255, 0.4);
+  --user-bubble: rgba(0, 243, 255, 0.1);
+  --ai-bubble: rgba(255, 0, 234, 0.1);
+  --input-bg: rgba(0, 0, 0, 0.5);
+  --button-hover: #00e0eb;
+}
+
+[data-theme='matrix'] {
+  --bg-color: #0a120a;
+  --panel-bg: rgba(10, 22, 10, 0.7);
+  --panel-border: rgba(80, 200, 120, 0.25);
+  --text-primary: #c8e6c9;
+  --text-secondary: #6a9f6e;
+  --accent-1: #4caf50;
+  --accent-2: #2e7d32;
+  --accent-glow: rgba(76, 175, 80, 0.35);
+  --user-bubble: rgba(76, 175, 80, 0.1);
+  --ai-bubble: rgba(46, 125, 50, 0.15);
+  --input-bg: rgba(8, 16, 8, 0.8);
+  --button-hover: #43a047;
+}
+
+[data-theme='stealth'] {
+  --bg-color: #0f0f11;
+  --panel-bg: rgba(20, 20, 24, 0.8);
+  --panel-border: rgba(255, 40, 40, 0.2);
+  --text-primary: #f0f0f0;
+  --text-secondary: #70757a;
+  --accent-1: #ff2828;
+  --accent-2: #555555;
+  --accent-glow: rgba(255, 40, 40, 0.4);
+  --user-bubble: rgba(70, 70, 75, 0.2);
+  --ai-bubble: rgba(255, 40, 40, 0.1);
+  --input-bg: rgba(10, 10, 12, 0.7);
+  --button-hover: #e02020;
+}
+
+[data-theme='neon-tokyo'] {
+  --bg-color: #120810;
+  --panel-bg: rgba(25, 12, 22, 0.7);
+  --panel-border: rgba(255, 100, 50, 0.25);
+  --text-primary: #f5e0d0;
+  --text-secondary: #b08070;
+  --accent-1: #ff6b35;
+  --accent-2: #ff1493;
+  --accent-glow: rgba(255, 107, 53, 0.4);
+  --user-bubble: rgba(255, 107, 53, 0.12);
+  --ai-bubble: rgba(255, 20, 147, 0.1);
+  --input-bg: rgba(15, 8, 12, 0.8);
+  --button-hover: #ff5722;
+}
+
+[data-theme='arctic'] {
+  --bg-color: #0c1420;
+  --panel-bg: rgba(15, 25, 45, 0.6);
+  --panel-border: rgba(120, 200, 255, 0.2);
+  --text-primary: #e0eef8;
+  --text-secondary: #7a9ab8;
+  --accent-1: #64b5f6;
+  --accent-2: #e1f5fe;
+  --accent-glow: rgba(100, 181, 246, 0.3);
+  --user-bubble: rgba(100, 181, 246, 0.1);
+  --ai-bubble: rgba(225, 245, 254, 0.08);
+  --input-bg: rgba(10, 18, 30, 0.7);
+  --button-hover: #42a5f5;
+}
+
+[data-theme='minecraft'] {
+  --bg-color: #1a1208;
+  --panel-bg: rgba(30, 22, 10, 0.75);
+  --panel-border: rgba(100, 160, 60, 0.3);
+  --text-primary: #d4c8a0;
+  --text-secondary: #8a7a55;
+  --accent-1: #5b8c2a;
+  --accent-2: #8b6914;
+  --accent-glow: rgba(91, 140, 42, 0.35);
+  --user-bubble: rgba(139, 105, 20, 0.15);
+  --ai-bubble: rgba(91, 140, 42, 0.12);
+  --input-bg: rgba(20, 15, 5, 0.8);
+  --button-hover: #4a7a20;
+}
+
+[data-theme='rocket-league'] {
+  --bg-color: #080c18;
+  --panel-bg: rgba(10, 15, 30, 0.7);
+  --panel-border: rgba(30, 144, 255, 0.25);
+  --text-primary: #e8ecf4;
+  --text-secondary: #7a8aa8;
+  --accent-1: #1e90ff;
+  --accent-2: #ff8c00;
+  --accent-glow: rgba(30, 144, 255, 0.4);
+  --user-bubble: rgba(255, 140, 0, 0.12);
+  --ai-bubble: rgba(30, 144, 255, 0.1);
+  --input-bg: rgba(8, 10, 20, 0.8);
+  --button-hover: #1a80e6;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  min-height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  transition: background-color 0.5s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', sans-serif;
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: var(--panel-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: all 0.3s ease;
+}
+
+/* Scroller */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--accent-1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-2);
+}
+
+/* Base animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease forwards;
+}
+
+@keyframes pulse-glow {
+  0% { box-shadow: 0 0 5px var(--accent-glow); }
+  50% { box-shadow: 0 0 20px var(--accent-glow); }
+  100% { box-shadow: 0 0 5px var(--accent-glow); }
+}
