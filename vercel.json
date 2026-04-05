@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/reddit/:path*",
+      "destination": "https://www.reddit.com/:path*"
+    }
+  ]
+}
