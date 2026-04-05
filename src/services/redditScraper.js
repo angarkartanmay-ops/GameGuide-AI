@@ -80,10 +80,16 @@ export async function searchReddit(query) {
   try {
     // Build search across gaming subs + any detected game-specific sub
     const detectedSubs = detectGameSubs(query);
-    const allSubs = [...new Set([...detectedSubs, ...GAMING_SUBREDDITS.slice(0, 3)])];
-    const subredditStr = allSubs.join('+');
+    let searchUrl = '';
 
-    const searchUrl = `/api/reddit/r/${subredditStr}/search.json?q=${encodeURIComponent(query)}&sort=relevance&t=year&limit=5&restrict_sr=on`;
+    if (detectedSubs.length > 0) {
+      const allSubs = [...new Set([...detectedSubs, ...GAMING_SUBREDDITS.slice(0, 3)])];
+      const subredditStr = allSubs.join('+');
+      searchUrl = `/api/reddit/r/${subredditStr}/search.json?q=${encodeURIComponent(query)}&sort=relevance&t=year&limit=5&restrict_sr=on`;
+    } else {
+      // Global search for niche games like Marvel Future Fight
+      searchUrl = `/api/reddit/search.json?q=${encodeURIComponent(query)}&sort=relevance&t=year&limit=5`;
+    }
 
     const response = await fetch(searchUrl);
     if (!response.ok) {
