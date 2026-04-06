@@ -4,10 +4,21 @@ import remarkGfm from 'remark-gfm';
 import { Bot, User } from 'lucide-react';
 import FollowUpChips, { parseFollowUps } from './FollowUpChips';
 
+// Custom renderer: wraps every markdown table in a horizontally‑scrollable div
+// so it never overflows the bubble on narrow screens.
+const markdownComponents = {
+  table({ node, ...props }) {
+    return (
+      <div className="table-wrapper">
+        <table {...props} />
+      </div>
+    );
+  },
+};
+
 export default function MessageBubble({ message, onFollowUpClick }) {
   const isUser = message.sender === 'user';
 
-  // For AI messages, parse out follow-up questions
   const { cleanText, followUps } = isUser
     ? { cleanText: message.text, followUps: [] }
     : parseFollowUps(message.text);
@@ -18,10 +29,11 @@ export default function MessageBubble({ message, onFollowUpClick }) {
     <div className={`message-bubble-container ${isUser ? 'user' : 'ai'} animate-fade-in`}>
       <div className={`message-bubble ${isUser ? 'user' : 'ai'} glass-panel`}>
         <div className="message-avatar">
-          {isUser ? <User size={20} /> : <Bot size={20} />}
+          {isUser ? <User size={16} /> : <Bot size={16} />}
         </div>
+
         <div className="message-content">
-          {/* Render attached/generated images */}
+          {/* Attached / generated images */}
           {hasImages && (
             <div className={`message-images ${isUser ? 'user-images' : 'ai-images'}`}>
               {message.images.map((img, index) => (
@@ -41,13 +53,19 @@ export default function MessageBubble({ message, onFollowUpClick }) {
             </div>
           )}
 
-          {/* Render text content */}
+          {/* Text content */}
           {isUser ? (
             <p>{message.text}</p>
           ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanText}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={markdownComponents}
+            >
+              {cleanText}
+            </ReactMarkdown>
           )}
         </div>
+
         {!isUser && followUps.length > 0 && (
           <FollowUpChips followUps={followUps} onChipClick={onFollowUpClick} />
         )}
