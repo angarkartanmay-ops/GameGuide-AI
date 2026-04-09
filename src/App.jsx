@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { Gamepad2, Radio, BookOpen } from 'lucide-react';
 import ThemeSelector from './components/ThemeSelector';
+import UserProfile from './components/UserProfile';
 import ChatContainer from './components/ChatContainer';
 import ChatInput from './components/ChatInput';
 import useChat from './hooks/useChat';
@@ -35,7 +36,10 @@ function App() {
             )}
           </div>
         </div>
-        <ThemeSelector currentTheme={theme} onThemeChange={setTheme} />
+        <div className="header-controls">
+          <ThemeSelector currentTheme={theme} onThemeChange={setTheme} />
+          <UserProfile />
+        </div>
       </header>
 
       <main className="chat-wrapper">
