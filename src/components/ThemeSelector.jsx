@@ -2,13 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Palette } from 'lucide-react';
 
 const themes = [
-  { id: 'default', label: 'Cyberpunk 2077', emoji: '🌆' },
-  { id: 'matrix', label: 'Fallout', emoji: '☢️' },
-  { id: 'stealth', label: 'Valorant', emoji: '🎯' },
-  { id: 'neon-tokyo', label: 'Subway Surfers', emoji: '🛹' },
-  { id: 'arctic', label: 'Halo', emoji: '🪖' },
-  { id: 'minecraft', label: 'Minecraft', emoji: '⛏️' },
-  { id: 'rocket-league', label: 'Rocket League', emoji: '🚀' },
+  { id: 'default', label: 'Neon Synth', emoji: '🌆' },
+  { id: 'matrix', label: 'Wasteland Terminal', emoji: '☢️' },
+  { id: 'stealth', label: 'Tactical Strike', emoji: '🎯' },
+  { id: 'neon-tokyo', label: 'Urban Graffiti', emoji: '🛹' },
+  { id: 'arctic', label: 'Orbital Drop', emoji: '🪖' },
+  { id: 'voxel', label: 'Voxel World', emoji: '⛏️' },
+  { id: 'nitro-arena', label: 'Nitro Arena', emoji: '🚀' },
 ];
 
 export default function ThemeSelector({ currentTheme, onThemeChange }) {

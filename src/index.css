@@ -75,7 +75,7 @@
   --button-hover: #42a5f5;
 }
 
-[data-theme='minecraft'] {
+[data-theme='voxel'] {
   --bg-color: #1a1208;
   --panel-bg: rgba(30, 22, 10, 0.75);
   --panel-border: rgba(100, 160, 60, 0.3);
@@ -90,7 +90,7 @@
   --button-hover: #4a7a20;
 }
 
-[data-theme='rocket-league'] {
+[data-theme='nitro-arena'] {
   --bg-color: #080c18;
   --panel-bg: rgba(10, 15, 30, 0.7);
   --panel-border: rgba(30, 144, 255, 0.25);

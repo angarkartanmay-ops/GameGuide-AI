@@ -49,12 +49,12 @@ Standard AI models suffer from knowledge cut-offs. We bypassed this by building 
 *   An overarching Vanilla CSS architecture leveraging CSS variables (`--bg`, `--accent`, `--glass-bg`).
 *   A React dropdown modifies a global `data-theme` attribute on the base HTML document line, instantly causing a total visual cascade across the app without reloading.
 *   **6 Custom Top-Tier Game Themes Available:**
-    1.  **Cyberpunk 2077** (Dark slate, neon pink/cyan borders)
-    2.  **Fallout** (Black/green CRT terminal aesthetic, mono-style)
-    3.  **Valorant** (Clean slate gray, sharp aggressive red accents)
-    4.  **Subway Surfers** (Bright, vibrant playful colors, graffiti aesthetic)
-    5.  **Halo** (UNSC tactical grey with Cortana AI blue accents)
-    6.  **Minecraft** (Blocky earthy tones, grass green/stone gray combos)
+    1.  **Neon Synth** (Dark slate, neon pink/cyan borders)
+    2.  **Wasteland Terminal** (Black/green CRT terminal aesthetic, mono-style)
+    3.  **Tactical Strike** (Clean slate gray, sharp aggressive red accents)
+    4.  **Urban Graffiti** (Bright, vibrant playful colors, graffiti aesthetic)
+    5.  **Orbital Drop** (UNSC tactical grey with sci-fi blue accents)
+    6.  **Voxel World** (Blocky earthy tones, grass green/stone gray combos)
 
 ---
 
