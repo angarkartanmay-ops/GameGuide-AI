@@ -7,7 +7,10 @@ import { supabase } from './supabaseClient';
 export const generateChatResponse = async (apiKey, prompt, chatHistory, redditContext = '', wikiContext = '', attachments = []) => {
   try {
     const { data, error } = await supabase.functions.invoke('chat-proxy', {
-      body: { prompt, chatHistory, redditContext, wikiContext, attachments }
+      body: { prompt, chatHistory, redditContext, wikiContext, attachments },
+      headers: {
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+      }
     });
 
     if (error) {
