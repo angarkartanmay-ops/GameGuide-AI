@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import { Gamepad2, Radio, BookOpen, Cloud } from 'lucide-react';
+import { Gamepad2, Radio, BookOpen } from 'lucide-react';
 import ThemeSelector from './components/ThemeSelector';
 import UserProfile from './components/UserProfile';
 import ChatContainer from './components/ChatContainer';
@@ -24,12 +24,6 @@ function App() {
           <Gamepad2 className="brand-icon" size={32} />
           <h1>GameGuide-AI</h1>
           <div className="intel-badges">
-            {user && (
-              <div className="community-badge sync-badge animate-fade-in" title="Chat History Synced">
-                <Cloud size={14} />
-                <span>Cloud Sync</span>
-              </div>
-            )}
             {redditActive && (
               <div className="community-badge animate-fade-in">
                 <Radio size={14} />

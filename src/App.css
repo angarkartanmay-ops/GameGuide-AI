@@ -620,13 +620,6 @@
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
-/* Sync Badge Variant */
-.sync-badge {
-  color: #4ade80; /* bright green for reliable sync */
-  border-color: #4ade80;
-  animation: none; /* No pulse needed */
-}
-
 /* Wiki Badge Variant */
 .wiki-badge {
   color: var(--accent-2);

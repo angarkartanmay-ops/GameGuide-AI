@@ -10,34 +10,29 @@ export default function useChat(user) {
   const [redditActive, setRedditActive] = useState(false);
   const [wikiActive, setWikiActive] = useState(false);
 
-  // Fetch history on login, clear on logout
   useEffect(() => {
-    if (!user) {
-      setMessages([]);
-      return;
-    }
-
-    const fetchHistory = async () => {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .order('created_at', { ascending: true });
+    if (user) {
+      const fetchHistory = async () => {
+        const { data, error } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: true });
         
-      if (!error && data) {
-        setMessages(data.map(msg => ({
-          id: msg.id,
-          text: msg.text,
-          sender: msg.sender,
-          images: msg.images || []
-        })));
-      } else if (error) {
-        console.error('Error fetching chat history:', error);
-      }
-      setIsLoading(false);
-    };
-
-    fetchHistory();
+        if (!error && data) {
+          setMessages(data.map(msg => ({
+            id: msg.id || Date.now().toString(),
+            text: msg.text,
+            sender: msg.sender,
+            images: msg.images || []
+          })));
+        }
+      };
+      setIsLoading(true);
+      fetchHistory().finally(() => setIsLoading(false));
+    } else {
+      setMessages([]);
+    }
   }, [user]);
 
   const sendMessage = async (text, attachments = []) => {
@@ -54,15 +49,17 @@ export default function useChat(user) {
     };
 
     setMessages((prev) => [...prev, userMessage]);
-
-    // Persist to DB if logged in
+    
     if (user) {
-      supabase.from('chat_messages').insert([{
+      // Background sync, no await needed here for UX speed
+      supabase.from('chat_messages').insert({
         user_id: user.id,
         text: userMessage.text,
-        sender: 'user',
+        sender: userMessage.sender,
         images: userMessage.images
-      }]).then(({error}) => { if(error) console.error("History insert error:", error) });
+      }).then(({ error }) => {
+        if (error) console.error("History sync error:", error);
+      });
     }
 
     setIsLoading(true);
@@ -106,14 +103,13 @@ export default function useChat(user) {
 
       setMessages((prev) => [...prev, aiMessage]);
 
-      // Persist to DB if logged in
       if (user) {
-        supabase.from('chat_messages').insert([{
+        supabase.from('chat_messages').insert({
           user_id: user.id,
           text: aiMessage.text,
-          sender: 'ai',
+          sender: aiMessage.sender,
           images: aiMessage.images
-        }]).then(({error}) => { if(error) console.error("History insert error:", error) });
+        }).then();
       }
     } catch (error) {
       console.error(error);
@@ -124,6 +120,15 @@ export default function useChat(user) {
         images: [],
       };
       setMessages((prev) => [...prev, errorMessage]);
+
+      if (user) {
+        supabase.from('chat_messages').insert({
+          user_id: user.id,
+          text: errorMessage.text,
+          sender: errorMessage.sender,
+          images: []
+        }).then();
+      }
     } finally {
       setIsLoading(false);
     }

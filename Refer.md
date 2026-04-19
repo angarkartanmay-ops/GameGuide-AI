@@ -68,15 +68,19 @@ Standard AI models suffer from knowledge cut-offs. We bypassed this by building 
 
 ---
 
-## 4. Database & Persistence Layer
-*   **PostgreSQL via Supabase:** The application utilizes a customized strict `chat_messages` table within the managed Supabase environment to securely save chat histories for logged-in users.
-*   **Row Level Security (RLS):** Policies are enforced natively at the database level so authenticated users (`auth.uid() = user_id`) can only view or append their specific conversation.
-*   **State Hydration:** When a user logs in via Google OAuth, the `useChat` hook automatically queries Supabase, reconstructs the message object array seamlessly alongside Base64 image context, and maps it directly back into React state. 
+## 4. Supabase Database & Persistence
+The system employs **Supabase** out-of-the-box not just for Authentication (Google OAuth), but natively for backend persistence.
+*   **Chat History Storage:** When users authenticate via Google, a globally available `user` object is synced into `useChat()`.
+*   **Real-time Sync:** All outgoing user queries and incoming AI responses are asynchronously written into a `chat_messages` PostgreSQL table using `supabase.from().insert()`, providing a lightning-fast UI experience while safely archiving context behind the scenes.
+*   **Security (RLS):** The database utilizes strict **Row Level Security (RLS)** ensuring authenticated users can absolutely only trigger `SELECT` or `INSERT` operations on rows where their personal `auth.uid()` matches the message's `user_id`.
 
 ---
 
 ## 5. Current State & Future Architecture Migration (Next Steps)
-The application presently is highly stable and fully operational utilizing a combined Vite local proxy and Vercel Serverless Function architecture in production.
+The application presently is highly stable and fully operational when tested locally via `npm run dev`.
 
-**Future Considerations:**
-*   Migrating the heavy Base64 image payload strings found in the `chat_messages` PostgreSQL `jsonb` array out into proper **Supabase Storage buckets** if database bloat becomes an issue due to extreme scale.
+**Important Notice on Deployment:**
+Because the Intelligence Scrapers (Reddit & Fandom) were successfully migrated from `vite.config.js` into Vercel Serverless Functions (`/api`), standard static deployment (Vercel) officially supports live web scraping without breaking!
+
+To take this to the next scalability stage:
+*   Transitioning image cache saving from bloated Native Base64 into Supabase Storage buckets.
