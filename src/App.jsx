@@ -10,7 +10,7 @@ import useAuth from './hooks/useAuth';
 import LoadingScreen from './components/LoadingScreen';
 
 function App() {
-  const [theme, setTheme] = useState('default');
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'default');
   const { user, loading: authLoading } = useAuth();
   const { messages, isLoading, sendMessage, redditActive, wikiActive } = useChat(user);
 
@@ -19,23 +19,30 @@ function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Loading Screen Logic
+  // Handle manual login/logout triggers or initial auth loading
   useEffect(() => {
     if (authLoading) {
       setShowLoader(true);
       setExitingLoader(false);
-    } else {
-      // Artificial delay of 1.5s to show cool gamer graphics
-      const timer = setTimeout(() => {
-        setExitingLoader(true);
-        // Wait 500ms for transition CSS to finish before unmounting completely
-        setTimeout(() => setShowLoader(false), 500);
-      }, 1500);
-      return () => clearTimeout(timer);
+      return;
     }
-  }, [authLoading]);
+
+    // Force loader trigger immediately when user explicitly logs in or out
+    setShowLoader(true);
+    setExitingLoader(false);
+
+    // Artificial animated delay of 1.5s 
+    const timer = setTimeout(() => {
+      setExitingLoader(true);
+      // Wait 500ms for transition CSS to finish before unmounting completely
+      setTimeout(() => setShowLoader(false), 500);
+    }, 1500);
+    
+    return () => clearTimeout(timer);
+  }, [authLoading, user]);
 
   return (
     <div className="app-container">
