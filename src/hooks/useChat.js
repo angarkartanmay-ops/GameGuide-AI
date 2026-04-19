@@ -1,13 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../services/supabaseClient';
 import { generateChatResponse } from '../services/aiProvider';
 import { searchReddit } from '../services/redditScraper';
 import { searchWikis } from '../services/wikiScraper';
 
-export default function useChat() {
+export default function useChat(user) {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [redditActive, setRedditActive] = useState(false);
   const [wikiActive, setWikiActive] = useState(false);
+
+  // Fetch history on login, clear on logout
+  useEffect(() => {
+    if (!user) {
+      setMessages([]);
+      return;
+    }
+
+    const fetchHistory = async () => {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .order('created_at', { ascending: true });
+        
+      if (!error && data) {
+        setMessages(data.map(msg => ({
+          id: msg.id,
+          text: msg.text,
+          sender: msg.sender,
+          images: msg.images || []
+        })));
+      } else if (error) {
+        console.error('Error fetching chat history:', error);
+      }
+      setIsLoading(false);
+    };
+
+    fetchHistory();
+  }, [user]);
 
   const sendMessage = async (text, attachments = []) => {
     // Build user message with optional image previews
@@ -23,6 +54,17 @@ export default function useChat() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+
+    // Persist to DB if logged in
+    if (user) {
+      supabase.from('chat_messages').insert([{
+        user_id: user.id,
+        text: userMessage.text,
+        sender: 'user',
+        images: userMessage.images
+      }]).then(({error}) => { if(error) console.error("History insert error:", error) });
+    }
+
     setIsLoading(true);
     setRedditActive(false);
     setWikiActive(false);
@@ -63,6 +105,16 @@ export default function useChat() {
       };
 
       setMessages((prev) => [...prev, aiMessage]);
+
+      // Persist to DB if logged in
+      if (user) {
+        supabase.from('chat_messages').insert([{
+          user_id: user.id,
+          text: aiMessage.text,
+          sender: 'ai',
+          images: aiMessage.images
+        }]).then(({error}) => { if(error) console.error("History insert error:", error) });
+      }
     } catch (error) {
       console.error(error);
       const errorMessage = {

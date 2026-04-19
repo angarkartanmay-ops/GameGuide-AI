@@ -68,10 +68,15 @@ Standard AI models suffer from knowledge cut-offs. We bypassed this by building 
 
 ---
 
-## 4. Current State & Future Architecture Migration (Next Steps)
-The application presently is highly stable and fully operational when tested locally via `npm run dev`.
+## 4. Database & Persistence Layer
+*   **PostgreSQL via Supabase:** The application utilizes a customized strict `chat_messages` table within the managed Supabase environment to securely save chat histories for logged-in users.
+*   **Row Level Security (RLS):** Policies are enforced natively at the database level so authenticated users (`auth.uid() = user_id`) can only view or append their specific conversation.
+*   **State Hydration:** When a user logs in via Google OAuth, the `useChat` hook automatically queries Supabase, reconstructs the message object array seamlessly alongside Base64 image context, and maps it directly back into React state. 
 
-**Important Notice on Deployment:**
-Because the Intelligence Scrapers (Reddit & Fandom) are anchored inside `vite.config.js` (dev-server middleware), standard static deployment (Vercel/Netlify basic) will strip the scraping features out. 
+---
 
-To take this to final production, the next major architectural task is migrating the `vite.config.js` endpoints out into a standard Serverless `/api` folder structure (for Vercel) or wrapping the React App inside a lightweight Node.js/Express server wrapper for Render/Railway deployment.
+## 5. Current State & Future Architecture Migration (Next Steps)
+The application presently is highly stable and fully operational utilizing a combined Vite local proxy and Vercel Serverless Function architecture in production.
+
+**Future Considerations:**
+*   Migrating the heavy Base64 image payload strings found in the `chat_messages` PostgreSQL `jsonb` array out into proper **Supabase Storage buckets** if database bloat becomes an issue due to extreme scale.
