@@ -7,18 +7,39 @@ import ChatContainer from './components/ChatContainer';
 import ChatInput from './components/ChatInput';
 import useChat from './hooks/useChat';
 import useAuth from './hooks/useAuth';
+import LoadingScreen from './components/LoadingScreen';
 
 function App() {
   const [theme, setTheme] = useState('default');
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { messages, isLoading, sendMessage, redditActive, wikiActive } = useChat(user);
+
+  const [showLoader, setShowLoader] = useState(true);
+  const [exitingLoader, setExitingLoader] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
+  // Loading Screen Logic
+  useEffect(() => {
+    if (authLoading) {
+      setShowLoader(true);
+      setExitingLoader(false);
+    } else {
+      // Artificial delay of 1.5s to show cool gamer graphics
+      const timer = setTimeout(() => {
+        setExitingLoader(true);
+        // Wait 500ms for transition CSS to finish before unmounting completely
+        setTimeout(() => setShowLoader(false), 500);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [authLoading]);
+
   return (
     <div className="app-container">
+      {showLoader && <LoadingScreen isExiting={exitingLoader} />}
       <header className="main-header">
         <div className="brand">
           <Gamepad2 className="brand-icon" size={32} />

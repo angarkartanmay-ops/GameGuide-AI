@@ -1,0 +1,188 @@
+/* LoadingScreen.css */
+.loading-screen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--bg-color);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  transition: opacity 0.5s ease-in-out, transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.loading-screen-overlay.exiting {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(1.05); /* Slight pop out effect when exiting */
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+}
+
+/* Common text styles */
+.loading-text {
+  color: var(--accent-1);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  text-shadow: 0 0 10px var(--accent-glow);
+  animation: pulse 1.5s infinite;
+  text-align: center;
+}
+
+.loading-subtext {
+  color: var(--text-secondary);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+  animation: flicker 2s infinite alternate;
+}
+
+/* Animation 1: Cyber Glitch */
+.anim-cyber-glitch .glitch-box {
+  width: 100px;
+  height: 100px;
+  border: 4px solid var(--accent-1);
+  position: relative;
+  animation: glitch-anim 2s infinite linear alternate-reverse;
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.anim-cyber-glitch .glitch-box::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: -10px;
+  right: -10px;
+  height: 20px;
+  background: var(--accent-2);
+  opacity: 0.5;
+  animation: glitch-anim-2 3s infinite linear alternate-reverse;
+}
+
+/* Animation 2: Radar Sweep */
+.anim-radar-sweep .radar-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.anim-radar-sweep .radar-circle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 50%;
+  height: 50%;
+  background: linear-gradient(45deg, var(--accent-1) 0%, transparent 50%);
+  transform-origin: top left;
+  animation: radar-spin 2s linear infinite;
+}
+
+/* Animation 3: Hex Grid Spinner */
+.anim-hex-grid .hex-spinner {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  animation: spin-slow 8s linear infinite;
+}
+
+.anim-hex-grid .hex {
+  width: 32px;
+  height: 32px;
+  background: var(--accent-2);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  animation: hex-pulse 1.5s ease-in-out infinite alternate;
+}
+.anim-hex-grid .hex:nth-child(1) { background: var(--accent-1); }
+.anim-hex-grid .hex:nth-child(2) { animation-delay: 0.3s; }
+.anim-hex-grid .hex:nth-child(3) { animation-delay: 0.6s; }
+
+/* Animation 4: Neon Pulse Rings */
+.anim-pulse-neon .ring-container {
+  position: relative;
+  width: 100px;
+  height: 100px;
+}
+
+.anim-pulse-neon .ring {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  border-top-color: var(--accent-1);
+  border-bottom-color: var(--accent-2);
+  animation: spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.anim-pulse-neon .ring:nth-child(2) {
+  top: 15px; left: 15px; right: 15px; bottom: 15px;
+  animation-direction: reverse;
+  animation-duration: 2s;
+  border-top-color: var(--accent-2);
+  border-bottom-color: var(--accent-1);
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes spin-slow {
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes radar-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes hex-pulse {
+  0% { transform: scale(0.8); opacity: 0.4; }
+  100% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 15px var(--accent-glow); }
+}
+
+@keyframes glitch-anim {
+  0% { clip-path: inset(10% 0 80% 0); transform: translate(-3px, 3px); }
+  20% { clip-path: inset(80% 0 10% 0); transform: translate(3px, -3px); }
+  40% { clip-path: inset(40% 0 40% 0); transform: translate(3px, 3px); }
+  60% { clip-path: inset(20% 0 60% 0); transform: translate(-3px, -3px); }
+  80% { clip-path: inset(60% 0 20% 0); transform: translate(3px, 3px); }
+  100% { clip-path: inset(10% 0 80% 0); transform: translate(-3px, 3px); }
+}
+
+@keyframes glitch-anim-2 {
+  0% { clip-path: inset(80% 0 10% 0); transform: translate(5px, -2px); }
+  20% { clip-path: inset(10% 0 80% 0); transform: translate(-2px, 5px); }
+  40% { clip-path: inset(60% 0 20% 0); transform: translate(5px, 2px); }
+  60% { clip-path: inset(40% 0 40% 0); transform: translate(2px, -5px); }
+  80% { clip-path: inset(20% 0 60% 0); transform: translate(-2px, -2px); }
+  100% { clip-path: inset(80% 0 10% 0); transform: translate(5px, -2px); }
+}
+
+@keyframes flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
+  20%, 24%, 55% { opacity: 0.2; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--accent-glow); text-shadow: 0 0 10px var(--accent-glow); }
+  50% { opacity: 0.6; box-shadow: none; text-shadow: none; }
+}
