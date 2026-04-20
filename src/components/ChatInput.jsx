@@ -174,7 +174,11 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
             <button className="command-palette-close" onClick={() => setShowCommands(false)}>✕</button>
           </div>
           {SLASH_COMMANDS
-            .filter(cmd => cmd.trigger.startsWith(inputText.toLowerCase()) || inputText === '/')
+            .filter(cmd => {
+              const typed = inputText.toLowerCase();
+              // Show all when just '/' typed; filter as more chars added
+              return typed === '/' || cmd.trigger.startsWith(typed);
+            })
             .map((cmd) => (
               <button
                 key={cmd.trigger}
