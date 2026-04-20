@@ -846,3 +846,107 @@
     max-width: 100%;
   }
 }
+
+/* ─── Slash Command Palette ──────────────────────────────────────────────── */
+.command-palette {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  right: 0;
+  border-radius: 14px;
+  border: 1px solid var(--accent-1);
+  background: var(--panel-bg);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 0 30px var(--accent-glow), 0 8px 32px rgba(0,0,0,0.5);
+  overflow: hidden;
+  z-index: 100;
+}
+
+.command-palette-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 1rem;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #000;
+}
+
+.command-palette-close {
+  background: none;
+  border: none;
+  color: #000;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.command-palette-close:hover { opacity: 1; }
+
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--panel-border);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, box-shadow 0.15s;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+.command-item:last-child { border-bottom: none; }
+.command-item:hover {
+  background: rgba(var(--accent-rgb, 0,255,255), 0.08);
+  box-shadow: inset 3px 0 0 var(--accent-1);
+}
+
+.command-emoji {
+  font-size: 1.2rem;
+  width: 1.6rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.command-trigger {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent-1);
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.command-arrow {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.command-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+/* Command response badge */
+.message-bubble.ai .command-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  color: #000;
+  margin-bottom: 0.5rem;
+}

@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SendIcon, Paperclip, X, Image as ImageIcon } from 'lucide-react';
+import { SendHorizonal, Paperclip, X, ChevronRight } from 'lucide-react';
 
-export default function ChatInput({ onSendMessage, isLoading }) {
+export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [] }) {
   const [inputText, setInputText] = useState('');
-  const [attachments, setAttachments] = useState([]); // { file, previewUrl, data, mimeType }
+  const [attachments, setAttachments] = useState([]);
+  const [showCommands, setShowCommands] = useState(false);
   const textAreaRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -20,10 +21,21 @@ export default function ChatInput({ onSendMessage, isLoading }) {
   }, [inputText]);
 
   const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      setShowCommands(false);
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
+  };
+
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    setInputText(val);
+    // Show command palette only if text starts with / and nothing else yet
+    setShowCommands(val.startsWith('/') && SLASH_COMMANDS.length > 0);
   };
 
   const handleSend = () => {
@@ -35,10 +47,19 @@ export default function ChatInput({ onSendMessage, isLoading }) {
       onSendMessage(inputText.trim() || 'Analyze this image', attachmentData);
       setInputText('');
       setAttachments([]);
+      setShowCommands(false);
       if (textAreaRef.current) {
         textAreaRef.current.style.height = '56px';
       }
     }
+  };
+
+  const selectCommand = (trigger) => {
+    setInputText(trigger);
+    setShowCommands(false);
+    // Auto-send immediately for instant magic
+    onSendMessage(trigger, []);
+    setInputText('');
   };
 
   const handleFileSelect = async (e) => {
@@ -130,9 +151,9 @@ export default function ChatInput({ onSendMessage, isLoading }) {
           className="chat-input glass-panel"
           placeholder={attachments.length > 0
             ? "Describe what you need help with, or just send the image..."
-            : "Ask anything about games, lore, or technical issues..."}
+            : "Ask anything about games, lore, or technical issues... (try /help)"}
           value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           disabled={isLoading}
         />
@@ -141,9 +162,34 @@ export default function ChatInput({ onSendMessage, isLoading }) {
           onClick={handleSend}
           disabled={(!inputText.trim() && attachments.length === 0) || isLoading}
         >
-          <SendIcon size={24} />
+          <SendHorizonal size={24} />
         </button>
       </div>
+
+      {/* Slash Command Palette */}
+      {showCommands && (
+        <div className="command-palette glass-panel animate-fade-in">
+          <div className="command-palette-header">
+            <span>⚡ Commands</span>
+            <button className="command-palette-close" onClick={() => setShowCommands(false)}>✕</button>
+          </div>
+          {SLASH_COMMANDS
+            .filter(cmd => cmd.trigger.startsWith(inputText.toLowerCase()) || inputText === '/')
+            .map((cmd) => (
+              <button
+                key={cmd.trigger}
+                className="command-item"
+                onMouseDown={(e) => { e.preventDefault(); selectCommand(cmd.trigger); }}
+              >
+                <span className="command-emoji">{cmd.emoji}</span>
+                <span className="command-trigger">{cmd.trigger}</span>
+                <ChevronRight size={12} className="command-arrow" />
+                <span className="command-desc">{cmd.description}</span>
+              </button>
+            ))
+          }
+        </div>
+      )}
     </div>
   );
 }
