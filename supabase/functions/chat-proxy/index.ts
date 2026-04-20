@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { prompt, chatHistory = [], redditContext = '', wikiContext = '', attachments = [] } = await req.json();
+    const { prompt, chatHistory = [], redditContext = '', wikiContext = '', priceContext = '', attachments = [] } = await req.json();
 
     const apiKey = Deno.env.get('GOOGLE_API_KEY');
     
@@ -182,6 +182,9 @@ Deno.serve(async (req) => {
     }
     if (redditContext) {
       contextBlocks.push(`--- The following is real-time community data scraped from Reddit gaming communities. Use it to enrich your answer. ---\n${redditContext}`);
+    }
+    if (priceContext) {
+      contextBlocks.push(`--- The following is LIVE pricing data fetched from CheapShark right now. ALWAYS show this data when it is present. Show prices as a compact table or inline badge. Highlight if any game is at its Historic Low. Be direct: tell the user whether it is a good time to buy. ---\n${priceContext}`);
     }
 
     if (contextBlocks.length > 0) {

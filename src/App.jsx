@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import { Gamepad2, Radio, BookOpen } from 'lucide-react';
+import { Gamepad2, Radio, BookOpen, DollarSign } from 'lucide-react';
 import ThemeSelector from './components/ThemeSelector';
 import UserProfile from './components/UserProfile';
 import ChatContainer from './components/ChatContainer';
 import ChatInput from './components/ChatInput';
+import PriceBadge from './components/PriceBadge';
 import useChat from './hooks/useChat';
 import useAuth from './hooks/useAuth';
 import LoadingScreen from './components/LoadingScreen';
@@ -12,7 +13,7 @@ import LoadingScreen from './components/LoadingScreen';
 function App() {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'default');
   const { user, loading: authLoading } = useAuth();
-  const { messages, isLoading, sendMessage, redditActive, wikiActive, SLASH_COMMANDS } = useChat(user);
+  const { messages, isLoading, sendMessage, redditActive, wikiActive, priceActive, priceData, SLASH_COMMANDS } = useChat(user);
 
   const [showLoader, setShowLoader] = useState(true);
   const [exitingLoader, setExitingLoader] = useState(false);
@@ -64,6 +65,12 @@ function App() {
                 <span>Wiki Intel</span>
               </div>
             )}
+            {priceActive && (
+              <div className="community-badge price-badge animate-fade-in">
+                <DollarSign size={14} />
+                <span>Live Prices</span>
+              </div>
+            )}
           </div>
         </div>
         <div className="header-controls">
@@ -79,6 +86,7 @@ function App() {
           isLoading={isLoading}
           onFollowUpClick={(question) => sendMessage(question, [])}
         />
+        {priceActive && <PriceBadge priceData={priceData} />}
         <ChatInput onSendMessage={sendMessage} isLoading={isLoading} SLASH_COMMANDS={SLASH_COMMANDS} />
       </main>
     </div>

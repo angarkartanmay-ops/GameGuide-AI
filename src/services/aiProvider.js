@@ -4,10 +4,10 @@ import { supabase } from './supabaseClient';
  * Standard text response using GameGuide-AI Supabase Edge Function.
  * Accepts optional image attachments for analysis.
  */
-export const generateChatResponse = async (apiKey, prompt, chatHistory, redditContext = '', wikiContext = '', attachments = []) => {
+export const generateChatResponse = async (apiKey, prompt, chatHistory, redditContext = '', wikiContext = '', attachments = [], priceContext = '') => {
   try {
     const { data, error } = await supabase.functions.invoke('chat-proxy', {
-      body: { prompt, chatHistory, redditContext, wikiContext, attachments },
+      body: { prompt, chatHistory, redditContext, wikiContext, attachments, priceContext },
       headers: {
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
       }

@@ -3,12 +3,15 @@ import { supabase, supabaseAnonKey } from '../services/supabaseClient';
 import { generateChatResponse } from '../services/aiProvider';
 import { searchReddit } from '../services/redditScraper';
 import { searchWikis } from '../services/wikiScraper';
+import { fetchPrices, fetchPricesSummary } from '../services/priceScraper';
 
 export default function useChat(user) {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [redditActive, setRedditActive] = useState(false);
   const [wikiActive, setWikiActive] = useState(false);
+  const [priceActive, setPriceActive] = useState(false);
+  const [priceData, setPriceData] = useState([]);
 
   useEffect(() => {
     if (user) {
@@ -224,15 +227,20 @@ export default function useChat(user) {
     setIsLoading(true);
     setRedditActive(false);
     setWikiActive(false);
+    setPriceActive(false);
+    setPriceData([]);
 
     try {
-      // Step 1: Scrape Reddit + Wiki in parallel for speed
+      // Step 1: Scrape Reddit + Wiki + Prices in parallel for speed
       let redditContext = '';
       let wikiContext = '';
+      let priceContext = '';
 
-      const [redditResult, wikiResult] = await Promise.allSettled([
+      const [redditResult, wikiResult, priceResult, priceSummaryResult] = await Promise.allSettled([
         searchReddit(text),
         searchWikis(text),
+        fetchPrices(text),
+        fetchPricesSummary(text),
       ]);
 
       if (redditResult.status === 'fulfilled' && redditResult.value) {
@@ -243,10 +251,17 @@ export default function useChat(user) {
         wikiContext = wikiResult.value;
         setWikiActive(true);
       }
+      if (priceResult.status === 'fulfilled' && priceResult.value) {
+        priceContext = priceResult.value;
+      }
+      if (priceSummaryResult.status === 'fulfilled' && priceSummaryResult.value?.length > 0) {
+        setPriceData(priceSummaryResult.value);
+        setPriceActive(true);
+      }
 
       // Step 2: Call AI with all gathered context + attachments
       const aiResponse = await generateChatResponse(
-        null, text, messages, redditContext, wikiContext, attachments
+        null, text, messages, redditContext, wikiContext, attachments, priceContext
       );
 
       // AI response is now { text, images }
@@ -300,6 +315,8 @@ export default function useChat(user) {
     clearChat,
     redditActive,
     wikiActive,
+    priceActive,
+    priceData,
     SLASH_COMMANDS,
   };
 }
