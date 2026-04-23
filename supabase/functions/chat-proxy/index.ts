@@ -98,9 +98,11 @@ function shouldGenerateImage(query: string) {
   return IMAGE_KEYWORDS.some(k => lower.includes(k));
 }
 
+// Image generation models (in priority order)
+// gemini-2.0-flash-exp supports multimodal output including images
 const IMAGE_MODELS = [
-  'gemini-1.5-flash',
-  'gemini-1.5-pro',
+  'gemini-2.0-flash-exp',
+  'gemini-2.0-flash',
 ];
 
 async function generateImageWithRetry(ai: any, prompt: string) {
@@ -128,15 +130,24 @@ async function generateImageWithRetry(ai: any, prompt: string) {
   return null;
 }
 
-const MODELS_TO_TRY = ['gemini-1.5-pro', 'gemini-1.5-flash'];
+// Chat models in priority order:
+// 1. gemini-2.0-flash       — fast, generous free quota, best for most queries
+// 2. gemini-2.5-flash-preview-04-17 — most capable, slightly slower
+// 3. gemini-2.0-flash-lite  — ultra-fast fallback when others are overloaded
+const MODELS_TO_TRY = [
+  'gemini-2.0-flash',
+  'gemini-2.5-flash-preview-04-17',
+  'gemini-2.0-flash-lite',
+];
 
 async function callAiWithRetry(ai: any, contents: any, systemInstruction: string) {
   let lastError = null;
 
   for (const model of MODELS_TO_TRY) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
+    // Up to 3 attempts per model with exponential backoff
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        console.log(`Calling Gemini API (Model: ${model}, Attempt: ${attempt})...`);
+        console.log(`Calling Gemini (Model: ${model}, Attempt: ${attempt})...`);
         const result = await ai.models.generateContent({
           model,
           contents,
@@ -145,26 +156,42 @@ async function callAiWithRetry(ai: any, contents: any, systemInstruction: string
         return result.text;
       } catch (error: any) {
         lastError = error;
-        const status = error.status || "";
-        const message = error.message.toLowerCase();
-        
-        console.warn(`Attempt ${attempt} on ${model} failed:`, message);
+        const msg = (error.message || '').toLowerCase();
 
-        // If it's a 503 (Unavailable/High Demand) or 429 (Rate Limit), wait and retry
-        if (message.includes('503') || message.includes('429') || message.includes('unavailable') || message.includes('demand')) {
-          if (attempt < 2) {
-            const delay = attempt * 1500;
-            console.log(`Retrying in ${delay}ms...`);
-            await new Promise(r => setTimeout(r, delay));
-            continue;
-          }
-        } else {
-          // If it's a permanent error (like 400 Bad Request), don't retry this model
+        console.warn(`Attempt ${attempt} on ${model} failed: ${msg}`);
+
+        // 404 = wrong model name / not available in this region → skip to next model immediately
+        if (msg.includes('404') || msg.includes('not found') || msg.includes('not supported')) {
+          console.warn(`Model ${model} not available — skipping to next.`);
           break;
         }
+
+        // 400 Bad Request = bad payload, won't help retrying
+        if (msg.includes('400') || msg.includes('bad request') || msg.includes('invalid')) {
+          break;
+        }
+
+        // 429 Rate Limited or 503 High Demand → wait with exponential backoff then retry
+        if (msg.includes('503') || msg.includes('429') || msg.includes('unavailable') ||
+            msg.includes('demand') || msg.includes('quota') || msg.includes('rate limit')) {
+          if (attempt < 3) {
+            const delay = attempt * 2000; // 2s, 4s
+            console.log(`Rate limited/overloaded. Retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          } else {
+            // Exhausted retries on this model, try the next one
+            break;
+          }
+        }
+
+        // Unknown error: one retry then move on
+        if (attempt >= 2) break;
+        await new Promise(r => setTimeout(r, 1000));
       }
     }
   }
+
   throw lastError;
 }
 
@@ -231,12 +258,23 @@ Deno.serve(async (req) => {
 
   } catch (error: any) {
     console.error("Critical Function Error:", error);
-    
-    let friendly = error.message;
-    if (friendly.includes('503') || friendly.includes('demand')) {
-      friendly = "The Neural Net is currently under heavy load (503 Service Unavailable). The high demand is temporary—please try again in a moment!";
-    } else if (friendly.includes('429')) {
-      friendly = "API Rate Limit Exceeded. We are optimizing our throughput—please wait 10 seconds and try again.";
+
+    const raw = (error.message || '').toLowerCase();
+    let friendly: string;
+
+    if (raw.includes('not found') || raw.includes('404') || raw.includes('not supported')) {
+      friendly = "The AI model is temporarily unavailable. Our system already tried 3 fallback models. Please try again in 30 seconds.";
+    } else if (raw.includes('503') || raw.includes('demand') || raw.includes('unavailable')) {
+      friendly = "The AI is under heavy load right now. This is temporary — please try again in a moment!";
+    } else if (raw.includes('429') || raw.includes('quota') || raw.includes('rate limit')) {
+      friendly = "API rate limit reached. Please wait 15–30 seconds before your next message.";
+    } else if (raw.includes('400') || raw.includes('bad request')) {
+      friendly = "Your request couldn't be processed (possibly an unsupported attachment type). Try sending text only.";
+    } else if (raw.includes('api key') || raw.includes('authentication') || raw.includes('401')) {
+      friendly = "Server authentication error. Please contact support.";
+    } else {
+      // Don't show raw JSON to users — show a clean fallback
+      friendly = "An unexpected error occurred. Please try again.";
     }
 
     return new Response(JSON.stringify({ 
