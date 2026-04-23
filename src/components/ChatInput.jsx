@@ -11,8 +11,8 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
   const adjustTextareaHeight = () => {
     const el = textAreaRef.current;
     if (el) {
-      el.style.height = '56px';
-      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+      el.style.height = '52px';
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
     }
   };
 
@@ -34,7 +34,6 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
   const handleInputChange = (e) => {
     const val = e.target.value;
     setInputText(val);
-    // Show command palette only if text starts with / and nothing else yet
     setShowCommands(val.startsWith('/') && SLASH_COMMANDS.length > 0);
   };
 
@@ -49,7 +48,7 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
       setAttachments([]);
       setShowCommands(false);
       if (textAreaRef.current) {
-        textAreaRef.current.style.height = '56px';
+        textAreaRef.current.style.height = '52px';
       }
     }
   };
@@ -57,7 +56,6 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
   const selectCommand = (trigger) => {
     setInputText(trigger);
     setShowCommands(false);
-    // Auto-send immediately for instant magic
     onSendMessage(trigger, []);
     setInputText('');
   };
@@ -67,11 +65,9 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
     if (!files.length) return;
 
     const newAttachments = [];
-
-    for (const file of files.slice(0, 3)) { // Max 3 files
+    for (const file of files.slice(0, 3)) {
       if (!file.type.startsWith('image/')) continue;
-      if (file.size > 10 * 1024 * 1024) continue; // 10MB limit
-
+      if (file.size > 10 * 1024 * 1024) continue;
       const base64 = await fileToBase64(file);
       newAttachments.push({
         file,
@@ -82,7 +78,6 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
     }
 
     setAttachments(prev => [...prev, ...newAttachments].slice(0, 3));
-    // Reset the input so the same file can be selected again
     e.target.value = '';
   };
 
@@ -99,7 +94,6 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
-        // Remove the data:mime;base64, prefix
         const base64 = reader.result.split(',')[1];
         resolve(base64);
       };
@@ -107,6 +101,11 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
       reader.readAsDataURL(file);
     });
   };
+
+  const filteredCommands = SLASH_COMMANDS.filter(cmd => {
+    const typed = inputText.toLowerCase();
+    return typed === '/' || cmd.trigger.startsWith(typed);
+  });
 
   return (
     <div className="input-area-wrapper">
@@ -127,12 +126,37 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
         </div>
       )}
 
+      {/* Slash Command Palette — rendered INSIDE wrapper for correct positioning */}
+      {showCommands && filteredCommands.length > 0 && (
+        <div className="command-palette glass-panel animate-fade-in">
+          <div className="command-palette-header">
+            <span>⚡ Commands</span>
+            <button className="command-palette-close" onClick={() => setShowCommands(false)}>✕</button>
+          </div>
+          <div className="command-palette-list">
+            {filteredCommands.map((cmd) => (
+              <button
+                key={cmd.trigger}
+                className="command-item"
+                onMouseDown={(e) => { e.preventDefault(); selectCommand(cmd.trigger); }}
+                onTouchEnd={(e) => { e.preventDefault(); selectCommand(cmd.trigger); }}
+              >
+                <span className="command-emoji">{cmd.emoji}</span>
+                <span className="command-trigger">{cmd.trigger}</span>
+                <ChevronRight size={12} className="command-arrow" />
+                <span className="command-desc">{cmd.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="input-area">
         <button
           className="upload-btn glass-panel"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading || attachments.length >= 3}
-          title="Attach image (screenshot, error, etc.)"
+          title="Attach image"
         >
           <Paperclip size={20} />
         </button>
@@ -150,8 +174,8 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
           ref={textAreaRef}
           className="chat-input glass-panel"
           placeholder={attachments.length > 0
-            ? "Describe what you need help with, or just send the image..."
-            : "Ask anything about games, lore, or technical issues... (try /help)"}
+            ? "Describe what you need..."
+            : "Ask about any game... (try /help)"}
           value={inputText}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
@@ -162,38 +186,9 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
           onClick={handleSend}
           disabled={(!inputText.trim() && attachments.length === 0) || isLoading}
         >
-          <SendHorizonal size={24} />
+          <SendHorizonal size={22} />
         </button>
       </div>
-
-      {/* Slash Command Palette */}
-      {showCommands && (
-        <div className="command-palette glass-panel animate-fade-in">
-          <div className="command-palette-header">
-            <span>⚡ Commands</span>
-            <button className="command-palette-close" onClick={() => setShowCommands(false)}>✕</button>
-          </div>
-          {SLASH_COMMANDS
-            .filter(cmd => {
-              const typed = inputText.toLowerCase();
-              // Show all when just '/' typed; filter as more chars added
-              return typed === '/' || cmd.trigger.startsWith(typed);
-            })
-            .map((cmd) => (
-              <button
-                key={cmd.trigger}
-                className="command-item"
-                onMouseDown={(e) => { e.preventDefault(); selectCommand(cmd.trigger); }}
-              >
-                <span className="command-emoji">{cmd.emoji}</span>
-                <span className="command-trigger">{cmd.trigger}</span>
-                <ChevronRight size={12} className="command-arrow" />
-                <span className="command-desc">{cmd.description}</span>
-              </button>
-            ))
-          }
-        </div>
-      )}
     </div>
   );
 }
