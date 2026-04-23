@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SendHorizonal, Paperclip, X, ChevronRight } from 'lucide-react';
+import { SendHorizonal, Paperclip, X, ChevronRight, Square, AlertTriangle } from 'lucide-react';
 
-export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [] }) {
+const MAX_CHARS = 1500; // warn above this threshold
+
+export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_COMMANDS = [] }) {
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState([]);
   const [showCommands, setShowCommands] = useState(false);
+  const [showCharWarning, setShowCharWarning] = useState(false);
   const textAreaRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -34,30 +37,37 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
   const handleInputChange = (e) => {
     const val = e.target.value;
     setInputText(val);
-    // Show command palette only if text starts with / and nothing else yet
     setShowCommands(val.startsWith('/') && SLASH_COMMANDS.length > 0);
   };
 
   const handleSend = () => {
-    if ((inputText.trim() || attachments.length > 0) && !isLoading) {
-      const attachmentData = attachments.map(a => ({
-        data: a.data,
-        mimeType: a.mimeType,
-      }));
-      onSendMessage(inputText.trim() || 'Analyze this image', attachmentData);
-      setInputText('');
-      setAttachments([]);
-      setShowCommands(false);
-      if (textAreaRef.current) {
-        textAreaRef.current.style.height = '56px';
-      }
+    if (isLoading) return; // blocked while loading (use Stop button instead)
+
+    const trimmed = inputText.trim();
+    if (!trimmed && attachments.length === 0) return;
+
+    // ── Long message warning ─────────────────────────────────────────────────
+    if (trimmed.length > MAX_CHARS && !showCharWarning) {
+      setShowCharWarning(true);
+      return; // show warning; user must click Send again to confirm
     }
+
+    setShowCharWarning(false);
+    const attachmentData = attachments.map(a => ({ data: a.data, mimeType: a.mimeType }));
+    onSendMessage(trimmed || 'Analyze this image', attachmentData);
+    setInputText('');
+    setAttachments([]);
+    setShowCommands(false);
+    if (textAreaRef.current) textAreaRef.current.style.height = '56px';
+  };
+
+  const handleStop = () => {
+    if (onCancel) onCancel();
   };
 
   const selectCommand = (trigger) => {
     setInputText(trigger);
     setShowCommands(false);
-    // Auto-send immediately for instant magic
     onSendMessage(trigger, []);
     setInputText('');
   };
@@ -67,11 +77,9 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
     if (!files.length) return;
 
     const newAttachments = [];
-
-    for (const file of files.slice(0, 3)) { // Max 3 files
+    for (const file of files.slice(0, 3)) {
       if (!file.type.startsWith('image/')) continue;
-      if (file.size > 10 * 1024 * 1024) continue; // 10MB limit
-
+      if (file.size > 10 * 1024 * 1024) continue;
       const base64 = await fileToBase64(file);
       newAttachments.push({
         file,
@@ -80,9 +88,7 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
         mimeType: file.type,
       });
     }
-
     setAttachments(prev => [...prev, ...newAttachments].slice(0, 3));
-    // Reset the input so the same file can be selected again
     e.target.value = '';
   };
 
@@ -95,31 +101,38 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
     });
   };
 
-  const fileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
+  const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => {
-        // Remove the data:mime;base64, prefix
-        const base64 = reader.result.split(',')[1];
-        resolve(base64);
-      };
+      reader.onload = () => resolve(reader.result.split(',')[1]);
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-  };
+
+  const charCount = inputText.length;
+  const isOverLimit = charCount > MAX_CHARS;
 
   return (
     <div className="input-area-wrapper">
+      {/* Long-message warning banner */}
+      {showCharWarning && (
+        <div className="char-warning animate-fade-in">
+          <AlertTriangle size={15} />
+          <span>
+            Your message is <strong>{charCount.toLocaleString()} characters</strong> — this uses more AI credits.
+            &nbsp;<button className="char-warning-confirm" onClick={handleSend}>Send anyway</button>
+            &nbsp;<button className="char-warning-cancel" onClick={() => setShowCharWarning(false)}>Edit</button>
+          </span>
+        </div>
+      )}
+
       {/* Attachment previews */}
       {attachments.length > 0 && (
         <div className="attachment-previews animate-fade-in">
           {attachments.map((attachment, index) => (
             <div key={index} className="attachment-preview">
               <img src={attachment.previewUrl} alt={`Attachment ${index + 1}`} />
-              <button
-                className="attachment-remove"
-                onClick={() => removeAttachment(index)}
-              >
+              <button className="attachment-remove" onClick={() => removeAttachment(index)}>
                 <X size={14} />
               </button>
             </div>
@@ -148,22 +161,45 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
 
         <textarea
           ref={textAreaRef}
-          className="chat-input glass-panel"
-          placeholder={attachments.length > 0
-            ? "Describe what you need help with, or just send the image..."
-            : "Ask anything about games, lore, or technical issues... (try /help)"}
+          className={`chat-input glass-panel ${isOverLimit ? 'chat-input--over-limit' : ''}`}
+          placeholder={
+            isLoading
+              ? 'Generating response... (press Stop to cancel)'
+              : attachments.length > 0
+                ? 'Describe what you need help with, or just send the image...'
+                : 'Ask anything about games, lore, or technical issues... (try /help)'
+          }
           value={inputText}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           disabled={isLoading}
         />
-        <button
-          className="send-btn glass-panel"
-          onClick={handleSend}
-          disabled={(!inputText.trim() && attachments.length === 0) || isLoading}
-        >
-          <SendHorizonal size={24} />
-        </button>
+
+        {/* Character counter — shown when approaching limit */}
+        {charCount > MAX_CHARS * 0.7 && !isLoading && (
+          <div className={`char-counter ${isOverLimit ? 'char-counter--over' : ''}`}>
+            {charCount}/{MAX_CHARS}
+          </div>
+        )}
+
+        {/* Send / Stop button */}
+        {isLoading ? (
+          <button
+            className="stop-btn glass-panel animate-pulse-stop"
+            onClick={handleStop}
+            title="Stop generating response"
+          >
+            <Square size={18} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            className="send-btn glass-panel"
+            onClick={handleSend}
+            disabled={(!inputText.trim() && attachments.length === 0) || isLoading}
+          >
+            <SendHorizonal size={24} />
+          </button>
+        )}
       </div>
 
       {/* Slash Command Palette */}
@@ -176,7 +212,6 @@ export default function ChatInput({ onSendMessage, isLoading, SLASH_COMMANDS = [
           {SLASH_COMMANDS
             .filter(cmd => {
               const typed = inputText.toLowerCase();
-              // Show all when just '/' typed; filter as more chars added
               return typed === '/' || cmd.trigger.startsWith(typed);
             })
             .map((cmd) => (

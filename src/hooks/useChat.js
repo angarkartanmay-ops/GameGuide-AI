@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase, supabaseAnonKey } from '../services/supabaseClient';
 import { generateChatResponse } from '../services/aiProvider';
 import { searchReddit } from '../services/redditScraper';
@@ -12,6 +12,12 @@ export default function useChat(user) {
   const [wikiActive, setWikiActive] = useState(false);
   const [priceActive, setPriceActive] = useState(false);
   const [priceData, setPriceData] = useState([]);
+
+  // ─── Credit-saving refs ────────────────────────────────────────────────────
+  const abortControllerRef = useRef(null);   // for Stop Response
+  const lastMessageRef = useRef('');         // for duplicate guard
+  const cooldownRef = useRef(false);         // for rate limiting (2s)
+  const cooldownTimerRef = useRef(null);     // to clear on unmount
 
   useEffect(() => {
     if (user) {
@@ -37,6 +43,21 @@ export default function useChat(user) {
       setMessages([]);
     }
   }, [user]);
+
+  // Clear cooldown timer on unmount
+  useEffect(() => () => clearTimeout(cooldownTimerRef.current), []);
+
+  /** Stop the in-flight AI request immediately. */
+  const cancelRequest = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    setRedditActive(false);
+    setWikiActive(false);
+    setPriceActive(false);
+  }, []);
 
   const clearChat = useCallback(async () => {
     setMessages([]);
@@ -192,10 +213,22 @@ export default function useChat(user) {
   };
 
   const sendMessage = async (text, attachments = []) => {
-    // ── Check for slash commands first ─────────────────────────────────────
+    // ── Slash commands ──────────────────────────────────────────────────────
     if (text.trim().startsWith('/')) {
       const handled = await processCommand(text);
       if (handled) return;
+    }
+
+    // ── Duplicate guard ─────────────────────────────────────────────────────
+    if (text.trim() === lastMessageRef.current && attachments.length === 0) {
+      console.warn('Duplicate message blocked.');
+      return;
+    }
+
+    // ── Cooldown guard (2 seconds between requests) ─────────────────────────
+    if (cooldownRef.current) {
+      console.warn('Rate limit: please wait before sending another message.');
+      return;
     }
 
     // Build user message with optional image previews
@@ -209,6 +242,8 @@ export default function useChat(user) {
         mimeType: a.mimeType,
       })),
     };
+
+    lastMessageRef.current = text.trim(); // record for duplicate guard
 
     setMessages((prev) => [...prev, userMessage]);
     
@@ -229,6 +264,14 @@ export default function useChat(user) {
     setWikiActive(false);
     setPriceActive(false);
     setPriceData([]);
+
+    // Create a new AbortController for this request
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    // Start 2-second cooldown
+    cooldownRef.current = true;
+    cooldownTimerRef.current = setTimeout(() => { cooldownRef.current = false; }, 2000);
 
     try {
       // Step 1: Scrape Reddit + Wiki + Prices in parallel for speed
@@ -261,7 +304,8 @@ export default function useChat(user) {
 
       // Step 2: Call AI with all gathered context + attachments
       const aiResponse = await generateChatResponse(
-        null, text, messages, redditContext, wikiContext, attachments, priceContext
+        null, text, messages, redditContext, wikiContext, attachments, priceContext,
+        controller.signal  // ← pass abort signal
       );
 
       // AI response is now { text, images }
@@ -286,6 +330,11 @@ export default function useChat(user) {
         }).then();
       }
     } catch (error) {
+      // AbortError = user clicked Stop — don't show any error message
+      if (error.name === 'AbortError') {
+        console.info('Request cancelled by user.');
+        return;
+      }
       console.error(error);
       const errorMessage = {
         id: (Date.now() + 1).toString(),
@@ -304,6 +353,7 @@ export default function useChat(user) {
         }).then();
       }
     } finally {
+      abortControllerRef.current = null;
       setIsLoading(false);
     }
   };
@@ -312,6 +362,7 @@ export default function useChat(user) {
     messages,
     isLoading,
     sendMessage,
+    cancelRequest,
     clearChat,
     redditActive,
     wikiActive,

@@ -13,7 +13,7 @@ import LoadingScreen from './components/LoadingScreen';
 function App() {
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'default');
   const { user, loading: authLoading } = useAuth();
-  const { messages, isLoading, sendMessage, redditActive, wikiActive, priceActive, priceData, SLASH_COMMANDS } = useChat(user);
+  const { messages, isLoading, sendMessage, cancelRequest, redditActive, wikiActive, priceActive, priceData, SLASH_COMMANDS } = useChat(user);
 
   const [showLoader, setShowLoader] = useState(true);
   const [exitingLoader, setExitingLoader] = useState(false);
@@ -87,7 +87,7 @@ function App() {
           onFollowUpClick={(question) => sendMessage(question, [])}
         />
         {priceActive && <PriceBadge priceData={priceData} />}
-        <ChatInput onSendMessage={sendMessage} isLoading={isLoading} SLASH_COMMANDS={SLASH_COMMANDS} />
+        <ChatInput onSendMessage={sendMessage} onCancel={cancelRequest} isLoading={isLoading} SLASH_COMMANDS={SLASH_COMMANDS} />
       </main>
     </div>
   );
