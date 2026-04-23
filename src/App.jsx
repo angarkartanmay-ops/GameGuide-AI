@@ -3,7 +3,6 @@ import './App.css';
 import { Gamepad2, Radio, BookOpen, DollarSign } from 'lucide-react';
 import ThemeSelector from './components/ThemeSelector';
 import UserProfile from './components/UserProfile';
-import MobileMenu from './components/MobileMenu';
 import ChatContainer from './components/ChatContainer';
 import ChatInput from './components/ChatInput';
 import PriceBadge from './components/PriceBadge';
@@ -24,29 +23,32 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // Handle manual login/logout triggers or initial auth loading
   useEffect(() => {
     if (authLoading) {
       setShowLoader(true);
       setExitingLoader(false);
       return;
     }
+
+    // Force loader trigger immediately when user explicitly logs in or out
     setShowLoader(true);
     setExitingLoader(false);
+
+    // Artificial animated delay of 1.5s 
     const timer = setTimeout(() => {
       setExitingLoader(true);
+      // Wait 500ms for transition CSS to finish before unmounting completely
       setTimeout(() => setShowLoader(false), 500);
     }, 1500);
+    
     return () => clearTimeout(timer);
   }, [authLoading, user]);
-
-  const activeIntelCount = [redditActive, wikiActive, priceActive].filter(Boolean).length;
 
   return (
     <div className="app-container">
       {showLoader && <LoadingScreen isExiting={exitingLoader} />}
-
-      {/* ── Desktop Header ─────────────────────────────────────── */}
-      <header className="main-header desktop-header">
+      <header className="main-header">
         <div className="brand">
           <Gamepad2 className="brand-icon" size={32} />
           <h1>GameGuide-AI</h1>
@@ -77,24 +79,8 @@ function App() {
         </div>
       </header>
 
-      {/* ── Mobile Header ──────────────────────────────────────── */}
-      <header className="main-header mobile-header">
-        <div className="mobile-brand">
-          <Gamepad2 className="brand-icon" size={24} />
-          <h1>GameGuide-AI</h1>
-        </div>
-        {/* Active intel dots */}
-        {activeIntelCount > 0 && (
-          <div className="mobile-intel-dots">
-            {redditActive && <span className="intel-dot intel-dot--reddit" title="Community Intel active" />}
-            {wikiActive && <span className="intel-dot intel-dot--wiki" title="Wiki Intel active" />}
-            {priceActive && <span className="intel-dot intel-dot--price" title="Live Prices active" />}
-          </div>
-        )}
-        <MobileMenu currentTheme={theme} onThemeChange={setTheme} />
-      </header>
-
       <main className="chat-wrapper">
+        
         <ChatContainer
           messages={messages}
           isLoading={isLoading}
