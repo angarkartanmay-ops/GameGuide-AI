@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import './LoadingScreen.css';
 
-const ANIMATIONS = ['anim-electric-nexus', 'anim-hyper-space', 'anim-data-rain', 'anim-energy-shield'];
+const ANIMATIONS = [
+  'anim-electric-nexus', 
+  'anim-hyper-space', 
+  'anim-data-rain', 
+  'anim-energy-shield',
+  'anim-cyber-vortex',
+  'anim-glitch-system'
+];
 
 const BOOT_TEXTS = [
   "INITIALIZING NEURAL NET...",
@@ -43,7 +50,7 @@ export default function LoadingScreen({ isExiting }) {
               <div 
                 key={i} 
                 className="lightning-bolt" 
-                style={{ '--rot': `${i * 15}deg`, '--delay': `${Math.random() * 2}s` }}
+                style={{ '--rot': `${i * 15}deg`, '--delay': `${Math.random() * 0.8}s` }}
               />
             ))}
           </div>
@@ -60,8 +67,8 @@ export default function LoadingScreen({ isExiting }) {
                 style={{ 
                   '--angle': `${Math.random() * 360}deg`, 
                   '--dist': `${Math.random() * 100 + 20}vw`,
-                  '--dur': `${Math.random() * 1.5 + 0.5}s`,
-                  '--delay': `${Math.random() * 2}s` 
+                  '--dur': `${Math.random() * 1 + 0.3}s`,
+                  '--delay': `${Math.random() * 1}s` 
                 }}
               />
             ))}
@@ -78,8 +85,8 @@ export default function LoadingScreen({ isExiting }) {
                 className="rain-drop" 
                 style={{ 
                   '--left': `${Math.random() * 100}vw`, 
-                  '--dur': `${Math.random() * 1.5 + 0.5}s`,
-                  '--delay': `${Math.random() * 2}s` 
+                  '--dur': `${Math.random() * 1.2 + 0.4}s`,
+                  '--delay': `${Math.random() * 1}s` 
                 }}
               />
             ))}
@@ -90,13 +97,50 @@ export default function LoadingScreen({ isExiting }) {
         // Hexagon grid covering massive area
         return (
           <div className="energy-shield-container">
-            {[...Array(100)].map((_, i) => (
+            {[...Array(80)].map((_, i) => (
               <div 
                 key={i} 
                 className="shield-hex" 
-                style={{ '--pulse-delay': `${Math.random() * 3}s` }}
+                style={{ '--pulse-delay': `${Math.random() * 2}s` }}
               />
             ))}
+          </div>
+        );
+
+      case 'anim-cyber-vortex':
+        // Spinning particles in a vortex
+        return (
+          <div className="cyber-vortex-container">
+            {[...Array(40)].map((_, i) => (
+              <div 
+                key={i} 
+                className="vortex-particle" 
+                style={{ 
+                  '--rot': `${i * 9}deg`, 
+                  '--delay': `${Math.random() * 2}s`,
+                  '--scale': `${0.5 + Math.random()}`
+                }}
+              />
+            ))}
+          </div>
+        );
+
+      case 'anim-glitch-system':
+        // Horizontal scanlines and flicker
+        return (
+          <div className="glitch-system-container">
+            {[...Array(15)].map((_, i) => (
+              <div 
+                key={i} 
+                className="glitch-bar" 
+                style={{ 
+                  '--top': `${Math.random() * 100}%`, 
+                  '--height': `${Math.random() * 50}px`,
+                  '--delay': `${Math.random() * 3}s` 
+                }}
+              />
+            ))}
+            <div className="glitch-overlay"></div>
           </div>
         );
 
