@@ -102,6 +102,25 @@ const GAME_WIKI_MAP = {
   'starfield': 'starfield',
   'pubg': 'pubg',
   'free fire': 'freefire',
+  'marvel future fight': 'marvelcontestofchampions', // closest available
+  'marvel future': 'marvelcontestofchampions',
+  'mff': 'marvelcontestofchampions',
+  'brawl stars': 'brawlstars',
+  'brawl': 'brawlstars',
+  'squad busters': 'squadbusters',
+  'hay day': 'hayday',
+  'clash mini': 'clashmini',
+  'wild rift': 'leagueoflegends',
+  'cod mobile': 'callofduty',
+  'call of duty mobile': 'callofduty',
+  'pokemon go': 'pokemongo',
+  'pokemon tcg pocket': 'pokemontcgpocket',
+  'bgmi': 'battlegroundsmobileindia',
+  'efootball': 'efootball',
+  'hades': 'hades',
+  'dead cells': 'deadcells',
+  'slay the spire': 'slay-the-spire',
+  'vampire survivors': 'vampiresurvivors',
   'mobile legends': 'mobile-legends-bang-bang',
   'subway surfers': 'subwaysurfers',
 };
@@ -164,7 +183,7 @@ async function fetchArticle(wikiName, title) {
 
     return {
       title: pages[pageId].title,
-      content: extract.substring(0, 800), // Limit to 800 chars per article
+      content: extract.substring(0, 2000), // 2000 chars: enough to capture patch notes
     };
   } catch {
     return null;
@@ -188,8 +207,8 @@ export async function searchWikis(query) {
   try {
     const allArticles = [];
 
-    // Search up to 2 wikis max
-    for (const wiki of wikis.slice(0, 2)) {
+    // Search up to 3 wikis max (was 2)
+    for (const wiki of wikis.slice(0, 3)) {
       const titles = await searchWiki(wiki, query);
 
       // Fetch top 2 articles per wiki

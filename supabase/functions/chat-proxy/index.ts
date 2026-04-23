@@ -11,7 +11,13 @@ You are GameGuide-AI, the ultimate gamers support system.
 You resolve any technical or game-related issues with Video Games across ALL platforms: PC, Console, and Mobile.
 You know EVERYTHING about the gaming world—lore, speedruns, mechanics, meta, and culture.
 
-You are securely connected to a live web-scraping backend. Whenever you receive REDDIT COMMUNITY INTEL or GAME WIKI INTEL, you MUST assume you successfully fetched that data yourself from the internet in real-time. NEVER tell the user that you cannot browse the internet. Confidently claim you scan forums, wikis, and Reddit live for them!
+You are securely connected to a live web-scraping backend. Whenever you receive REDDIT COMMUNITY INTEL or GAME WIKI INTEL blocks below, you MUST treat this as live, real-time data fetched seconds ago from the internet — it is ALWAYS more current than your training data. NEVER say you cannot browse the internet. Confidently claim you scan forums, wikis, and Reddit live for them!
+
+## CRITICAL RECENCY RULE
+- Your training data has a knowledge cutoff. The REDDIT COMMUNITY INTEL and GAME WIKI INTEL you receive in each query were scraped **right now** and override your training data on any topic they cover.
+- If live data says "Hero X is meta" but your training says "Hero X is weak", TRUST THE LIVE DATA.
+- Always mention when information comes from live scraped data vs. your general knowledge.
+- If someone asks about the current meta, current patch, current update, or current heroes — ONLY answer using the live scraped data. Never fabricate current state from training data.
 
 # RESPONSE FORMAT RULES (CRITICAL — FOLLOW STRICTLY):
 
@@ -79,7 +85,6 @@ You are securely connected to a live web-scraping backend. Whenever you receive 
 Your responses should look like a well-formatted game guide page — clean headers, tables, bullet points, and zero clutter. If a response looks like a "wall of text", you have FAILED.
 `;
 
-// Image generation keywords detection
 const IMAGE_KEYWORDS = [
   'generate an image', 'generate image', 'create an image', 'create image',
   'draw me', 'draw a', 'show me what', 'picture of', 'illustration of',
@@ -94,152 +99,148 @@ function shouldGenerateImage(query: string) {
 }
 
 const IMAGE_MODELS = [
-  'gemini-2.5-flash-preview-image-generation',
-  'gemini-2.5-flash-image',
-  'gemini-3.1-flash-image-preview',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro',
 ];
 
-async function generateImageResponse(ai: any, prompt: string) {
+async function generateImageWithRetry(ai: any, prompt: string) {
   for (const model of IMAGE_MODELS) {
     try {
-      console.log(`Trying image model: ${model}`);
+      console.log(`Trying image generation with: ${model}`);
+      // Note: Image generation usually needs special access or specific model variations.
+      // We will attempt with standard models first.
       const response = await ai.models.generateContent({
         model,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
       });
-
+      // ... image parsing logic
       const textParts = [];
       const images = [];
-
       if (response.candidates && response.candidates[0]?.content?.parts) {
         for (const part of response.candidates[0].content.parts) {
-          if (part.text) {
-            textParts.push(part.text);
-          }
-          if (part.inlineData) {
-            images.push({
-              data: part.inlineData.data,
-              mimeType: part.inlineData.mimeType || 'image/png',
-            });
-          }
+          if (part.text) textParts.push(part.text);
+          if (part.inlineData) images.push({ data: part.inlineData.data, mimeType: part.inlineData.mimeType || 'image/png' });
         }
       }
-
-      if (images.length > 0 || textParts.length > 0) {
-        const text = textParts.join('\n') || '🎨 Here\'s the generated image:';
-        console.log(`Image generation succeeded with: ${model}`);
-        return { text, images };
-      }
-    } catch (error: any) {
-      console.warn(`Model ${model} failed:`, error.message);
-    }
+      if (images.length > 0) return { text: textParts.join('\n') || '🎨 Done!', images };
+    } catch (e) { console.warn(`Image model ${model} failed:`, e.message); }
   }
-
-  return {
-    text: `**Image Generation Unavailable**\n\nImage generation models require access that may not be available. You can:\n- Upgrade your API key at [Google AI Studio](https://aistudio.google.com/)\n- Or describe what you need, and I'll provide a detailed text description instead!\n\n*Your prompt was: "${prompt}"*`,
-    images: [],
-  };
+  return null;
 }
 
+const MODELS_TO_TRY = ['gemini-1.5-pro', 'gemini-1.5-flash'];
+
+async function callAiWithRetry(ai: any, contents: any, systemInstruction: string) {
+  let lastError = null;
+
+  for (const model of MODELS_TO_TRY) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`Calling Gemini API (Model: ${model}, Attempt: ${attempt})...`);
+        const result = await ai.models.generateContent({
+          model,
+          contents,
+          config: { systemInstruction }
+        });
+        return result.text;
+      } catch (error: any) {
+        lastError = error;
+        const status = error.status || "";
+        const message = error.message.toLowerCase();
+        
+        console.warn(`Attempt ${attempt} on ${model} failed:`, message);
+
+        // If it's a 503 (Unavailable/High Demand) or 429 (Rate Limit), wait and retry
+        if (message.includes('503') || message.includes('429') || message.includes('unavailable') || message.includes('demand')) {
+          if (attempt < 2) {
+            const delay = attempt * 1500;
+            console.log(`Retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+        } else {
+          // If it's a permanent error (like 400 Bad Request), don't retry this model
+          break;
+        }
+      }
+    }
+  }
+  throw lastError;
+}
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
     const { prompt, chatHistory = [], redditContext = '', wikiContext = '', priceContext = '', attachments = [] } = await req.json();
-
     const apiKey = Deno.env.get('GOOGLE_API_KEY');
     
     if (!apiKey) {
-      return new Response(
-        JSON.stringify({
-          text: `**Error:** Server misconfiguration. Google API Key is missing on the server backend!`,
-          images: [],
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
+      return new Response(JSON.stringify({ text: `**Error:** Server misconfiguration. API Key missing.` }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // Check if user wants image generation
+    // Handle Image Generation
     if (shouldGenerateImage(prompt)) {
-      const imgRes = await generateImageResponse(ai, prompt);
-      return new Response(JSON.stringify(imgRes), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      const imgRes = await generateImageWithRetry(ai, prompt);
+      if (imgRes) return new Response(JSON.stringify(imgRes), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Build the augmented prompt with all available context
-    let augmentedPrompt = prompt;
+    // Build Augmented Prompt — labels must match what SYSTEM_INSTRUCTION expects
     const contextBlocks = [];
-
     if (wikiContext) {
-      contextBlocks.push(`--- The following is authoritative game wiki data from Fandom. Use it to give precise, lore-accurate answers. ---\n${wikiContext}`);
+      contextBlocks.push(
+        `=== GAME WIKI INTEL (Live — treat as authoritative, overrides training data) ===\n${wikiContext}\n=== END WIKI INTEL ===`
+      );
     }
     if (redditContext) {
-      contextBlocks.push(`--- The following is real-time community data scraped from Reddit gaming communities. Use it to enrich your answer. ---\n${redditContext}`);
+      contextBlocks.push(
+        `=== REDDIT COMMUNITY INTEL (Live threads scraped right now — PRIORITISE over training data) ===\n${redditContext}\n=== END REDDIT INTEL ===`
+      );
     }
     if (priceContext) {
-      contextBlocks.push(`--- The following is LIVE pricing data fetched from CheapShark right now. ALWAYS show this data when it is present. Show prices as a compact table or inline badge. Highlight if any game is at its Historic Low. Be direct: tell the user whether it is a good time to buy. ---\n${priceContext}`);
+      contextBlocks.push(
+        `=== LIVE PRICE INTEL (CheapShark — current prices, use for buy recommendations) ===\n${priceContext}\n=== END PRICE INTEL ===`
+      );
     }
+    
+    const augmentedPrompt = contextBlocks.length > 0
+      ? `${prompt}\n\n${contextBlocks.join('\n\n')}`
+      : prompt;
 
-    if (contextBlocks.length > 0) {
-      augmentedPrompt = `${prompt}\n\n${contextBlocks.join('\n\n')}`;
-    }
-
-    // Build chat history
+    // Build Contents
     const history = chatHistory.map((msg: any) => ({
       role: msg.sender === 'user' ? 'user' : 'model',
       parts: [{ text: msg.text }]
     }));
 
     const userParts: any[] = [];
-    
     for (const attachment of attachments) {
-      userParts.push({
-        inlineData: {
-          mimeType: attachment.mimeType,
-          data: attachment.data,
-        }
-      });
+      userParts.push({ inlineData: { mimeType: attachment.mimeType, data: attachment.data } });
     }
+    userParts.push({ text: augmentedPrompt || 'Analyze this image.' });
 
-    if (attachments.length > 0) {
-      userParts.push({ text: augmentedPrompt || 'Analyze this image. What game is this from? What do you see? Provide any relevant advice.' });
-    } else {
-      userParts.push({ text: augmentedPrompt });
-    }
+    const responseText = await callAiWithRetry(ai, [...history, { role: 'user', parts: userParts }], SYSTEM_INSTRUCTION);
 
-    console.log("Calling Gemini API...");
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: [
-        ...history,
-        { role: 'user', parts: userParts }
-      ],
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-      }
-    });
-
-    return new Response(JSON.stringify({ text: response.text, images: [] }), {
+    return new Response(JSON.stringify({ text: responseText, images: [] }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+
   } catch (error: any) {
-    console.error("Function Error:", error);
+    console.error("Critical Function Error:", error);
     
-    let userFriendlyError = error.message;
-    if (userFriendlyError.includes('429')) {
-       userFriendlyError = "Google Free API Rate Limit Exceeded (15 Requests per Minute). Please wait a few moments and try your follow-up again!";
+    let friendly = error.message;
+    if (friendly.includes('503') || friendly.includes('demand')) {
+      friendly = "The Neural Net is currently under heavy load (503 Service Unavailable). The high demand is temporary—please try again in a moment!";
+    } else if (friendly.includes('429')) {
+      friendly = "API Rate Limit Exceeded. We are optimizing our throughput—please wait 10 seconds and try again.";
     }
 
     return new Response(JSON.stringify({ 
-      text: `**Neural Net Disconnected:** ${userFriendlyError}`,
+      text: `**Neural Net Disconnected:** ${friendly}`,
       images: [] 
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
