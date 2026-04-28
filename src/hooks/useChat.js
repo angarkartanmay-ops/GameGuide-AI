@@ -308,7 +308,7 @@ export default function useChat(user) {
         controller.signal  // ← pass abort signal
       );
 
-      // AI response is now { text, images }
+      // AI response is now { text, images, meta }
       const aiMessage = {
         id: (Date.now() + 1).toString(),
         text: aiResponse.text,
@@ -317,6 +317,7 @@ export default function useChat(user) {
           previewUrl: `data:${img.mimeType};base64,${img.data}`,
           mimeType: img.mimeType,
         })),
+        meta: aiResponse.meta || null,
       };
 
       setMessages((prev) => [...prev, aiMessage]);

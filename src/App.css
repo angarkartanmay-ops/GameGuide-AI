@@ -1280,3 +1280,51 @@
   gap: 2px;
 }
 .price-source-link:hover { text-decoration: underline; }
+
+/* ─── CORTEX BADGE — shows persona + provider on each AI response ─────── */
+.cortex-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0.75rem;
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--accent, #00ffd1);
+  background: linear-gradient(135deg, rgba(0,255,209,0.08), rgba(255,0,170,0.06));
+  border: 1px solid var(--panel-border, rgba(255,255,255,0.1));
+  border-radius: 999px;
+  opacity: 0.75;
+  transition: opacity 0.2s;
+  cursor: default;
+  user-select: none;
+  white-space: nowrap;
+}
+.cortex-badge:hover { opacity: 1; }
+.cortex-sep { opacity: 0.5; }
+.cortex-provider { color: var(--accent-2, #ff5fff); font-weight: 700; }
+.cortex-cached {
+  margin-left: 4px;
+  padding: 1px 6px;
+  background: rgba(0,255,209,0.15);
+  border-radius: 4px;
+  font-size: 0.65rem;
+}
+.cortex-vision {
+  margin-left: 4px;
+  padding: 1px 8px;
+  background: linear-gradient(90deg, rgba(255,95,255,0.25), rgba(0,255,209,0.25));
+  color: #fff;
+  font-weight: 800;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  letter-spacing: 0.6px;
+  box-shadow: 0 0 8px rgba(255,95,255,0.3);
+  animation: cortex-vision-pulse 2.5s ease-in-out infinite;
+}
+@keyframes cortex-vision-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255,95,255,0.3); }
+  50% { box-shadow: 0 0 14px rgba(0,255,209,0.6); }
+}

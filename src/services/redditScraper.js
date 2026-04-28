@@ -205,7 +205,7 @@ function buildSearchUrl(query, gameSubs) {
 
   // Boost meta queries with extra keywords for better Reddit results
   const enhancedQuery = isMeta
-    ? `${query} 2024 2025`
+    ? `${query} 2025 2026`
     : query;
 
   // Sort strategy: new for meta queries, top for general info

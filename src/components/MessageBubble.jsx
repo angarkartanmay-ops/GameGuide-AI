@@ -47,6 +47,17 @@ export default function MessageBubble({ message, onFollowUpClick }) {
           ) : (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanText}</ReactMarkdown>
           )}
+
+          {/* Cortex telemetry badge — shows which brain answered */}
+          {!isUser && message.meta && message.meta.provider && !message.meta.error && (
+            <div className="cortex-badge" title={`Powered by ${message.meta.provider} • ${message.meta.model}${message.meta.vision ? ' • Vision GODMODE' : ''}`}>
+              {message.meta.personaEmoji || '🤖'} {message.meta.persona || 'GameGuide'}
+              <span className="cortex-sep">·</span>
+              <span className="cortex-provider">{message.meta.provider}</span>
+              {message.meta.vision && <span className="cortex-vision">🔍 GODMODE</span>}
+              {message.meta.cached && <span className="cortex-cached">⚡ cached</span>}
+            </div>
+          )}
         </div>
         {!isUser && followUps.length > 0 && (
           <FollowUpChips followUps={followUps} onChipClick={onFollowUpClick} />

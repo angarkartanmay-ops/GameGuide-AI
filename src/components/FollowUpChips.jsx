@@ -33,8 +33,16 @@ export function parseFollowUps(text) {
   const questions = questionBlock.split(/\[\?\]\s*/);
 
   for (const q of questions) {
-    const trimmed = q.trim().replace(/\??\s*$/, '?').replace(/\?\?$/, '?');
-    if (trimmed.length > 5) {
+    // Strip markdown artifacts that bleed into question text
+    let trimmed = q.trim()
+      .replace(/^#+\s*/gm, '')         // Remove heading markers (### etc.)
+      .replace(/\*\*/g, '')             // Remove bold markers
+      .replace(/^\s*[-*]\s*/gm, '')     // Remove bullet points
+      .replace(/\n.*/g, '')             // Only keep the first line
+      .trim()
+      .replace(/\??[\s.]*$/, '?')       // Ensure ends with exactly one ?
+      .replace(/\?\?+$/, '?');          // Collapse multiple ?
+    if (trimmed.length > 5 && trimmed.length < 200) {
       followUps.push(trimmed);
     }
   }

@@ -59,7 +59,7 @@ export const generateChatResponse = async (
       }
 
       const data = await res.json();
-      return { text: data.text, images: data.images || [] };
+      return { text: data.text, images: data.images || [], meta: data._meta || null };
     }
 
     // Fallback: no signal — use Supabase JS client (original path)
@@ -68,7 +68,7 @@ export const generateChatResponse = async (
     if (error) throw error;
     if (!data) throw new Error('No response returned from the proxy.');
 
-    return { text: data.text, images: data.images || [] };
+    return { text: data.text, images: data.images || [], meta: data._meta || null };
 
   } catch (error) {
     // If the request was deliberately aborted — propagate so useChat can handle it cleanly
