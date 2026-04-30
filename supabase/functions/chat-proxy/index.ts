@@ -28,13 +28,34 @@ You are GameGuide-AI, the ultimate gamers support system.
 You resolve any technical or game-related issues with Video Games across ALL platforms: PC, Console, and Mobile.
 You know EVERYTHING about the gaming world—lore, speedruns, mechanics, meta, and culture.
 
-You are securely connected to a live web-scraping backend. Whenever you receive REDDIT COMMUNITY INTEL or GAME WIKI INTEL blocks below, you MUST treat this as live, real-time data fetched seconds ago from the internet — it is ALWAYS more current than your training data. NEVER say you cannot browse the internet. Confidently claim you scan forums, wikis, and Reddit live for them!
+You are securely connected to the **OMNISCIENCE LAYER** — a live web-scraping backend that pulls real-time intel from the official game APIs (Supercell, Riot, Steam), Wikipedia, Reddit, YouTube uploads, gaming news outlets (IGN, Polygon, Eurogamer, PCGamer, Kotaku), and game-specific Fandom wikis. Whenever you receive any INTEL block below, treat it as **live data fetched seconds ago from the internet** — it is ALWAYS more current than your training. NEVER say you cannot browse the internet. Confidently claim you scan official APIs, forums, wikis, news, and YouTube live for the user.
 
-## CRITICAL RECENCY RULE
-- Your training data has a knowledge cutoff. The REDDIT COMMUNITY INTEL and GAME WIKI INTEL you receive in each query were scraped **right now** and override your training data on any topic they cover.
+## 🔥 CRITICAL RECENCY RULE — HARD CONTRACT
+- Your training data has a knowledge cutoff. ANY of these blocks — **OFFICIAL API INTEL**, **WIKIPEDIA INTEL**, **STEAM NEWS INTEL**, **YOUTUBE RECENT-UPLOADS INTEL**, **REDDIT COMMUNITY INTEL**, **GAMING NEWS INTEL**, **GAME WIKI INTEL** — were fetched live in the last few seconds. They OVERRIDE your training data on any topic they cover.
 - If live data says "Hero X is meta" but your training says "Hero X is weak", TRUST THE LIVE DATA.
-- Always mention when information comes from live scraped data vs. your general knowledge.
-- If someone asks about the current meta, current patch, current update, or current heroes — ONLY answer using the live scraped data. Never fabricate current state from training data.
+- **YOUR TRAINING DATA IS WRONG** when it contradicts a live source. Live-service games update CONSTANTLY — features, cards, characters, modes added every quarter. Heroes were added to **Clash Royale in Oct 2024**. Operators come and go from **Rainbow Six Siege X**. **Wuthering Waves**, **Genshin**, **Honkai Star Rail** ship new patches monthly. Your training cutoff predates most of these changes.
+- **NEVER deny a feature exists if a live source confirms it.** Never say "this game doesn't have X" when a live block clearly mentions X.
+- If asked "what game is this?" or "which card is this?" and live sources clearly identify it, do NOT second-guess based on what you remember the game looked like in your training era.
+- If someone asks about the current meta, current patch, current update, current heroes, current cards, current operators, current banners, current season — **ONLY answer using the live scraped data**. Never fabricate current state from training.
+- Always cite which live source confirmed a fact (e.g. "*per the official Supercell API*", "*from r/ClashRoyale today*", "*Wikipedia article last revised <date>*").
+- If the live blocks are silent on the user's question, fall back to training but flag it: "*based on my training knowledge — verify against the current patch.*"
+
+## 🎯 PRO-GAMER ACCURACY CONTRACT (NON-NEGOTIABLE)
+You are deployed as a **professional-grade gaming assistant**. Pro players, esports coaches, speedrunners, and competitive teams will rely on your output. Wrong info has a real cost — losses, wasted hours, ruined builds. Hold yourself to a tournament-ref level of accuracy:
+
+1. **Specific numbers > vague claims.** Never say "high damage" — say "850 damage at level 11". Never say "fast cooldown" — say "8.4s cooldown". If you don't know an exact number, SAY SO ("exact value not in my live sources, approximately X based on training") rather than fabricating.
+2. **Patch-version tags.** When stating any number, mechanic, or meta claim, tag the patch/season it applies to ("as of patch 12.3", "Season 38 of Clash Royale", "Wuthering Waves 2.1"). If you don't know the patch, say "patch unspecified — verify in-game".
+3. **Distinguish FACT from OPINION.** Mark opinions explicitly: "**Fact:**" vs "**Pro consensus:**" vs "**My take:**". A fact is something you can cite a live source for. An opinion is your synthesis.
+4. **Anti-confabulation rules:**
+   - Never invent item names, card names, character names, ability names, NPC names, or location names.
+   - Never invent stats. If a stat isn't in your live data, write "(stat not surfaced — check the in-game tooltip)".
+   - Never invent achievement requirements, quest steps, or trophy conditions.
+   - If you misidentify a game in your first attempt, openly correct yourself: "**Correction:** I initially identified this as X, but live sources confirm it is Y."
+5. **"I don't know" is allowed and respected.** Saying "I'm not sure — could you check this in-game and tell me?" is FAR better than confidently lying. Pro gamers can handle uncertainty. They can't handle bad info.
+6. **Multi-platform awareness.** Always specify the platform/edition when stat or mechanics differ (Minecraft Java vs Bedrock; PC vs Console aim assist; mobile vs PC FPS targets).
+7. **Recency primacy.** When patch dates are unclear, default to: "Live sources are dated [<date>] — anything more recent than that should be checked in-game."
+8. **No filler.** Skip "Great question!", "I'd love to help with that!", "Let me explain..." — get straight to the answer. Pros want signal, not preamble.
+9. **Consistency check.** Before submitting your answer, mentally re-read it for internal contradictions (e.g. saying "850 damage" in one bullet and "1200 damage" in another). Fix any conflicts.
 
 # RESPONSE FORMAT RULES (CRITICAL — FOLLOW STRICTLY):
 
@@ -380,27 +401,76 @@ const INTENT_PATTERNS: Array<{ intent: Intent; persona: keyof typeof PERSONAS; r
 ];
 
 const KNOWN_GAMES = [
-  // top 60 — keep in sync-ish with wikiScraper.js GAME_WIKI_MAP
-  'elden ring','dark souls','minecraft','valorant','fortnite','overwatch','league of legends','apex legends',
-  'destiny 2','call of duty','warzone','zelda','pokemon','cyberpunk','witcher','skyrim','fallout','gta',
-  'gta v','gta vi','gta 6','red dead','rdr2','sekiro','bloodborne','hollow knight','terraria','stardew valley',
-  'animal crossing','splatoon','smash bros','mario kart','mario','sonic','final fantasy','ff7','ff14','ff16',
-  'kingdom hearts','persona 5','persona 3','metaphor','baldurs gate','baldur\'s gate','bg3','diablo','diablo 4',
-  'diablo iv','path of exile','poe','wow','world of warcraft','runescape','osrs','genshin','honkai','star rail',
-  'wuthering waves','zenless','fifa','fc','nba 2k','madden','rocket league','dota','dota 2','cs2','counter-strike',
-  'rainbow six','siege','tarkov','escape from tarkov','rust','dayz','arma','helldivers','helldivers 2',
-  'monster hunter','rise','wilds','dead by daylight','dbd','league','marvel rivals','rivals','the finals',
-  'overwatch 2','splitgate','fragpunk','xdefiant','delta force','arc raiders','black myth','wukong','silksong',
-  'subway surfers','clash royale','clash of clans','pubg','pubg mobile','bgmi','free fire','mobile legends',
-  'wild rift','arena breakout','genshin impact'
+  // ── AAA: ARPG/Open-world ─────────────────────────────────────────────────
+  'elden ring','dark souls','dark souls 3','dark souls 2','sekiro','bloodborne','demon\'s souls','demons souls',
+  'monster hunter','monster hunter rise','monster hunter wilds','monster hunter world','mh rise','mh wilds','mh world',
+  'witcher','witcher 3','the witcher','cyberpunk','cyberpunk 2077','red dead','rdr2','red dead redemption',
+  'gta','gta v','gta vi','gta 6','gta 5','gta online','grand theft auto',
+  'skyrim','fallout','fallout 4','fallout 76','starfield','baldurs gate','baldur\'s gate','bg3','baldurs gate 3',
+  'kingdom come','dragon age','mass effect','horizon zero dawn','horizon forbidden west','death stranding',
+  'black myth','wukong','black myth wukong','expedition 33','clair obscur','silent hill','silent hill 2',
+  // ── AAA: shooters / battle royales ───────────────────────────────────────
+  'valorant','fortnite','apex legends','call of duty','warzone','cod','mw3','mw2','black ops 6','bo6',
+  'rainbow six','siege','rainbow six siege','r6','tarkov','escape from tarkov','helldivers','helldivers 2',
+  'overwatch','overwatch 2','the finals','marvel rivals','rivals','splitgate','splitgate 2','fragpunk',
+  'xdefiant','delta force','arc raiders','battlefield','battlefield 2042','counter-strike','cs2','cs:go','csgo',
+  // ── MOBA / 5v5 / TCG ─────────────────────────────────────────────────────
+  'league of legends','league','lol','dota','dota 2','smite','smite 2','wild rift','mobile legends','mlbb',
+  'pokemon unite','heroes of the storm','marvel snap','hearthstone','legends of runeterra','runeterra',
+  // ── Live-service RPGs ───────────────────────────────────────────────────
+  'destiny','destiny 2','warframe','path of exile','poe','path of exile 2','poe 2','diablo','diablo 4','diablo iv',
+  'world of warcraft','wow','final fantasy xiv','ffxiv','ff14','runescape','osrs','old school runescape',
+  // ── HoYoverse / Kuro / gacha ────────────────────────────────────────────
+  'genshin','genshin impact','honkai star rail','star rail','hsr','honkai impact','honkai impact 3rd',
+  'wuthering waves','wuwa','zenless zone zero','zzz','tower of fantasy','arknights','blue archive','nikke',
+  'fate grand order','fgo','azur lane','girls frontline','reverse 1999','punishing gray raven','pgr',
+  // ── Sandbox / survival / sim ────────────────────────────────────────────
+  'minecraft','minecraft java','minecraft bedrock','terraria','stardew valley','satisfactory','factorio',
+  'rust','dayz','ark','ark survival evolved','valheim','enshrouded','palworld','lethal company','phasmophobia',
+  'no man\'s sky','no mans sky','subnautica','7 days to die','rimworld','kenshi','project zomboid',
+  // ── Action / character / fighting ───────────────────────────────────────
+  'devil may cry','dmc5','tekken','tekken 8','street fighter','street fighter 6','sf6','mortal kombat','mk1',
+  'guilty gear','guilty gear strive','dragon ball fighterz','dbfz','smash bros','smash ultimate','rivals of aether',
+  // ── Roguelike / indie ───────────────────────────────────────────────────
+  'hades','hades 2','hollow knight','silksong','dead cells','enter the gungeon','risk of rain','risk of rain 2',
+  'binding of isaac','noita','spelunky','nuclear throne','curse of the dead gods','vampire survivors',
+  // ── Sports / racing ─────────────────────────────────────────────────────
+  'fifa','fc','fc 25','ea fc','nba 2k','nba 2k25','madden','mlb the show','rocket league','forza','forza horizon',
+  'gran turismo','gt7','f1','f1 24','wreckfest','dirt rally','assetto corsa',
+  // ── Nintendo ────────────────────────────────────────────────────────────
+  'zelda','tears of the kingdom','totk','breath of the wild','botw','mario','mario kart','mario kart 8',
+  'super mario odyssey','super mario bros wonder','animal crossing','splatoon','splatoon 3','metroid','metroid prime',
+  'pokemon','pokemon scarlet','pokemon violet','pokemon legends arceus','pokemon go','pokemon unite','pokemon tcg',
+  'fire emblem','fire emblem engage','xenoblade','xenoblade chronicles 3',
+  // ── JRPG ────────────────────────────────────────────────────────────────
+  'final fantasy','ff7','ff7 remake','ff7 rebirth','ff14','ff16','final fantasy 7','final fantasy 16',
+  'persona 3','persona 3 reload','persona 4','persona 5','persona 5 royal','metaphor','metaphor refantazio',
+  'kingdom hearts','kingdom hearts 4','dragon quest','tales of arise','ni no kuni','sea of stars','octopath',
+  // ── Mobile (giant + popular) ────────────────────────────────────────────
+  'clash royale','clash of clans','coc','clash mini','brawl stars','squad busters','hay day','boom beach',
+  'subway surfers','temple run','candy crush','candy crush saga','royal match','homescapes','gardenscapes',
+  'pubg','pubg mobile','bgmi','battlegrounds mobile india','free fire','garena free fire','call of duty mobile',
+  'codm','arena breakout','farlight 84','marvel contest of champions','injustice 2','clash mini',
+  // ── Other live service / multiplayer ───────────────────────────────────
+  'sea of thieves','elite dangerous','star citizen','eve online','war thunder','world of tanks','wot',
+  'world of warships','crossout','planetside 2','foxhole','space marine 2','warhammer 40k space marine 2',
+  'total war warhammer 3','twwh3','total war','crusader kings 3','ck3','europa universalis 4','eu4','stellaris',
+  'civilization 6','civ 6','age of empires 4','aoe4','company of heroes 3','manor lords',
+  // ── Older but still relevant ────────────────────────────────────────────
+  'team fortress 2','tf2','garry\'s mod','gmod','left 4 dead 2','l4d2','portal 2','half-life','half-life 2',
+  'half-life alyx','undertale','deltarune','celeste','ori','ori and the will of the wisps','cuphead','among us'
 ];
 
 function detectGame(text: string): string | null {
   const lower = text.toLowerCase();
-  // longest-match first (so "elden ring" beats "ring", "gta vi" beats "gta")
+  // Longest-match first (so "elden ring" beats "ring", "gta vi" beats "gta").
+  // Use word-boundary regex to avoid false positives like "wow" matching "wowed",
+  // "lol" matching "lolly", "fc" matching "fcuk", etc.
   const sorted = [...KNOWN_GAMES].sort((a, b) => b.length - a.length);
   for (const g of sorted) {
-    if (lower.includes(g)) return g;
+    const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const rx = new RegExp(`\\b${escaped}\\b`, 'i');
+    if (rx.test(lower)) return g;
   }
   return null;
 }
@@ -823,6 +893,620 @@ function isProviderFatal(errMsg: string): boolean {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  🌍 OMNISCIENCE LAYER — server-side live web intel scrapers
+//  ───────────────────────────────────────────────────────────────────────
+//  Fans out to 5 NEW data sources in parallel (in addition to client-side
+//  Reddit/Fandom/Price). Each block carries an authority score so the
+//  trust ranker can prioritise official APIs > Wikipedia > Steam News >
+//  YouTube > RSS.
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface ScrapeBlock { text: string; score: number; source: string; }
+
+const OMNI_USER_AGENT = 'GameGuide-AI/4.0 (educational gaming assistant; contact: jai.sharma93927@gmail.com)';
+
+// Per-(game, source) cache, 15-minute TTL.
+const omniCache = new Map<string, { block: ScrapeBlock; ts: number }>();
+const OMNI_CACHE_TTL_MS = 15 * 60 * 1000;
+
+function omniCacheGet(source: string, key: string): ScrapeBlock | null {
+  const hit = omniCache.get(`${source}:${key}`);
+  if (!hit) return null;
+  if (Date.now() - hit.ts > OMNI_CACHE_TTL_MS) {
+    omniCache.delete(`${source}:${key}`);
+    return null;
+  }
+  return hit.block;
+}
+function omniCacheSet(source: string, key: string, block: ScrapeBlock) {
+  omniCache.set(`${source}:${key}`, { block, ts: Date.now() });
+}
+
+// ─── Steam appId lookup table for top games ────────────────────────────────
+// Used by fetchSteamNews to resolve game name → appId.
+const STEAM_APPIDS: Record<string, number> = {
+  'counter-strike 2': 730, 'cs2': 730, 'cs:go': 730, 'counter-strike': 730,
+  'dota 2': 570, 'dota': 570,
+  'pubg': 578080, 'pubg battlegrounds': 578080,
+  'apex legends': 1172470,
+  'team fortress 2': 440, 'tf2': 440,
+  'rust': 252490,
+  'gta v': 271590, 'gta 5': 271590, 'grand theft auto v': 271590,
+  'red dead redemption 2': 1174180, 'rdr2': 1174180,
+  'elden ring': 1245620,
+  'dark souls 3': 374320, 'dark souls iii': 374320,
+  'dark souls': 570940, 'dark souls remastered': 570940,
+  'sekiro': 814380,
+  'cyberpunk 2077': 1091500, 'cyberpunk': 1091500,
+  'witcher 3': 292030, 'the witcher 3': 292030,
+  'baldur\'s gate 3': 1086940, 'baldurs gate 3': 1086940, 'bg3': 1086940,
+  'helldivers 2': 553850,
+  'palworld': 1623730,
+  'lethal company': 1966720,
+  'terraria': 105600,
+  'stardew valley': 413150,
+  'minecraft': 0, // Minecraft isn't on Steam — skip
+  'destiny 2': 1085660,
+  'warframe': 230410,
+  'path of exile': 238960, 'poe': 238960, 'path of exile 2': 2694490, 'poe 2': 2694490,
+  'monster hunter rise': 1446780, 'mh rise': 1446780,
+  'monster hunter wilds': 2246340, 'mh wilds': 2246340,
+  'monster hunter world': 582010,
+  'rainbow six siege': 359550, 'r6': 359550, 'siege': 359550,
+  'rocket league': 252950,
+  'fortnite': 0, // not on Steam
+  'valorant': 0, // not on Steam
+  'league of legends': 0, // not on Steam
+  'overwatch 2': 2357570,
+  'starcraft 2': 0,
+  'world of warcraft': 0,
+  'final fantasy xiv': 39210, 'ffxiv': 39210, 'ff14': 39210,
+  'final fantasy 7 remake': 1462040, 'ff7 remake': 1462040,
+  'final fantasy 16': 2515020, 'ff16': 2515020,
+  'persona 5 royal': 1687950, 'persona 5': 1687950,
+  'persona 3 reload': 2161700,
+  'metaphor refantazio': 2679460, 'metaphor': 2679460,
+  'hogwarts legacy': 990080,
+  'hollow knight': 367520,
+  'hollow knight silksong': 1030300, 'silksong': 1030300,
+  'hades': 1145360, 'hades 2': 1145350,
+  'starfield': 1716740,
+  'fallout 4': 377160,
+  'fallout 76': 1151340,
+  'skyrim': 489830, 'skyrim special edition': 489830,
+  'no man\'s sky': 275850, 'no mans sky': 275850,
+  'subnautica': 264710, 'subnautica below zero': 848450,
+  'satisfactory': 526870,
+  'factorio': 427520,
+  'rimworld': 294100,
+  'rust legacy': 252490,
+  'sea of thieves': 1172620,
+  'forza horizon 5': 1551360,
+  'microsoft flight simulator': 1250410,
+  'red dead online': 1404210,
+  'tarkov': 0, 'escape from tarkov': 0, // not on Steam
+  'arma 3': 107410,
+  'dayz': 221100,
+  'kenshi': 233860,
+  'mount and blade': 261550, 'mount and blade 2': 261550, 'bannerlord': 261550,
+  'total war warhammer 3': 1142710, 'twwh3': 1142710,
+  'crusader kings 3': 1158310, 'ck3': 1158310,
+  'europa universalis 4': 236850, 'eu4': 236850,
+  'stellaris': 281990,
+  'cities skylines 2': 949230, 'cities skylines': 255710,
+  'civilization 6': 289070, 'civ 6': 289070,
+  'manor lords': 1363080,
+  'enshrouded': 1203620,
+  'wuthering waves': 0, // mobile/PC standalone
+  'genshin impact': 0,
+  'honkai star rail': 0,
+  'zenless zone zero': 0,
+  'death stranding': 1190460,
+  'death stranding 2': 0,
+  'tekken 8': 1778820,
+  'street fighter 6': 1364780,
+  'mortal kombat 1': 1971870,
+  'dead by daylight': 381210, 'dbd': 381210,
+  'phasmophobia': 739630,
+  'devil may cry 5': 601150, 'dmc5': 601150,
+  'returnal': 1649240,
+  'control': 870780,
+  'alan wake 2': 0,
+  'expedition 33': 0, 'clair obscur': 0,
+  'doom eternal': 782330,
+  'doom 2016': 379720,
+  'doom the dark ages': 0,
+  'wukong': 2358720, 'black myth wukong': 2358720, 'black myth': 2358720,
+  'arc raiders': 0,
+  'marvel rivals': 2767030,
+  'the finals': 2073850,
+  'xdefiant': 0,
+  'delta force': 0,
+  'fragpunk': 0,
+  'splitgate': 677620, 'splitgate 2': 0,
+};
+
+function gameToSteamAppId(game: string): number | null {
+  const lower = game.toLowerCase();
+  // Exact match first
+  if (STEAM_APPIDS[lower] !== undefined) {
+    return STEAM_APPIDS[lower] || null;
+  }
+  // Partial match
+  for (const [k, v] of Object.entries(STEAM_APPIDS)) {
+    if (lower.includes(k) || k.includes(lower)) return v || null;
+  }
+  return null;
+}
+
+// ─── Wikipedia REST API ────────────────────────────────────────────────────
+// Tries multiple title variants (game name, "Game (video game)", "Game (game)")
+// to handle disambiguation pages. Returns the first non-disambig hit.
+async function fetchWikipedia(game: string, timeoutMs = 1800): Promise<ScrapeBlock | null> {
+  const cached = omniCacheGet('wikipedia', game);
+  if (cached) return cached;
+
+  const titleCase = game.split(' ').map(w => w.length > 0 ? (w[0].toUpperCase() + w.slice(1)) : w).join(' ');
+  const variants = [
+    titleCase,
+    `${titleCase} (video game)`,
+    `${titleCase} (game)`,
+    titleCase.replace(/\s+/g, '_'),
+  ];
+
+  for (const variant of variants) {
+    try {
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(variant)}`;
+      const res = await fetchWithTimeout(url, {
+        headers: { 'User-Agent': OMNI_USER_AGENT, 'Accept': 'application/json' },
+      }, timeoutMs);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (!data?.extract) continue;
+      if (data.type === 'disambiguation') continue;
+
+      // Sanity check — extract must mention the game name OR be tagged as a game article
+      const extractLower = (data.extract || '').toLowerCase();
+      const gameLower = game.toLowerCase();
+      const titleLower = (data.title || '').toLowerCase();
+      const looksLikeGame = extractLower.includes('video game') || extractLower.includes('multiplayer') ||
+        extractLower.includes('developed by') || extractLower.includes('released') ||
+        titleLower.includes(gameLower) || gameLower.includes(titleLower);
+      if (!looksLikeGame) continue;
+
+      const text = `📚 **${data.title}** (Wikipedia, last revised ${data.timestamp || 'recently'})\n${data.extract}\nSource: ${data.content_urls?.desktop?.page || 'wikipedia.org'}`;
+      const block: ScrapeBlock = { text, score: 8, source: 'wikipedia' };
+      omniCacheSet('wikipedia', game, block);
+      return block;
+    } catch (e: any) {
+      console.warn(`[OMNI] wikipedia "${variant}" failed: ${e.message}`);
+    }
+  }
+
+  // Last-resort: search API to find the most-likely article title, then try summary
+  try {
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(game + ' video game')}&limit=3&format=json&origin=*`;
+    const sres = await fetchWithTimeout(searchUrl, {
+      headers: { 'User-Agent': OMNI_USER_AGENT, 'Accept': 'application/json' },
+    }, 1500);
+    if (sres.ok) {
+      const sdata = await sres.json();
+      const candidates = Array.isArray(sdata) && Array.isArray(sdata[1]) ? sdata[1] : [];
+      for (const candidate of candidates.slice(0, 2)) {
+        try {
+          const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(candidate)}`;
+          const res = await fetchWithTimeout(url, {
+            headers: { 'User-Agent': OMNI_USER_AGENT, 'Accept': 'application/json' },
+          }, 1200);
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (!data?.extract || data.type === 'disambiguation') continue;
+          const text = `📚 **${data.title}** (Wikipedia, via search; revised ${data.timestamp || 'recently'})\n${data.extract}\nSource: ${data.content_urls?.desktop?.page || 'wikipedia.org'}`;
+          const block: ScrapeBlock = { text, score: 8, source: 'wikipedia' };
+          omniCacheSet('wikipedia', game, block);
+          return block;
+        } catch { /* keep iterating */ }
+      }
+    }
+  } catch (e: any) {
+    console.warn(`[OMNI] wikipedia opensearch failed: ${e.message}`);
+  }
+
+  return null;
+}
+
+// ─── Steam News API ────────────────────────────────────────────────────────
+async function fetchSteamNews(game: string, timeoutMs = 1800): Promise<ScrapeBlock | null> {
+  const appId = gameToSteamAppId(game);
+  if (!appId) return null;
+
+  const cached = omniCacheGet('steam-news', game);
+  if (cached) return cached;
+
+  try {
+    const url = `https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=${appId}&count=6&maxlength=600&format=json`;
+    const res = await fetchWithTimeout(url, {
+      headers: { 'User-Agent': OMNI_USER_AGENT },
+    }, timeoutMs);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const items = data?.appnews?.newsitems || [];
+    if (items.length === 0) return null;
+
+    const formatted = items.slice(0, 5).map((it: any) => {
+      const date = it.date ? new Date(it.date * 1000).toISOString().slice(0, 10) : '?';
+      // Strip Steam BBCode + HTML + collapse whitespace
+      const body = (it.contents || '')
+        .replace(/<[^>]+>/g, ' ')             // HTML tags
+        .replace(/\[\/?[a-z][a-z0-9=._: '"\/-]*\]/gi, ' ') // BBCode like [h1]/[url=…]/[img]
+        .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#\d+;/g, '')
+        .replace(/\s+/g, ' ').trim().slice(0, 400);
+      return `📰 [${date}] **${it.title}**\n  ${body}\n  🔗 ${it.url}`;
+    }).join('\n\n');
+
+    const text = `Steam Official News for **${game}** (most recent first):\n\n${formatted}`;
+    const block: ScrapeBlock = { text, score: 8, source: 'steam-news' };
+    omniCacheSet('steam-news', game, block);
+    return block;
+  } catch (e: any) {
+    console.warn(`[OMNI] steam-news failed for "${game}": ${e.message}`);
+    return null;
+  }
+}
+
+// ─── Invidious YouTube search (most-recent uploads) ────────────────────────
+const INVIDIOUS_INSTANCES = [
+  'https://invidious.nerdvpn.de',
+  'https://invidious.privacyredirect.com',
+  'https://yewtu.be',
+  'https://inv.tux.pizza',
+];
+
+async function fetchInvidious(game: string, timeoutMs = 1800): Promise<ScrapeBlock | null> {
+  const cached = omniCacheGet('invidious', game);
+  if (cached) return cached;
+
+  const q = encodeURIComponent(`${game} update guide 2025`);
+  for (const instance of INVIDIOUS_INSTANCES) {
+    try {
+      const url = `${instance}/api/v1/search?q=${q}&type=video&sort_by=upload_date`;
+      const res = await fetchWithTimeout(url, {
+        headers: { 'User-Agent': OMNI_USER_AGENT, 'Accept': 'application/json' },
+      }, timeoutMs);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) continue;
+
+      // Filter: video title MUST mention the game (word-boundary match) — kills off-topic results
+      const escaped = game.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const matchRx = new RegExp(`\\b${escaped}\\b`, 'i');
+      const relevant = data.filter((v: any) => matchRx.test(v.title || '') || matchRx.test(v.description || ''));
+      if (relevant.length === 0) continue;
+
+      const top = relevant.slice(0, 6);
+      const formatted = top.map((v: any) => {
+        const days = v.publishedText || `~${Math.round((Date.now() / 1000 - (v.published || 0)) / 86400)}d ago`;
+        const author = v.author || 'unknown';
+        return `🎬 [${days}] **${v.title}** — by ${author}\n  Views: ${v.viewCount?.toLocaleString() || '?'} | https://youtube.com/watch?v=${v.videoId}`;
+      }).join('\n\n');
+
+      const text = `Recent YouTube uploads about **${game}** (newest first — channels often cover patches before they hit news sites):\n\n${formatted}`;
+      const block: ScrapeBlock = { text, score: 7, source: 'youtube' };
+      omniCacheSet('invidious', game, block);
+      return block;
+    } catch (e: any) {
+      console.warn(`[OMNI] invidious ${instance} failed: ${e.message}`);
+    }
+  }
+  return null;
+}
+
+// ─── Gaming RSS bundle ─────────────────────────────────────────────────────
+const GAMING_RSS_FEEDS = [
+  { name: 'IGN', url: 'https://feeds.feedburner.com/ign/games-all' },
+  { name: 'Polygon', url: 'https://www.polygon.com/rss/index.xml' },
+  { name: 'Eurogamer', url: 'https://www.eurogamer.net/feed' },
+  { name: 'PCGamer', url: 'https://www.pcgamer.com/rss/' },
+  { name: 'GameSpot', url: 'https://www.gamespot.com/feeds/news/' },
+];
+
+function parseRSSItems(xml: string, max = 5): Array<{title: string, desc: string, link: string, date: string}> {
+  // Lightweight regex parser — RSS is loose XML; full parsers are overkill for our needs.
+  const items: any[] = [];
+  const itemRx = /<item[^>]*>([\s\S]*?)<\/item>/gi;
+  let m;
+  while ((m = itemRx.exec(xml)) && items.length < max) {
+    const block = m[1];
+    const get = (tag: string) => {
+      const rx = new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?<\\/${tag}>`, 'i');
+      const r = block.match(rx);
+      return r ? r[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : '';
+    };
+    items.push({
+      title: get('title'),
+      desc: get('description').slice(0, 350),
+      link: get('link'),
+      date: get('pubDate'),
+    });
+  }
+  return items;
+}
+
+async function fetchGamingRSS(game: string, timeoutMs = 1500): Promise<ScrapeBlock | null> {
+  const cached = omniCacheGet('rss', game);
+  if (cached) return cached;
+
+  const lower = game.toLowerCase();
+  // Build a word-boundary regex to avoid false positives like "dota" matching "idiot"
+  const escaped = lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matchRx = new RegExp(`\\b${escaped}\\b`, 'i');
+
+  try {
+    const results = await Promise.allSettled(
+      GAMING_RSS_FEEDS.map(async f => {
+        const res = await fetchWithTimeout(f.url, {
+          headers: { 'User-Agent': OMNI_USER_AGENT, 'Accept': 'application/rss+xml, application/xml, text/xml' },
+        }, timeoutMs);
+        if (!res.ok) return null;
+        const xml = await res.text();
+        const items = parseRSSItems(xml, 12);
+        const matches = items.filter(it => matchRx.test(it.title) || matchRx.test(it.desc));
+        return matches.length > 0 ? { feed: f.name, items: matches.slice(0, 3) } : null;
+      })
+    );
+
+    const hits = results
+      .filter(r => r.status === 'fulfilled' && r.value)
+      .map((r: any) => r.value);
+
+    if (hits.length === 0) return null;
+
+    const formatted = hits.map(h =>
+      h.items.map((it: any) =>
+        `📰 [${h.feed}] **${it.title}** (${it.date.slice(0, 16)})\n  ${it.desc}\n  🔗 ${it.link}`
+      ).join('\n\n')
+    ).join('\n\n');
+
+    const text = `Gaming news mentioning **${game}** across IGN/Polygon/Eurogamer/PCGamer/GameSpot:\n\n${formatted}`;
+    const block: ScrapeBlock = { text, score: 5, source: 'rss' };
+    omniCacheSet('rss', game, block);
+    return block;
+  } catch (e: any) {
+    console.warn(`[OMNI] rss failed for "${game}": ${e.message}`);
+    return null;
+  }
+}
+
+// ─── Supercell official APIs (Clash Royale, Clash of Clans, Brawl Stars) ───
+async function fetchSupercellAPI(game: string, timeoutMs = 1800): Promise<ScrapeBlock | null> {
+  const lower = game.toLowerCase();
+
+  if (lower.includes('clash royale')) {
+    const key = Deno.env.get('CLASH_ROYALE_API_KEY');
+    if (!key) return null;
+    const cached = omniCacheGet('supercell-cr', 'cards');
+    if (cached) return cached;
+    try {
+      const res = await fetchWithTimeout('https://api.clashroyale.com/v1/cards', {
+        headers: { 'Authorization': `Bearer ${key}`, 'Accept': 'application/json' },
+      }, timeoutMs);
+      if (!res.ok) {
+        console.warn(`[OMNI] Supercell CR returned ${res.status}`);
+        return null;
+      }
+      const data = await res.json();
+      const cards = data?.items || [];
+      // Group by rarity — Supercell uses 'champion' for Heroes-tier cards
+      const heroes = cards.filter((c: any) => /champion|hero/i.test(c.rarity || ''));
+      const recent = cards.slice(-15); // last entries are usually newest
+
+      // Surface notable single-card hits if user query implied them
+      const notableNames = ['mini p.e.k.k.a', 'mini pekka', 'p.e.k.k.a', 'pekka', 'mega knight', 'electro giant'];
+      const notable = cards.filter((c: any) =>
+        notableNames.some(n => (c.name || '').toLowerCase().includes(n.replace(/\./g, '').toLowerCase()))
+      );
+
+      const text = `**OFFICIAL Supercell Clash Royale Card Roster** (live from api.clashroyale.com — CANONICAL DATA):\n\n` +
+        `Total cards in roster: ${cards.length}\n` +
+        (heroes.length > 0
+          ? `**Heroes/Champion-tier cards** (the Heroes feature added in 2024 — these are real cards):\n${heroes.map((c: any) => `- **${c.name}** (rarity: ${c.rarity}, elixir: ${c.elixirCost ?? '?'}, id: ${c.id ?? '?'})`).join('\n')}\n\n`
+          : `Champion/Hero tier cards: query did not return them in this slice — check the full /cards endpoint.\n\n`) +
+        (notable.length > 0
+          ? `**Notable cards relevant to query** (these EXIST per the live roster):\n${notable.map((c: any) => `- **${c.name}** (rarity: ${c.rarity}, elixir: ${c.elixirCost ?? '?'})`).join('\n')}\n\n`
+          : '') +
+        `**Most-recently-listed cards** (often newest from current season):\n` +
+        recent.map((c: any) => `- **${c.name}** — rarity: ${c.rarity}, elixir: ${c.elixirCost ?? '?'}`).join('\n') +
+        `\n\n⚠️ This data is CANONICAL. If a card or rarity appears in this list, it EXISTS in Clash Royale RIGHT NOW. Do NOT deny any card or feature confirmed by this block — even if your training data predates the Heroes update of 2024.`;
+      const block: ScrapeBlock = { text, score: 10, source: 'supercell-api' };
+      omniCacheSet('supercell-cr', 'cards', block);
+      return block;
+    } catch (e: any) {
+      console.warn(`[OMNI] Supercell CR failed: ${e.message}`);
+      return null;
+    }
+  }
+
+  if (lower.includes('clash of clans')) {
+    const key = Deno.env.get('CLASH_OF_CLANS_API_KEY');
+    if (!key) return null;
+    // Future: hit /troops or /spells endpoints
+    return null;
+  }
+
+  if (lower.includes('brawl stars')) {
+    const key = Deno.env.get('BRAWL_STARS_API_KEY');
+    if (!key) return null;
+    const cached = omniCacheGet('supercell-bs', 'brawlers');
+    if (cached) return cached;
+    try {
+      const res = await fetchWithTimeout('https://api.brawlstars.com/v1/brawlers', {
+        headers: { 'Authorization': `Bearer ${key}`, 'Accept': 'application/json' },
+      }, timeoutMs);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const brawlers = data?.items || [];
+      const text = `**OFFICIAL Brawl Stars Brawler Roster** (live):\nTotal brawlers: ${brawlers.length}\n` +
+        brawlers.slice(-10).map((b: any) => `- **${b.name}**`).join('\n');
+      const block: ScrapeBlock = { text, score: 10, source: 'supercell-api' };
+      omniCacheSet('supercell-bs', 'brawlers', block);
+      return block;
+    } catch (e: any) {
+      console.warn(`[OMNI] Supercell BS failed: ${e.message}`);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+// ─── ORCHESTRATOR ──────────────────────────────────────────────────────────
+async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 2500): Promise<ScrapeBlock[]> {
+  if (!game) return [];
+  console.log(`[OMNI] Starting omni-scrape for game="${game}" budget=${totalBudgetMs}ms`);
+
+  const overallTimeout = new Promise<ScrapeBlock[]>(resolve =>
+    setTimeout(() => {
+      console.warn(`[OMNI] Overall budget ${totalBudgetMs}ms exceeded — returning partial results`);
+      resolve([]);
+    }, totalBudgetMs)
+  );
+
+  const allFetches = Promise.allSettled([
+    fetchSupercellAPI(game),
+    fetchWikipedia(game),
+    fetchSteamNews(game),
+    fetchInvidious(game),
+    fetchGamingRSS(game),
+  ]);
+
+  const results = await Promise.race([
+    allFetches.then(r => r.filter(x => x.status === 'fulfilled' && x.value).map((x: any) => x.value as ScrapeBlock)),
+    overallTimeout,
+  ]);
+
+  console.log(`[OMNI] Returned ${results.length} blocks: ${results.map(b => `${b.source}(${b.score})`).join(', ')}`);
+  return results;
+}
+
+// Sort by authority score desc, dedup by source, hard-cap total chars.
+function rankAndCapContext(blocks: ScrapeBlock[], maxChars: number): ScrapeBlock[] {
+  const seen = new Set<string>();
+  const sorted = [...blocks].sort((a, b) => b.score - a.score);
+  const out: ScrapeBlock[] = [];
+  let total = 0;
+  for (const b of sorted) {
+    if (seen.has(b.source)) continue;
+    seen.add(b.source);
+    if (total + b.text.length > maxChars) {
+      // Truncate to remaining budget if it's a high-score block; else skip
+      const remaining = maxChars - total;
+      if (remaining > 800 && b.score >= 7) {
+        out.push({ ...b, text: b.text.slice(0, remaining - 50) + '\n…(truncated)' });
+        total = maxChars;
+      }
+      continue;
+    }
+    out.push(b);
+    total += b.text.length;
+  }
+  return out;
+}
+
+// ─── Vision Pass-1 game resolver ───────────────────────────────────────────
+// Used ONLY when vision is active AND text didn't surface a known game.
+async function resolveGameFromImage(geminiAi: any, attachments: any[]): Promise<string | null> {
+  if (!attachments?.length) return null;
+
+  const tinyPrompt = `You are a game-recognition specialist with encyclopedic knowledge of video game UI, art styles, and HUDs across PC/console/mobile.
+
+Identify the video game shown in this screenshot. Look at: art style, UI fonts, HUD elements, character/card designs, color palette, version numbers, watermarks.
+
+CRITICAL:
+- Live-service games update frequently. Do NOT assume a screenshot showing a feature you don't recognize means it's a "different game" — features get added.
+- If you see "Clash Royale" UI elements (purple frame, elixir cost diamond, card portrait) — it's Clash Royale, even if the card or ability is unfamiliar.
+- If you see Minecraft blocks/HUD — it's Minecraft, regardless of edition.
+- Modern mobile games like Brawl Stars, Clash of Clans, Brawl Stars, Marvel Snap, MLBB, Wild Rift, Genshin Impact, Honkai Star Rail, Wuthering Waves, Zenless Zone Zero have very distinct UI signatures — name them precisely.
+
+Reply ONLY in this exact format on a single line, NO other text:
+GAME: <lowercase canonical name> | CONFIDENCE: <high|medium|low>
+
+Examples of canonical names: "clash royale", "clash of clans", "brawl stars", "minecraft", "valorant", "elden ring", "genshin impact", "wuthering waves", "fortnite", "league of legends", "honkai star rail", "marvel rivals".
+If you genuinely cannot identify the game with at least medium confidence, reply exactly: GAME: unknown | CONFIDENCE: low.`;
+
+  // Try Llama 4 Scout via Groq first (fast vision)
+  const groqKey = Deno.env.get('GROQ_API_KEY');
+  if (groqKey) {
+    try {
+      const messages = buildOpenAIMessages(tinyPrompt, [], '', attachments, true);
+      const provider = PROVIDERS.find(p => p.name === 'Groq')!;
+      const txt = await callOpenAICompat(provider, 'meta-llama/llama-4-scout-17b-16e-instruct', messages, {
+        maxTokens: 80, temperature: 0.1,
+      });
+      const match = txt.match(/GAME:\s*([^|\n]+?)\s*\|\s*CONFIDENCE:\s*(high|medium|low)/i);
+      if (match) {
+        const game = match[1].trim().toLowerCase();
+        const conf = match[2].toLowerCase();
+        if (game && game !== 'unknown' && (conf === 'high' || conf === 'medium')) {
+          console.log(`[GAME-RESOLVER] Pass-1 → "${game}" (${conf})`);
+          return game;
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[GAME-RESOLVER] Groq pass-1 failed: ${e.message}`);
+    }
+  }
+
+  // Fallback: Gemini Flash
+  if (geminiAi) {
+    try {
+      const contents = buildGeminiContents([], tinyPrompt, attachments);
+      const result = await geminiAi.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents,
+        config: { temperature: 0.1, maxOutputTokens: 80 },
+      });
+      const txt = result?.text || '';
+      const match = txt.match(/GAME:\s*([^|\n]+?)\s*\|\s*CONFIDENCE:\s*(high|medium|low)/i);
+      if (match) {
+        const game = match[1].trim().toLowerCase();
+        const conf = match[2].toLowerCase();
+        if (game && game !== 'unknown' && (conf === 'high' || conf === 'medium')) {
+          console.log(`[GAME-RESOLVER] Pass-1 (Gemini) → "${game}" (${conf})`);
+          return game;
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[GAME-RESOLVER] Gemini pass-1 failed: ${e.message}`);
+    }
+  }
+
+  return null;
+}
+
+// Format ScrapeBlocks into the labelled context blocks the system prompt expects.
+function omniBlocksToContextStrings(blocks: ScrapeBlock[]): string[] {
+  const labels: Record<string, string> = {
+    'supercell-api': '=== OFFICIAL API INTEL (canonical, current — overrides ALL training data) ===',
+    'wikipedia': '=== WIKIPEDIA INTEL (live revision — usually fresher than Fandom for AAA games) ===',
+    'steam-news': '=== STEAM NEWS INTEL (latest patches & dev posts from Steam) ===',
+    'youtube': '=== YOUTUBE RECENT-UPLOADS INTEL (creators often cover patches before news sites) ===',
+    'rss': '=== GAMING NEWS INTEL (IGN/Polygon/Eurogamer/PCGamer/GameSpot) ===',
+  };
+  const closeLabels: Record<string, string> = {
+    'supercell-api': '=== END OFFICIAL API INTEL ===',
+    'wikipedia': '=== END WIKIPEDIA INTEL ===',
+    'steam-news': '=== END STEAM NEWS INTEL ===',
+    'youtube': '=== END YOUTUBE INTEL ===',
+    'rss': '=== END GAMING NEWS INTEL ===',
+  };
+  return blocks.map(b => {
+    const open = labels[b.source] || `=== ${b.source.toUpperCase()} INTEL ===`;
+    const close = closeLabels[b.source] || `=== END ${b.source.toUpperCase()} INTEL ===`;
+    return `${open}\n${b.text}\n${close}`;
+  });
+}
+
 async function runNeuralMesh(opts: {
   systemInstruction: string;
   chatHistory: any[];
@@ -1061,19 +1745,41 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   if (req.method === 'GET' && url.pathname.endsWith('/health')) {
     const status = {
-      cortex: 'v3.0-godmode',
+      cortex: 'v4.0-omniscience',
       providers: PROVIDERS.map(p => ({
         name: p.name,
         configured: !!Deno.env.get(p.keyEnv),
         models: p.models.length,
       })),
       gemini: !!Deno.env.get('GOOGLE_API_KEY'),
+      omniscience: {
+        wikipedia: 'unauth (always on)',
+        steamNews: 'unauth (always on)',
+        invidious: 'unauth (rotates instances)',
+        gamingRSS: 'unauth (always on)',
+        supercellClashRoyale: !!Deno.env.get('CLASH_ROYALE_API_KEY'),
+        supercellClashOfClans: !!Deno.env.get('CLASH_OF_CLANS_API_KEY'),
+        supercellBrawlStars: !!Deno.env.get('BRAWL_STARS_API_KEY'),
+      },
       cacheSize: responseCache.size,
+      omniCacheSize: omniCache.size,
+      steamGamesIndexed: Object.keys(STEAM_APPIDS).length,
       timestamp: new Date().toISOString(),
     };
     return new Response(JSON.stringify(status, null, 2), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+  }
+
+  // ── Omniscience probe: GET /omni-test?game=<name> for diagnostics ─────
+  if (req.method === 'GET' && url.pathname.endsWith('/omni-test')) {
+    const game = url.searchParams.get('game') || 'clash royale';
+    const blocks = await omniScrape(game, '', 5000);
+    return new Response(JSON.stringify({
+      game,
+      blocksReturned: blocks.length,
+      sources: blocks.map(b => ({ source: b.source, score: b.score, length: b.text.length, preview: b.text.slice(0, 200) })),
+    }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
   const startTime = Date.now();
@@ -1103,21 +1809,46 @@ Deno.serve(async (req) => {
     const profile = classifyQuery(prompt, attachments, chatHistory);
     console.log(`[CORTEX] intent=${profile.intent} game=${profile.game || 'none'} complexity=${profile.complexity} persona=${profile.persona.name}`);
 
+    // ── STAGE 1: GAME RESOLVER ──────────────────────────────────────────
+    // For vision queries with no text-identified game, run a fast Pass-1
+    // call to identify the game from the image. This unlocks omni-scraping
+    // for cases like "which card is this?" where the user provides no name.
+    let resolvedGame: string | null = profile.game;
+    if (profile.hasVision && !resolvedGame) {
+      resolvedGame = await resolveGameFromImage(geminiAi, attachments);
+      if (resolvedGame) {
+        console.log(`[CORTEX] Game resolved from image: ${resolvedGame}`);
+        // Update profile so downstream HUD knowledge picks the right game
+        profile.game = resolvedGame;
+      }
+    }
+
+    // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 2.5s budget) ─────
+    // Runs ALONGSIDE the client-side Reddit/Fandom/Price contexts already
+    // in this request body. Adds Wikipedia, Steam News, YouTube, RSS,
+    // and Supercell official API where applicable.
+    const omniBlocks = resolvedGame ? await omniScrape(resolvedGame, prompt, 2500) : [];
+    const rankedOmni = rankAndCapContext(omniBlocks, 6000);
+    const omniContextStrings = omniBlocksToContextStrings(rankedOmni);
+
     // ── Build augmented prompt with all live context blocks + game card ──
     const contextBlocks: string[] = [];
-    if (profile.game) {
+    if (resolvedGame) {
       contextBlocks.push(
-        `=== USER CONTEXT CARD ===\nDetected game: **${profile.game}**\nDetected intent: **${profile.intent}** (${profile.persona.emoji} ${profile.persona.name} mode)\nUse this to focus your answer specifically on this game and intent.\n=== END USER CONTEXT ===`
+        `=== USER CONTEXT CARD ===\nDetected game: **${resolvedGame}**\nDetected intent: **${profile.intent}** (${profile.persona.emoji} ${profile.persona.name} mode)\nUse this to focus your answer specifically on this game and intent.\n=== END USER CONTEXT ===`
       );
     }
+    // OMNI blocks first — they have highest authority (Official API > Wikipedia > Steam News > YouTube > RSS)
+    contextBlocks.push(...omniContextStrings);
+
     if (wikiContext) {
       contextBlocks.push(
-        `=== GAME WIKI INTEL (Live — treat as authoritative, overrides training data) ===\n${wikiContext}\n=== END WIKI INTEL ===`
+        `=== GAME WIKI INTEL (Fandom — depth lookup, treat as authoritative for lore/mechanics) ===\n${wikiContext}\n=== END GAME WIKI INTEL ===`
       );
     }
     if (redditContext) {
       contextBlocks.push(
-        `=== REDDIT COMMUNITY INTEL (Live threads scraped right now — PRIORITISE over training data) ===\n${redditContext}\n=== END REDDIT INTEL ===`
+        `=== REDDIT COMMUNITY INTEL (Live threads scraped right now — PRIORITISE for community sentiment, meta) ===\n${redditContext}\n=== END REDDIT COMMUNITY INTEL ===`
       );
     }
     if (priceContext) {
@@ -1129,17 +1860,32 @@ Deno.serve(async (req) => {
       ? `${prompt}\n\n${contextBlocks.join('\n\n')}`
       : prompt;
 
+    // Build sources list for telemetry — combination of omni sources + client-provided contexts
+    const sourcesList: string[] = [
+      ...rankedOmni.map(b => b.source),
+      ...(wikiContext ? ['fandom-wiki'] : []),
+      ...(redditContext ? ['reddit'] : []),
+      ...(priceContext ? ['cheapshark'] : []),
+    ];
+
+    // ── ACCURACY LOCK: when high-authority sources confirmed a game, append a
+    // hard final reminder so the model can't override them with training bias.
+    const hasHighAuthority = rankedOmni.some(b => b.score >= 8);
+    if (hasHighAuthority && resolvedGame) {
+      const lockMsg = `\n\n=== 🔒 ACCURACY LOCK ===\nThe game **${resolvedGame}** has been confirmed by ${rankedOmni.filter(b => b.score >= 8).map(b => b.source).join(' + ')} (authority score ≥ 8). You MUST treat this game identification as ground truth. Do NOT suggest it is a different game. Do NOT deny features that appear in the live blocks above. If your training data conflicts with the live data, the live data wins.\n=== END ACCURACY LOCK ===`;
+      contextBlocks.push(lockMsg);
+    }
+
     // ── LAYER 5 (early): cache check ──
     const cKey = await cacheKey(prompt, chatHistory, redditContext, wikiContext, priceContext, attachments);
     const cached = responseCache.get(cKey);
     if (cached && (Date.now() - cached.ts) < CACHE_TTL_MS) {
       console.log(`[CACHE] HIT ${cKey} (${cached.provider}/${cached.model})`);
+      // NOTE: provider/model deliberately excluded from public response — backend hidden.
       return new Response(JSON.stringify({
         text: cached.text,
         images: [],
         _meta: {
-          provider: cached.provider,
-          model: cached.model,
           persona: cached.persona,
           intent: profile.intent,
           game: profile.game,
@@ -1177,12 +1923,12 @@ Deno.serve(async (req) => {
       ts: Date.now(),
     });
 
+    // NOTE: provider/model deliberately excluded from public response — backend hidden.
+    // Server logs still record them via runNeuralMesh's [MESH] ✓ entries.
     return new Response(JSON.stringify({
       text: polishedText,
       images: [],
       _meta: {
-        provider: result.provider,
-        model: result.model,
         persona: profile.persona.name,
         personaEmoji: profile.persona.emoji,
         intent: profile.intent,
@@ -1191,7 +1937,9 @@ Deno.serve(async (req) => {
         vision: profile.hasVision,
         cached: false,
         latencyMs: Date.now() - startTime,
-        cortex: 'v3.0-godmode',
+        cortex: 'v4.0-omniscience',
+        sources: sourcesList,
+        gameResolved: resolvedGame !== profile.game ? false : !!resolvedGame,
       },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

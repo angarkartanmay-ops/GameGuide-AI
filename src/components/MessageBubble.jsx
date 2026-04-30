@@ -1,11 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Bot, User } from 'lucide-react';
 import FollowUpChips, { parseFollowUps } from './FollowUpChips';
 
+const SOURCE_LABELS = {
+  'supercell-api': '🛡️ Official Supercell API',
+  'wikipedia': '📚 Wikipedia (live revision)',
+  'steam-news': '🎮 Steam Official News',
+  'youtube': '🎬 YouTube (recent uploads)',
+  'rss': '📰 Gaming News (IGN/Polygon/etc.)',
+  'fandom-wiki': '📖 Fandom Wiki',
+  'reddit': '👥 Reddit (live threads)',
+  'cheapshark': '💰 CheapShark (current prices)',
+};
+
 export default function MessageBubble({ message, onFollowUpClick }) {
   const isUser = message.sender === 'user';
+  const [sourcesOpen, setSourcesOpen] = useState(false);
 
   // For AI messages, parse out follow-up questions
   const { cleanText, followUps } = isUser
@@ -13,6 +25,8 @@ export default function MessageBubble({ message, onFollowUpClick }) {
     : parseFollowUps(message.text);
 
   const hasImages = message.images && message.images.length > 0;
+  const sources = (message.meta?.sources || []).filter(Boolean);
+  const uniqueSources = [...new Set(sources)];
 
   return (
     <div className={`message-bubble-container ${isUser ? 'user' : 'ai'} animate-fade-in`}>
@@ -48,14 +62,37 @@ export default function MessageBubble({ message, onFollowUpClick }) {
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanText}</ReactMarkdown>
           )}
 
-          {/* Cortex telemetry badge — shows which brain answered */}
-          {!isUser && message.meta && message.meta.provider && !message.meta.error && (
-            <div className="cortex-badge" title={`Powered by ${message.meta.provider} • ${message.meta.model}${message.meta.vision ? ' • Vision GODMODE' : ''}`}>
-              {message.meta.personaEmoji || '🤖'} {message.meta.persona || 'GameGuide'}
-              <span className="cortex-sep">·</span>
-              <span className="cortex-provider">{message.meta.provider}</span>
-              {message.meta.vision && <span className="cortex-vision">🔍 GODMODE</span>}
-              {message.meta.cached && <span className="cortex-cached">⚡ cached</span>}
+          {/* Cortex telemetry badge — persona + GODMODE only (no backend model disclosure) */}
+          {!isUser && message.meta && !message.meta.error && (message.meta.persona || message.meta.vision) && (
+            <div className="cortex-badge-row">
+              <div className="cortex-badge" title={message.meta.vision ? 'GameGuide-AI · Vision GODMODE active' : 'GameGuide-AI'}>
+                {message.meta.personaEmoji || '🤖'} {message.meta.persona || 'GameGuide'}
+                {message.meta.vision && <span className="cortex-vision">🔍 GODMODE</span>}
+                {message.meta.cached && <span className="cortex-cached">⚡ cached</span>}
+              </div>
+              {uniqueSources.length > 0 && (
+                <div className="cortex-sources-wrapper">
+                  <button
+                    type="button"
+                    className="cortex-sources-chip"
+                    onClick={() => setSourcesOpen(o => !o)}
+                    title="Click to see live data sources used in this response"
+                  >
+                    📡 {uniqueSources.length} live source{uniqueSources.length > 1 ? 's' : ''}
+                    <span className="cortex-sources-caret">{sourcesOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {sourcesOpen && (
+                    <div className="cortex-sources-dropdown">
+                      <div className="cortex-sources-header">Live data injected into this answer:</div>
+                      {uniqueSources.map(src => (
+                        <div key={src} className="cortex-sources-item">
+                          {SOURCE_LABELS[src] || `🌐 ${src}`}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
