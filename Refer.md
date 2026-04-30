@@ -6,7 +6,7 @@ This document serves as a highly detailed summary of the architecture, capabilit
 
 ## 1. Project Overview & Philosophy
 **GameGuide-AI** is a premium, web-based, AI-powered support application built specifically for the gaming community. 
-**Core Philosophy:** Gamers do not want to read walls of text. They need high-density, accurate, well-structured data. The project was designed with a heavy emphasis on scannability (tables, bolding, bullet points), real-time accuracy (Wiki/Reddit scraping), and an immersive UX (theme engines, responsive layouts).
+**Core Philosophy:** Gamers do not want to read walls of text. They need high-density, accurate, well-structured data. The project was designed with a heavy emphasis on scannability (tables, bolding, bullet points), real-time accuracy (Wiki/Reddit/Price scraping), and an immersive UX (theme engines, loading animations, responsive layouts).
 
 ---
 
@@ -15,72 +15,71 @@ This document serves as a highly detailed summary of the architecture, capabilit
 ### 🤖 A. The LLM Engine (Gemini Integration)
 *   **Provider:** Built entirely on the new `@google/genai` official Google SDK.
 *   **Primary Models:** 
-    *   `gemini-2.5-flash`: Used for all text generation, context handling, and image analysis (vision). Lightning-fast and highly capable.
-    *   `gemini-2.5-flash-image` / `gemini-3.1-flash-image-preview`: Utilized specifically when image generation requests are detected.
-*   **System Prompt Engineering:** A highly specialized system prompt (`SYSTEM_INSTRUCTION` in `aiProvider.js`) enforces strict constraints:
+    *   `gemini-1.5-pro`: Primary model for high-complexity reasoning and multi-turn conversations.
+    *   `gemini-1.5-flash`: Lightweight, high-availability fallback used to ensure 100% uptime when the Pro model hits capacity.
+*   **System Prompt Engineering:** A highly specialized system prompt (`SYSTEM_INSTRUCTION` in the `chat-proxy` Edge Function) enforces strict constraints:
     *   **No paragraphs:** Forces the use of bullet points grouped under clear `##` headers.
     *   **Table Requirement:** Any comparison (gear, stats, characters, speedrunner vs. completionist strategies) *must* be formatted as a Markdown table.
     *   **ASCII Flowcharts:** AI is instructed to draw visual ASCII decision trees for troubleshooting or quest steps.
     *   **Suggested Next Questions:** Strict generation of 2-4 follow-up questions from the *user's perspective* using a `[?]` syntax wrapper.
 
-### 🌐 B. The Intelligence Engine (Live Scraping)
+### 🛡️ B. Robust Reliability (The Chat Proxy)
+*   **Supabase Edge Function:** All AI communication is proxied through a Deno-based Edge Function (`supabase/functions/chat-proxy/index.ts`).
+*   **Automatic Retry & Backoff:** Implements exponential backoff to handle `503` (High Demand) and `429` (Rate Limit) errors from Google.
+*   **Model Fallback Chain:** If the primary model fails or is overloaded, the proxy automatically switches to the fallback model mid-flight, making the UI feel bulletproof.
+
+### 🌐 C. The Intelligence Engine (Live Scraping)
 Standard AI models suffer from knowledge cut-offs. We bypassed this by building an Intelligence Engine to ground the models.
-*   **Vite Middleware Proxy:** To bypass browser CORS security limitations, we wrote custom middleware directly into `vite.config.js`. This allows the React app to fetch `/api/reddit` and `/api/wiki` securely.
-*   **Reddit Scraper:** Pulls live JSON data from specific gaming subreddits based on keyword presence to inject current community dialogue, complaints, meta discussions, and "sentiment".
-*   **Wiki Scraper:** A `GAME_WIKI_MAP` maps specific game titles to their Fandom MediaWiki endpoints. When appropriate, it pulls high-density lore, weapon stats, and quest steps directly from the wiki to ensure factual precision.
-*   *Note on Execution:* The scrapers execute in parallel using `Promise.allSettled` to drastically reduce wait times before the AI runs.
+*   **Vercel Proxy Functions:** Scrapers are deployed as serverless functions in `/api` (Reddit and Wiki) to bypass CORS while maintaining production stability.
+*   **Reddit Scraper:** Pulls live JSON data from specific gaming subreddits to inject current community dialogue, complaints, meta discussions, and "sentiment".
+*   **Wiki Scraper:** Maps game titles to Fandom MediaWiki endpoints, pulling lore, weapon stats, and quest steps directly from the source.
+*   **Price Engine (Is It Worth It?):** Integrated with the **CheapShark API** (`src/services/priceScraper.js`). 
+    *   Detects game titles in queries and fetches live pricing across multiple stores (Steam, GOG, Epic).
+    *   Identifies **Historic Lows** and active deals.
+    *   Renders a high-end `PriceBadge` widget with direct links and savings percentages.
 
-### 👁️ C. Multimodal Systems (Vision & Generation)
-*   **Image Attachments (Vision):**
-    *   Users can attach up to 3 images (using the 📎 paperclip UI) under 10MB each.
-    *   Images are processed into Base64 format and injected into the Gemini context via `inlineData`.
-    *   The AI will use these images to read screen errors, identify map locations, or critique character builds visually.
-*   **Image Generation:**
-    *   A Regex detector watches user prompts for keywords like `"generate an image"`, `"draw me"`, `"visualize"`.
-    *   If triggered, normal chat routing halts, and the payload is sent to Gemini's native image generation models via a custom **3-Model Fallback Chain** to guarantee the highest chance of success depending on API key tier limits.
-    *   Images render seamlessly inline, wrapped in a clickable UI with a `🎨 AI Generated` badge. Features graceful UI failure messages if the user is out of API quota.
+### 👁️ D. Multimodal Systems (Vision & Generation)
+*   **Image Analysis (Vision):** Users can attach up to 3 images. Images are processed into Base64 and injected into the Gemini context for UI reading, map identification, or character build analysis.
+*   **Image Generation:** A Regex detector triggers a fallback chain of image generation models when keywords like `"generate image"` or `"draw me"` are detected. Images render inline with a `🎨 AI Generated` badge.
 
-### 🖱️ D. Interactive Follow-Ups (Claude-Style UX)
-*   Instead of the conversation ending coldly, the AI generates questions the user might logically ask next.
-*   **Custom Parser:** A sophisticated regex script (`parseFollowUps` in `FollowUpChips.jsx`) scans the LLM output for the `[?]` tags, safely excises them from the main body paragraph, and transforms them into an array of UI chips.
-*   **Clickable UI:** These chips are rendered at the bottom of the message as cyan "glass" buttons under the header *"You might also want to ask:"*. Clicking immediately fires the text into the chat.
+### ⌨️ E. Slash Command System
+Implemented a "Power User" command palette (`useChat.js`) that allows instant interactions:
+*   `/clear`: Wipe entire chat history from Supabase.
+*   `/help`: View the interactive command reference table.
+*   `/tip`: Generate a random random elite pro gaming tip.
+*   `/lore`: Get a lore drop on a random iconic game universe.
+*   **Easter Eggs:** `/konami`, `/noclip`, `/redpill`, and `/loading` for immersive gamer flavor.
 
-### 🎭 E. The Game Theme Engine
-*   An overarching Vanilla CSS architecture leveraging CSS variables (`--bg`, `--accent`, `--glass-bg`).
-*   A React dropdown modifies a global `data-theme` attribute on the base HTML document line, instantly causing a total visual cascade across the app without reloading.
-*   **6 Custom Top-Tier Game Themes Available:**
-    1.  **Neon Synth** (Dark slate, neon pink/cyan borders)
-    2.  **Wasteland Terminal** (Black/green CRT terminal aesthetic, mono-style)
-    3.  **Tactical Strike** (Clean slate gray, sharp aggressive red accents)
-    4.  **Urban Graffiti** (Bright, vibrant playful colors, graffiti aesthetic)
-    5.  **Orbital Drop** (UNSC tactical grey with sci-fi blue accents)
-    6.  **Voxel World** (Blocky earthy tones, grass green/stone gray combos)
+### 🎭 F. The Gamer Theme Engine
+*   **7 Custom Themes:** Rebranded from copyrighted names to creative alternatives (e.g., *Voxel World* instead of *Minecraft*, *Orbital Drop* instead of *Halo*).
+*   **Persistence:** Active theme is saved to `localStorage`, ensuring preferences survive page refreshes.
+*   **Loading Screen:** A full-screen randomized animation engine triggers on load/login. Features 6 particle effects (*Electric Nexus, Hyper-Space, Data Rain, Energy Shield, Cyber Vortex, Glitch System*) that adapt to the active theme's colors.
 
 ---
 
 ## 3. The Tech Stack Breakdown
 
-*   **Core Framework Setup:** React 18 / Vite Server
-*   **Styling:** 100% Vanilla CSS (`App.css`, `index.css`). Avoided Tailwind precisely to have absolute fine-tuned control over intricate CSS animations (glows, glassmorphism `backdrop-filter`, sliding fade-ins).
-*   **Icons Library:** `lucide-react` used for consistent, scalable SVG icons across UI components.
-*   **Markdown Rendering:** Used `react-markdown` layered tightly with `remark-gfm` (GitHub Flavored Markdown) to ensure HTML tables, bold tags, and list indentations format dynamically out-of-the-box.
-*   **API Interactions:** Local `.env` management linking out to public Fandom APIs, public Reddit JSON drops, and the official Google generative API.
+*   **Core:** React 18 / Vite
+*   **Backend/DB:** Supabase (Auth, PostgreSQL, Edge Functions)
+*   **Styling:** 100% Vanilla CSS (utilizing `100dvh` for mobile and CSS variables for the theme engine).
+*   **Deployment:** Vercel (Frontend & Serverless API Scrapers).
+*   **Markdown:** `react-markdown` + `remark-gfm` for table rendering.
+*   **Responsiveness:** Dedicated mobile redesign with horizontally scrollable responsive tables and a centered "stacked" header layout.
 
 ---
 
-## 4. Supabase Database & Persistence
-The system employs **Supabase** out-of-the-box not just for Authentication (Google OAuth), but natively for backend persistence.
-*   **Chat History Storage:** When users authenticate via Google, a globally available `user` object is synced into `useChat()`.
-*   **Real-time Sync:** All outgoing user queries and incoming AI responses are asynchronously written into a `chat_messages` PostgreSQL table using `supabase.from().insert()`, providing a lightning-fast UI experience while safely archiving context behind the scenes.
-*   **Security (RLS):** The database utilizes strict **Row Level Security (RLS)** ensuring authenticated users can absolutely only trigger `SELECT` or `INSERT` operations on rows where their personal `auth.uid()` matches the message's `user_id`.
+## 4. Mobile Transformation
+Moving beyond "basic stacking," the mobile UI features:
+*   **Horizontal Scroll Tables:** AI tables wrap text and allow smooth horizontal scrolling within the chat bubble to prevent layout breaks.
+*   **Centered Controls:** Brand and navigation elements are optimized for thumb-reach and visual clarity on small screens.
+*   **Adaptive Density:** Message bubbles expand to 98% width on mobile to maximize information density.
 
 ---
 
-## 5. Current State & Future Architecture Migration (Next Steps)
-The application presently is highly stable and fully operational when tested locally via `npm run dev`.
-
-**Important Notice on Deployment:**
-Because the Intelligence Scrapers (Reddit & Fandom) were successfully migrated from `vite.config.js` into Vercel Serverless Functions (`/api`), standard static deployment (Vercel) officially supports live web scraping without breaking!
-
-To take this to the next scalability stage:
-*   Transitioning image cache saving from bloated Native Base64 into Supabase Storage buckets.
+## 5. Development History & Milestone Log
+1.  **v1.0:** Initial React + Gemini setup.
+2.  **v1.2:** Integrated Reddit/Wiki scraping via Vite proxy.
+3.  **v1.5:** Migration to Supabase Auth & DB history persistence.
+4.  **v2.0:** Production migration (Vercel APIs) and Theme Engine.
+5.  **v2.1:** Price Engine (CheapShark) and Slash Commands integration.
+6.  **v2.5 (Current):** Full Mobile Redesign, Loading Animation Engine, and Robust Proxy Retry Logic.

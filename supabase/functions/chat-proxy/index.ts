@@ -1043,7 +1043,7 @@ function gameToSteamAppId(game: string): number | null {
 // ─── Wikipedia REST API ────────────────────────────────────────────────────
 // Tries multiple title variants (game name, "Game (video game)", "Game (game)")
 // to handle disambiguation pages. Returns the first non-disambig hit.
-async function fetchWikipedia(game: string, timeoutMs = 1800): Promise<ScrapeBlock | null> {
+async function fetchWikipedia(game: string, timeoutMs = 1200): Promise<ScrapeBlock | null> {
   const cached = omniCacheGet('wikipedia', game);
   if (cached) return cached;
 
@@ -1117,7 +1117,7 @@ async function fetchWikipedia(game: string, timeoutMs = 1800): Promise<ScrapeBlo
 }
 
 // ─── Steam News API ────────────────────────────────────────────────────────
-async function fetchSteamNews(game: string, timeoutMs = 1800): Promise<ScrapeBlock | null> {
+async function fetchSteamNews(game: string, timeoutMs = 1200): Promise<ScrapeBlock | null> {
   const appId = gameToSteamAppId(game);
   if (!appId) return null;
 
@@ -1163,7 +1163,7 @@ const INVIDIOUS_INSTANCES = [
   'https://inv.tux.pizza',
 ];
 
-async function fetchInvidious(game: string, timeoutMs = 1800): Promise<ScrapeBlock | null> {
+async function fetchInvidious(game: string, timeoutMs = 1200): Promise<ScrapeBlock | null> {
   const cached = omniCacheGet('invidious', game);
   if (cached) return cached;
 
@@ -1233,7 +1233,7 @@ function parseRSSItems(xml: string, max = 5): Array<{title: string, desc: string
   return items;
 }
 
-async function fetchGamingRSS(game: string, timeoutMs = 1500): Promise<ScrapeBlock | null> {
+async function fetchGamingRSS(game: string, timeoutMs = 1100): Promise<ScrapeBlock | null> {
   const cached = omniCacheGet('rss', game);
   if (cached) return cached;
 
@@ -1279,7 +1279,7 @@ async function fetchGamingRSS(game: string, timeoutMs = 1500): Promise<ScrapeBlo
 }
 
 // ─── Supercell official APIs (Clash Royale, Clash of Clans, Brawl Stars) ───
-async function fetchSupercellAPI(game: string, timeoutMs = 1800): Promise<ScrapeBlock | null> {
+async function fetchSupercellAPI(game: string, timeoutMs = 1200): Promise<ScrapeBlock | null> {
   const lower = game.toLowerCase();
 
   if (lower.includes('clash royale')) {
@@ -1575,6 +1575,38 @@ async function runNeuralMesh(opts: {
     console.log('[VISION] External providers exhausted, falling back to Gemini...');
   }
 
+  // ── SPEED FAST-PATH: simple text queries → Groq Llama-3.1-8B-instant ───
+  // Sub-500ms typical response. Only kicks in when:
+  //   - Groq key configured
+  //   - No vision attachments
+  //   - profile.complexity === 'simple' (short queries, no multi-part Qs)
+  //   - Not a deep intent (lore/build/comparison/troubleshoot get full mesh)
+  const fastPathOK = !opts.profile.hasVision
+    && opts.profile.complexity === 'simple'
+    && Deno.env.get('GROQ_API_KEY')
+    && !['lore', 'build', 'comparison', 'troubleshoot'].includes(opts.profile.intent);
+  if (fastPathOK) {
+    try {
+      const groqProvider = PROVIDERS.find(p => p.name === 'Groq')!;
+      const messages = buildOpenAIMessages(
+        opts.systemInstruction,
+        opts.chatHistory,
+        opts.userPrompt,
+        opts.attachments,
+        false,
+      );
+      console.log('[MESH-FASTPATH] Groq → llama-3.1-8b-instant');
+      const text = await callOpenAICompat(groqProvider, 'llama-3.1-8b-instant', messages, {
+        maxTokens: 1800,
+        temperature: 0.7,
+      });
+      console.log('[MESH-FASTPATH] ✓ Groq/llama-3.1-8b-instant');
+      return { text, provider: 'Groq', model: 'llama-3.1-8b-instant' };
+    } catch (e: any) {
+      console.warn(`[MESH-FASTPATH] failed (${(e.message || '').slice(0, 100)}) — falling through to Gemini`);
+    }
+  }
+
   // ── PRIMARY PATH: Gemini (GOOGLE_API_KEY is always available) ──────────
   if (opts.geminiAi) {
     const contents = buildGeminiContents(opts.chatHistory, opts.userPrompt, opts.attachments);
@@ -1745,7 +1777,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   if (req.method === 'GET' && url.pathname.endsWith('/health')) {
     const status = {
-      cortex: 'v4.0-omniscience',
+      cortex: 'v4.1-omniscience-fast',
       providers: PROVIDERS.map(p => ({
         name: p.name,
         configured: !!Deno.env.get(p.keyEnv),
@@ -1809,6 +1841,28 @@ Deno.serve(async (req) => {
     const profile = classifyQuery(prompt, attachments, chatHistory);
     console.log(`[CORTEX] intent=${profile.intent} game=${profile.game || 'none'} complexity=${profile.complexity} persona=${profile.persona.name}`);
 
+    // ── SPEED: cache check FIRST (saves 2.5s omni-scrape + LLM call on hit) ──
+    // We hash on the inputs we already have: the user's prompt + any client-
+    // provided contexts + last 2 messages of history + attachment fingerprints.
+    // If hit, return immediately — skip omni-scrape AND the mesh.
+    const earlyCacheKey = await cacheKey(prompt, chatHistory, redditContext, wikiContext, priceContext, attachments);
+    const earlyCached = responseCache.get(earlyCacheKey);
+    if (earlyCached && (Date.now() - earlyCached.ts) < CACHE_TTL_MS) {
+      console.log(`[CACHE-EARLY] HIT ${earlyCacheKey} (${earlyCached.provider}/${earlyCached.model}) — skipping scrape + mesh`);
+      return new Response(JSON.stringify({
+        text: earlyCached.text,
+        images: [],
+        _meta: {
+          persona: earlyCached.persona,
+          intent: profile.intent,
+          game: profile.game,
+          cached: true,
+          latencyMs: Date.now() - startTime,
+          cortex: 'v4.1-omniscience-fast',
+        },
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // ── STAGE 1: GAME RESOLVER ──────────────────────────────────────────
     // For vision queries with no text-identified game, run a fast Pass-1
     // call to identify the game from the image. This unlocks omni-scraping
@@ -1823,11 +1877,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 2.5s budget) ─────
-    // Runs ALONGSIDE the client-side Reddit/Fandom/Price contexts already
-    // in this request body. Adds Wikipedia, Steam News, YouTube, RSS,
-    // and Supercell official API where applicable.
-    const omniBlocks = resolvedGame ? await omniScrape(resolvedGame, prompt, 2500) : [];
+    // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 1.6s budget) ─────
+    // Tightened from 2.5s → 1.6s for speed. Most sources resolve in <1s.
+    // Slow ones just won't contribute that turn; the LLM has training to fill.
+    // Skip entirely for simple chitchat where game context isn't needed.
+    const omniBlocks = (resolvedGame && profile.complexity !== 'simple')
+      ? await omniScrape(resolvedGame, prompt, 1600)
+      : [];
     const rankedOmni = rankAndCapContext(omniBlocks, 6000);
     const omniContextStrings = omniBlocksToContextStrings(rankedOmni);
 
@@ -1937,7 +1993,7 @@ Deno.serve(async (req) => {
         vision: profile.hasVision,
         cached: false,
         latencyMs: Date.now() - startTime,
-        cortex: 'v4.0-omniscience',
+        cortex: 'v4.1-omniscience-fast',
         sources: sourcesList,
         gameResolved: resolvedGame !== profile.game ? false : !!resolvedGame,
       },
