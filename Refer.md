@@ -55,6 +55,12 @@ Implemented a "Power User" command palette (`useChat.js`) that allows instant in
 *   **Persistence:** Active theme is saved to `localStorage`, ensuring preferences survive page refreshes.
 *   **Loading Screen:** A full-screen randomized animation engine triggers on load/login. Features 6 particle effects (*Electric Nexus, Hyper-Space, Data Rain, Energy Shield, Cyber Vortex, Glitch System*) that adapt to the active theme's colors.
 
+### 👾 G. Discord Bot Integration
+*   A standalone Node.js process using `discord.js` located in `/discord-bot`.
+*   **Shared Brain:** Rather than duplicating logic, the bot intercepts Discord messages and forwards them to the existing Supabase `chat-proxy` Edge Function.
+*   **Formatting Parity:** Because Discord natively supports Markdown (tables, bold text, code blocks), the AI's strict formatting constraints render perfectly in-client.
+*   **Deployment:** Designed to run as a continuous background worker (e.g., on Railway or Render).
+
 ---
 
 ## 3. The Tech Stack Breakdown
@@ -82,4 +88,5 @@ Moving beyond "basic stacking," the mobile UI features:
 3.  **v1.5:** Migration to Supabase Auth & DB history persistence.
 4.  **v2.0:** Production migration (Vercel APIs) and Theme Engine.
 5.  **v2.1:** Price Engine (CheapShark) and Slash Commands integration.
-6.  **v2.5 (Current):** Full Mobile Redesign, Loading Animation Engine, and Robust Proxy Retry Logic.
+6.  **v2.5:** Full Mobile Redesign, Loading Animation Engine, and Robust Proxy Retry Logic.
+7.  **v3.0 (Current):** Discord Bot Integration leveraging existing Supabase Edge Functions.

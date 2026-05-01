@@ -15,6 +15,7 @@ Welcome to **GameGuide-AI** – the ultimate multimodal, highly structured suppo
     *   **Halo**
     *   *(Default Hacker aesthetic)*
 *   **📊 Structured, Scannable Output:** Built to respect a gamer's time. Responses are strictly formatted avoiding walls of text, heavily utilizing Markdown tables for comparisons (e.g., assessing armor stats or speedrunner vs. completionist routes).
+*   **🤖 Discord Bot Integration:** Access the full power of GameGuide-AI directly from your Discord server. The bot shares the exact same "brain" (Supabase Edge Function) as the web app, maintaining strict formatting rules and live scraping capabilities.
 
 ## 🛠️ Tech Stack
 
