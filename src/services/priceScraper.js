@@ -62,9 +62,45 @@ const GAME_PRICE_MAP = {
   'red dead': 'Red Dead Redemption 2',
   'rdr2': 'Red Dead Redemption 2',
   'god of war': 'God of War',
-  'horizon': 'Horizon Zero Dawn',
+  'horizon zero dawn': 'Horizon Zero Dawn',
+  'horizon forbidden west': 'Horizon Forbidden West',
+  'forza horizon 5': 'Forza Horizon 5',
+  'forza horizon 4': 'Forza Horizon 4',
+  'forza motorsport': 'Forza Motorsport',
   'resident evil': 'Resident Evil Village',
-  'monster hunter': 'Monster Hunter World',
+  'resident evil 4': 'Resident Evil 4',
+  'resident evil 4 remake': 'Resident Evil 4',
+  'monster hunter': 'Monster Hunter Wilds',
+  'monster hunter wilds': 'Monster Hunter Wilds',
+  'monster hunter rise': 'Monster Hunter Rise',
+  'mh rise': 'Monster Hunter Rise',
+  'mh wilds': 'Monster Hunter Wilds',
+  'minecraft java edition': 'Minecraft Java',
+  'minecraft bedrock': 'Minecraft Bedrock',
+  'marvel rivals': 'Marvel Rivals',
+  'the finals': 'THE FINALS',
+  'delta force': 'Delta Force',
+  'black myth wukong': 'Black Myth: Wukong',
+  'black myth': 'Black Myth: Wukong',
+  'wukong': 'Black Myth: Wukong',
+  'helldivers 2': 'Helldivers 2',
+  'wuthering waves': 'Wuthering Waves',
+  'expedition 33': 'Clair Obscur: Expedition 33',
+  'clair obscur': 'Clair Obscur: Expedition 33',
+  'silksong': 'Hollow Knight: Silksong',
+  'lethal company': 'Lethal Company',
+  'phasmophobia': 'Phasmophobia',
+  'tekken 8': 'TEKKEN 8',
+  'street fighter 6': 'Street Fighter 6',
+  'mortal kombat 1': 'Mortal Kombat 1',
+  'persona 3 reload': 'Persona 3 Reload',
+  'metaphor': 'Metaphor: ReFantazio',
+  'metaphor refantazio': 'Metaphor: ReFantazio',
+  'hogwarts legacy': 'Hogwarts Legacy',
+  'death stranding': 'Death Stranding',
+  'sea of thieves': 'Sea of Thieves',
+  'manor lords': 'Manor Lords',
+  'enshrouded': 'Enshrouded',
   'final fantasy': 'Final Fantasy XIV',
   'ff14': 'Final Fantasy XIV',
   'ffxiv': 'Final Fantasy XIV',
@@ -110,28 +146,88 @@ function detectGames(query) {
 }
 
 /**
- * Fetch price data from CheapShark for a specific game title.
+ * Token-based similarity scoring. Higher = more relevant.
+ * Used to pick the "right" game from CheapShark's fuzzy search results.
+ */
+function scoreTitleMatch(candidate, target) {
+  const c = candidate.toLowerCase().trim();
+  const t = target.toLowerCase().trim();
+  if (c === t) return 1000;                            // exact match wins
+  if (c === t + ' edition' || t === c + ' edition') return 800;
+
+  const cTokens = new Set(c.split(/[^a-z0-9]+/).filter(Boolean));
+  const tTokens = new Set(t.split(/[^a-z0-9]+/).filter(Boolean));
+  let overlap = 0;
+  for (const tok of tTokens) if (cTokens.has(tok)) overlap++;
+  const tokenScore = (overlap / Math.max(tTokens.size, 1)) * 100;
+
+  // Prefer the candidate that contains the WHOLE target as a phrase
+  const containsScore = c.includes(t) ? 50 : 0;
+
+  // Penalize length distance — "Minecraft Legends" (heavily padded) vs "Minecraft"
+  const lengthPenalty = Math.abs(c.length - t.length) * 0.3;
+
+  // Penalize spin-off subtitles when target lacks them
+  const spinoffWords = ['legends', 'remake', 'remastered', 'definitive', 'enhanced', 'gold', 'deluxe', 'ultimate', 'collection', 'goty', 'season pass', 'dlc'];
+  let spinoffPenalty = 0;
+  if (!spinoffWords.some(w => t.includes(w))) {
+    for (const w of spinoffWords) if (c.includes(w)) spinoffPenalty += 12;
+  }
+
+  return tokenScore + containsScore - lengthPenalty - spinoffPenalty;
+}
+
+function pickBestMatch(games, target) {
+  if (!Array.isArray(games) || games.length === 0) return null;
+  const scored = games.map(g => ({ g, score: scoreTitleMatch(g.title || '', target) }));
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0].g;
+}
+
+/**
+ * Fetch price data from CheapShark.
+ *
+ * Strategy: try exact-match first (CheapShark's `exact=1`). If that returns
+ * no results, fall back to fuzzy search and pick the best result by
+ * token-similarity scoring instead of blindly taking games[0]. This fixes
+ * cases like "minecraft" → "Minecraft Legends" (CheapShark's fuzzy ranking
+ * preferred the spin-off).
  */
 async function fetchGamePrice(gameTitle) {
-  // Step 1: Search for the game by name
-  const searchRes = await fetch(
-    `https://www.cheapshark.com/api/1.0/games?title=${encodeURIComponent(gameTitle)}&limit=3&exact=0`,
-    { headers: { 'Accept': 'application/json' } }
-  );
-  if (!searchRes.ok) return null;
+  let games = null;
 
-  const games = await searchRes.json();
-  if (!games || games.length === 0) return null;
+  // ── Step 1a: try exact match first ───────────────────────────────────────
+  try {
+    const exactRes = await fetch(
+      `https://www.cheapshark.com/api/1.0/games?title=${encodeURIComponent(gameTitle)}&limit=5&exact=1`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (exactRes.ok) {
+      const exactGames = await exactRes.json();
+      if (Array.isArray(exactGames) && exactGames.length > 0) games = exactGames;
+    }
+  } catch { /* fall through to fuzzy */ }
 
-  const topGame = games[0];
+  // ── Step 1b: fuzzy fallback with smart scoring ──────────────────────────
+  if (!games) {
+    const fuzzyRes = await fetch(
+      `https://www.cheapshark.com/api/1.0/games?title=${encodeURIComponent(gameTitle)}&limit=8&exact=0`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    if (!fuzzyRes.ok) return null;
+    games = await fuzzyRes.json();
+    if (!Array.isArray(games) || games.length === 0) return null;
+  }
 
-  // Step 2: Get detailed pricing for the top match (includes cheapest ever)
+  const topGame = pickBestMatch(games, gameTitle);
+  if (!topGame) return null;
+
+  // ── Step 2: detailed pricing (includes cheapestPriceEver + deals) ───────
   const detailRes = await fetch(
     `https://www.cheapshark.com/api/1.0/games?id=${topGame.gameID}`,
     { headers: { 'Accept': 'application/json' } }
   );
   if (!detailRes.ok) {
-    // Fallback: return just basic cheapest price
     return {
       title: topGame.title || gameTitle,
       cheapest: topGame.cheapest,
@@ -158,6 +254,42 @@ async function fetchGamePrice(gameTitle) {
     })),
     thumb: topGame.thumb,
   };
+}
+
+/**
+ * Direct, single-game price lookup — used by the /price slash command.
+ * Skips the noisy `detectGames()` heuristic entirely and uses the user's
+ * literal input as the search title. Returns the same context-string
+ * shape as fetchPrices() so the command can render it identically.
+ */
+export async function fetchPriceDirect(gameTitle) {
+  if (!gameTitle || !gameTitle.trim()) return '';
+  const cacheKey = `price-direct:${gameTitle.toLowerCase().trim()}`;
+  const cached = priceCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) return cached.data;
+
+  try {
+    const result = await fetchGamePrice(gameTitle.trim());
+    if (!result) return '';
+    const formatted = formatPriceContext([result]);
+    priceCache.set(cacheKey, { data: formatted, timestamp: Date.now() });
+    return formatted;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Direct, summary-only variant — for the PriceBadge UI.
+ */
+export async function fetchPriceSummaryDirect(gameTitle) {
+  if (!gameTitle || !gameTitle.trim()) return [];
+  try {
+    const result = await fetchGamePrice(gameTitle.trim());
+    return result ? [result] : [];
+  } catch {
+    return [];
+  }
 }
 
 /**

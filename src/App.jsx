@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { Gamepad2, Radio, BookOpen, DollarSign } from 'lucide-react';
 import ThemeSelector from './components/ThemeSelector';
@@ -17,33 +17,29 @@ function App() {
 
   const [showLoader, setShowLoader] = useState(true);
   const [exitingLoader, setExitingLoader] = useState(false);
+  // Splash plays exactly ONCE on initial app load — not on tab refocus,
+  // token refresh, or any other auth state change.
+  const splashShownRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Handle manual login/logout triggers or initial auth loading
+  // Show the splash exactly once — on the first time auth resolves.
   useEffect(() => {
-    if (authLoading) {
-      setShowLoader(true);
-      setExitingLoader(false);
-      return;
-    }
+    if (authLoading) return;        // still bootstrapping — keep loader on
+    if (splashShownRef.current) return; // already played the splash this session
 
-    // Force loader trigger immediately when user explicitly logs in or out
-    setShowLoader(true);
-    setExitingLoader(false);
-
-    // Artificial animated delay of 1.5s 
-    const timer = setTimeout(() => {
+    splashShownRef.current = true;
+    const exitTimer = setTimeout(() => {
       setExitingLoader(true);
-      // Wait 500ms for transition CSS to finish before unmounting completely
-      setTimeout(() => setShowLoader(false), 500);
+      const unmountTimer = setTimeout(() => setShowLoader(false), 500);
+      return () => clearTimeout(unmountTimer);
     }, 1500);
-    
-    return () => clearTimeout(timer);
-  }, [authLoading, user]);
+
+    return () => clearTimeout(exitTimer);
+  }, [authLoading]);
 
   return (
     <div className="app-container">

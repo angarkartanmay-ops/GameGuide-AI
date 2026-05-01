@@ -197,47 +197,47 @@ const HUD_KNOWLEDGE: Record<string, string> = {
 };
 
 const VISION_GODMODE_INSTRUCTION = `
-# 🎯 VISION GODMODE — MANDATORY OBSERVATION PROTOCOL
+# 🎯 VISION GODMODE v2 — REFUSAL CONTRACT FIRST
 
-The user attached an image. You MUST follow this 7-stage protocol BEFORE giving advice. Skipping a stage = catastrophic failure.
+The user attached an image. You will read it in **3 PASSES** — no more, no fewer.
+Slim is a feature: padding observations to fill sections is the #1 cause of hallucination. Refuse to guess; refusing is **CORRECT**.
 
-## STAGE 1: CANVAS SCAN
-Mentally divide the image into a 3×3 grid (top-left, top, top-right, left, center, right, bottom-left, bottom, bottom-right). Note what UI region exists in each cell. This prevents missing the armor bar, the F3 text, the subtitle popup, etc.
+## ⛔ REFUSAL CONTRACT (READ THIS TWICE)
+- If you cannot read a number/icon/text/character with **HIGH confidence**, write \`(unclear)\` instead of guessing.
+- If a region is dark, blurry, partially off-screen, or pixelated, write \`(not legible)\` for that region.
+- "I cannot determine X from this image" is a CORRECT answer. Guessing wrong is a FAILURE.
+- Do NOT invent items, stats, characters, locations, abilities, or HUD elements that are not clearly visible.
+- Do NOT count icons unless you can identify each one individually. If unsure, write "(several visible — count not certain)".
+- If the user's question requires data not in the image, **say so** and ask a clarifying question.
 
-## STAGE 2: OCR PASS (CRITICAL)
-Transcribe EVERY readable string in the image — debug text, chat, item tooltips, level numbers, coords, FPS, version strings, subtitles. Treat this text as **ground truth** that overrides any visual guess. If F3 says "Minecraft 1.21.11" — that's the version, period.
+## PASS 1 :: OBSERVE (only what is clearly visible)
+List ONLY what you can see CLEARLY. Skip pixel clusters you can't identify. For each thing you list, prefix with one of:
+  • [TEXT]  — readable text/numbers (treat as ground truth)
+  • [ICON]  — a recognizable game-specific icon you can name
+  • [SHAPE] — a UI element whose function is obvious but content is partial
+Items you can't classify with confidence: SKIP them entirely. Do not list "(unclear)" speculations.
 
-## STAGE 3: HUD DECODE
-Apply the game-specific HUD knowledge (provided below). For each HUD element:
-- COUNT discrete icons (hearts, armor pips, mats, charges) ONE BY ONE.
-- Distinguish hearts from hunger from armor by ICON SHAPE, not row position.
-- If a row of armor icons is visible, armor IS equipped. Do not say "no armor" if you see them.
-- If hearts are red and full, do NOT say "low health" because you're guessing from a death message.
+## PASS 2 :: IDENTIFY (game + scene + key entities)
+Using PASS 1 + the game-specific HUD knowledge below:
+- Game name + edition/platform (cite the [TEXT] string that confirmed it, if any)
+- Scene type (menu / combat / death screen / inventory / cutscene / settings / etc.)
+- Key visible entities (boss name, character class, item, biome) — only if HIGH-confidence
+If you can't identify the game with HIGH confidence: state the game's *visual signature* (UI style, palette, font) and stop. Do NOT fabricate a name.
 
-## STAGE 4: INVENTORY/HOTBAR
-List EVERY item visible in inventory or hotbar with its stack count if shown. Identify by texture (e.g., "iron sword", "shield", "diamond pickaxe"). If unsure of item ID, describe it ("blue tool, looks like pickaxe").
+## PASS 3 :: ANSWER
+Answer the user's actual question, grounded ONLY in PASS 1+2. If the question requires info not in the image (e.g. "what's the meta build?"), use the live INTEL blocks at the prompt body — those override training data. If the live blocks are silent, say "based on my training — verify against the current patch".
 
-## STAGE 5: ENVIRONMENT
-Biome (forest/desert/cave/nether), time of day, weather, structures (houses/dungeons), mobs visible, blocks underfoot.
+## OUTPUT FORMAT
+- Open with a small "**🔍 Confirmed**" section ONLY IF you have at least 3 HIGH-confidence observations from PASS 1. Otherwise skip it — do not pad.
+- Then deliver the answer per the active persona's format rules.
+- End with the standard \`[?]\` follow-up questions.
 
-## STAGE 6: CONFIDENCE TAG
-For each observation, internally tag it [HIGH] (text/clear icon), [MEDIUM] (probable but pixelated), [LOW] (guess). NEVER state [LOW] observations as fact — caveat them with "appears to be".
-
-## STAGE 7: ANSWER
-ONLY NOW answer the user's actual question, grounded in stages 1-6. Open with a "**🔍 What I See**" section that summarizes confirmed [HIGH] facts in 4-6 bullets, THEN proceed with persona-shaped advice.
-
-## SELF-CORRECTION GUARDRAIL
-Before submitting, re-read your "What I See" section. If anything contradicts the OCR'd text from Stage 2, FIX IT. Common errors to catch:
-- Claiming low health when hearts show full → CORRECT to "full hearts visible"
-- Claiming no armor when armor row icons are visible → CORRECT to "armor equipped"
-- Misidentifying the game when F3/version text is visible
-- Inventing items not actually in the hotbar
-
-## ANTI-HALLUCINATION ABSOLUTES
-- Never invent gear the user doesn't show.
-- Never claim a game state from death-screen experience if you're seeing live HUD.
-- Never say "low HP" without counting heart icons.
-- If the image is dark/blurry/uncertain, say so — never confabulate.
+## ANTI-HALLUCINATION ABSOLUTES (re-read before submitting)
+- Hearts/HP: NEVER state "low HP" unless you can COUNT the missing heart icons.
+- Armor: a row of armor icons being visible means armor IS equipped. Period.
+- Game ID: F3/version-screen/watermark text is **ground truth** — outranks any visual guess.
+- Inventory: only items YOU SAW. No "you probably also have X".
+- Live-service feature denial: NEVER deny a card/character/feature that an INTEL block confirms exists, even if your training predates it.
 `;
 
 function buildVisionPrompt(profile: QueryProfile): string {
@@ -591,10 +591,13 @@ function optimizeRoute(profile: QueryProfile): Array<{ provider: ProviderConfig;
   //   3. Mistral Small 3.1 24B (OR free) — solid backup, decent at HUDs
   // Then Gemini direct via the main path is the ultimate fallback.
   if (profile.hasVision) {
+    // Mistral Small 3.1 was dropped from the vision route — it consistently
+    // confabulates on dense game UIs. Llama 4 Scout (Groq) and Gemini Flash Exp
+    // are the curated externals; Gemini direct is the final fallback inside
+    // runNeuralMesh itself.
     const visionPriority: Array<[string, string]> = [
       ['Groq', 'meta-llama/llama-4-scout-17b-16e-instruct'],
       ['OpenRouter', 'google/gemini-2.0-flash-exp:free'],
-      ['OpenRouter', 'mistralai/mistral-small-3.1-24b-instruct:free'],
     ];
     for (const [providerName, modelId] of visionPriority) {
       const provider = PROVIDERS.find(p => p.name === providerName);
@@ -603,12 +606,15 @@ function optimizeRoute(profile: QueryProfile): Array<{ provider: ProviderConfig;
       const m = provider.models.find(mm => mm.id === modelId);
       if (m) out.push({ provider, modelId });
     }
-    // Add any other vision-capable models we missed (defensive)
-    for (const provider of PROVIDERS) {
-      if (!Deno.env.get(provider.keyEnv)) continue;
-      for (const m of provider.models) {
-        if (m.vision && !out.find(o => o.modelId === m.id)) {
-          out.push({ provider, modelId: m.id });
+    // Defensive last-resort: if neither curated provider is configured,
+    // include any vision-capable model we have so the request doesn't fail.
+    if (out.length === 0) {
+      for (const provider of PROVIDERS) {
+        if (!Deno.env.get(provider.keyEnv)) continue;
+        for (const m of provider.models) {
+          if (m.vision && !out.find(o => o.modelId === m.id)) {
+            out.push({ provider, modelId: m.id });
+          }
         }
       }
     }
@@ -1552,11 +1558,12 @@ async function runNeuralMesh(opts: {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           console.log(`[VISION] ${provider.name} → ${modelId} (attempt ${attempt})`);
-          // Vision needs more tokens (7-stage protocol + answer) and lower temp
-          // for accurate observation (less creativity, more grounded).
+          // Vision: very low temperature (0.15) for grounded reads, no
+          // creative padding. The new GODMODE protocol explicitly tells the
+          // model to refuse rather than guess — temp must match.
           const text = await callOpenAICompat(provider, modelId, messages, {
             maxTokens: 3500,
-            temperature: 0.4,
+            temperature: 0.15,
           });
           console.log(`[VISION] ✓ ${provider.name}/${modelId}`);
           return { text, provider: provider.name, model: modelId };
@@ -1619,9 +1626,10 @@ async function runNeuralMesh(opts: {
             contents,
             config: {
               systemInstruction: opts.systemInstruction,
-              // Vision queries: lower temperature for grounded observations + more tokens
+              // Vision queries: very low temperature (0.15) — refusal-oriented
+              // GODMODE protocol does NOT tolerate creative padding.
               ...(opts.profile.hasVision
-                ? { temperature: 0.4, maxOutputTokens: 3500 }
+                ? { temperature: 0.15, maxOutputTokens: 3500 }
                 : { temperature: 0.72, maxOutputTokens: 2400 }),
             },
           });
@@ -1777,7 +1785,7 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   if (req.method === 'GET' && url.pathname.endsWith('/health')) {
     const status = {
-      cortex: 'v4.1-omniscience-fast',
+      cortex: 'v4.2-vision-refusal',
       providers: PROVIDERS.map(p => ({
         name: p.name,
         configured: !!Deno.env.get(p.keyEnv),
@@ -1858,7 +1866,7 @@ Deno.serve(async (req) => {
           game: profile.game,
           cached: true,
           latencyMs: Date.now() - startTime,
-          cortex: 'v4.1-omniscience-fast',
+          cortex: 'v4.2-vision-refusal',
         },
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -1879,11 +1887,12 @@ Deno.serve(async (req) => {
 
     // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 1.6s budget) ─────
     // Tightened from 2.5s → 1.6s for speed. Most sources resolve in <1s.
-    // Slow ones just won't contribute that turn; the LLM has training to fill.
-    // Skip entirely for simple chitchat where game context isn't needed.
-    const omniBlocks = (resolvedGame && profile.complexity !== 'simple')
-      ? await omniScrape(resolvedGame, prompt, 1600)
-      : [];
+    // VISION queries ALWAYS get omni context — even "simple" classification —
+    // so screenshots can be linked to live news/patches/Heroes-update content
+    // (e.g. "this is the new Mini P.E.K.K.A Hero from the Oct 2024 update").
+    // Text queries skip the scrape on simple chitchat for speed.
+    const shouldScrape = !!resolvedGame && (profile.hasVision || profile.complexity !== 'simple');
+    const omniBlocks = shouldScrape ? await omniScrape(resolvedGame, prompt, 1600) : [];
     const rankedOmni = rankAndCapContext(omniBlocks, 6000);
     const omniContextStrings = omniBlocksToContextStrings(rankedOmni);
 
@@ -1968,8 +1977,47 @@ Deno.serve(async (req) => {
       profile,
     });
 
+    // ── LAYER 4.5 (vision-only): SECOND-OPINION HOP ─────────────────────
+    // If the first vision response expressed material uncertainty AND the
+    // user's question is identification-critical, run a second vision
+    // model and present the merged perspective. Cost: +1 call only when
+    // the first one was uncertain (i.e. we're already paying with bad UX
+    // if we don't).
+    let finalText = result.text;
+    let secondOpinionUsed = false;
+    if (profile.hasVision) {
+      const isIdentificationQuery = /\b(what|which|who|name|identify) (is|game|card|character|class|item|hero|champion|operator|weapon|location|boss|mob)\b/i.test(prompt);
+      const expressedUncertainty = /\b(unclear|cannot determine|not legible|appears to be|i'?m not sure|hard to tell)\b/i.test(result.text);
+      if (isIdentificationQuery && expressedUncertainty) {
+        try {
+          console.log('[VISION-2OP] First answer was uncertain on an ID query — fetching second opinion');
+          const route = optimizeRoute(profile);
+          const second = route.find(r => r.modelId !== result.model && r.provider.name);
+          if (second && Deno.env.get(second.provider.keyEnv)) {
+            const messages = buildOpenAIMessages(systemInstruction, chatHistory, augmentedPrompt, attachments, true);
+            const altText = await callOpenAICompat(second.provider, second.modelId, messages, {
+              maxTokens: 2000, temperature: 0.15,
+            });
+            // Merge — show original + second opinion as a labeled compare
+            finalText = `${result.text}\n\n---\n\n## 🔁 Second Opinion (cross-check)\n\n${altText}\n\n*If the two answers agree on the key facts, treat them as confirmed. If they disagree, the disagreeing parts are uncertain — verify in-game.*`;
+            secondOpinionUsed = true;
+            console.log('[VISION-2OP] ✓ second opinion injected');
+          }
+        } catch (e: any) {
+          console.warn('[VISION-2OP] failed (will not block response):', e.message);
+        }
+      }
+
+      // Post-process: scrub the most common uncertainty-then-claim hallucination
+      // pattern. e.g. "the hearts appear to be 5" → "(uncertain — verify in-game)"
+      finalText = finalText.replace(
+        /\b(appears? to (?:be|have)|hard to tell but|seems? like|might be|i think (?:there are|it'?s|it has))\s+(\d+|several|many|a few)\b/gi,
+        '(uncertain — verify in-game)'
+      );
+    }
+
     // ── LAYER 5: quality gate ──
-    const polishedText = ensureFollowUps(result.text, profile);
+    const polishedText = ensureFollowUps(finalText, profile);
 
     responseCache.set(cKey, {
       text: polishedText,
@@ -1991,9 +2039,10 @@ Deno.serve(async (req) => {
         game: profile.game,
         complexity: profile.complexity,
         vision: profile.hasVision,
+        secondOpinion: secondOpinionUsed,
         cached: false,
         latencyMs: Date.now() - startTime,
-        cortex: 'v4.1-omniscience-fast',
+        cortex: 'v4.2-vision-refusal',
         sources: sourcesList,
         gameResolved: resolvedGame !== profile.game ? false : !!resolvedGame,
       },

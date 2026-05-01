@@ -3,7 +3,7 @@ import { supabase, supabaseAnonKey } from '../services/supabaseClient';
 import { generateChatResponse } from '../services/aiProvider';
 import { searchReddit } from '../services/redditScraper';
 import { searchWikis } from '../services/wikiScraper';
-import { fetchPrices, fetchPricesSummary } from '../services/priceScraper';
+import { fetchPrices, fetchPricesSummary, fetchPriceDirect, fetchPriceSummaryDirect } from '../services/priceScraper';
 
 // Cheap client-side heuristic: does this message warrant Reddit/Wiki scraping?
 // Skip the 2-3s scrape for greetings, meta-questions ("what can you do"), and
@@ -32,15 +32,21 @@ export default function useChat(user) {
   const cooldownRef = useRef(false);         // for rate limiting (2s)
   const cooldownTimerRef = useRef(null);     // to clear on unmount
 
+  // Depend on user?.id (stable string) instead of the user object reference.
+  // Supabase rebuilds the user object on every TOKEN_REFRESHED event (which
+  // fires whenever the tab regains focus); using `user` directly would refetch
+  // history every tab switch. Using user.id only re-fires when the actual
+  // logged-in user changes.
+  const userId = user?.id || null;
   useEffect(() => {
-    if (user) {
+    if (userId) {
       const fetchHistory = async () => {
         const { data, error } = await supabase
           .from('chat_messages')
           .select('*')
-          .eq('user_id', user.id)
+          .eq('user_id', userId)
           .order('created_at', { ascending: true });
-        
+
         if (!error && data) {
           setMessages(data.map(msg => ({
             id: msg.id || Date.now().toString(),
@@ -55,7 +61,7 @@ export default function useChat(user) {
     } else {
       setMessages([]);
     }
-  }, [user]);
+  }, [userId]);
 
   // Clear cooldown timer on unmount
   useEffect(() => () => clearTimeout(cooldownTimerRef.current), []);
@@ -142,9 +148,13 @@ export default function useChat(user) {
         setPriceData([]);
 
         try {
+          // Direct functions skip the noisy detectGames() heuristic and use
+          // the user's literal /price arg as the CheapShark search title.
+          // Inside fetchGamePrice we now also try exact=1 first and score
+          // fuzzy fallbacks to avoid "Minecraft → Minecraft Legends" misfires.
           const [textResult, summaryResult] = await Promise.allSettled([
-            fetchPrices(game),
-            fetchPricesSummary(game),
+            fetchPriceDirect(game),
+            fetchPriceSummaryDirect(game),
           ]);
 
           const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : [];
