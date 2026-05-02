@@ -542,7 +542,7 @@ const PROVIDERS: ProviderConfig[] = [
     keyEnv: 'GROQ_API_KEY',
     models: [
       { id: 'llama-3.3-70b-versatile', vision: false, speed: 'fast', tier: 'flagship' },
-      { id: 'meta-llama/llama-4-scout-17b-16e-instruct', vision: true, speed: 'fast', tier: 'balanced' },
+      { id: 'meta-llama/llama-4-scout-17b-16e-instruct', vision: false, speed: 'fast', tier: 'balanced' },
       { id: 'llama-3.1-8b-instant', vision: false, speed: 'fast', tier: 'fast' },
     ],
     timeoutMs: 25_000,
@@ -555,7 +555,7 @@ const PROVIDERS: ProviderConfig[] = [
       { id: 'deepseek/deepseek-chat-v3-0324:free', vision: false, speed: 'normal', tier: 'flagship' },
       { id: 'meta-llama/llama-3.3-70b-instruct:free', vision: false, speed: 'normal', tier: 'flagship' },
       { id: 'google/gemini-2.0-flash-exp:free', vision: true, speed: 'fast', tier: 'balanced' },
-      { id: 'mistralai/mistral-small-3.1-24b-instruct:free', vision: true, speed: 'fast', tier: 'balanced' },
+      { id: 'mistralai/mistral-small-3.1-24b-instruct:free', vision: false, speed: 'fast', tier: 'balanced' },
     ],
     timeoutMs: 30_000,
     extraHeaders: {
@@ -582,41 +582,11 @@ const PROVIDERS: ProviderConfig[] = [
 function optimizeRoute(profile: QueryProfile): Array<{ provider: ProviderConfig; modelId: string }> {
   const out: Array<{ provider: ProviderConfig; modelId: string }> = [];
 
-  // ── Vision required? Use a HARD-CODED priority list of best vision models ──
-  // Vision quality matters MORE than speed for screenshot analysis. Order:
-  //   1. Llama 4 Scout 17B (Groq)        — best open vision model, super fast
-  //   2. Gemini 2.0 Flash Exp (OR free)  — Google's strongest free vision
-  //   3. Mistral Small 3.1 24B (OR free) — solid backup, decent at HUDs
-  // Then Gemini direct via the main path is the ultimate fallback.
   if (profile.hasVision) {
-    // Mistral Small 3.1 was dropped from the vision route — it consistently
-    // confabulates on dense game UIs. Llama 4 Scout (Groq) and Gemini Flash Exp
-    // are the curated externals; Gemini direct is the final fallback inside
-    // runNeuralMesh itself.
-    const visionPriority: Array<[string, string]> = [
-      ['Groq', 'meta-llama/llama-4-scout-17b-16e-instruct'],
-      ['OpenRouter', 'google/gemini-2.0-flash-exp:free'],
-    ];
-    for (const [providerName, modelId] of visionPriority) {
-      const provider = PROVIDERS.find(p => p.name === providerName);
-      if (!provider) continue;
-      if (!Deno.env.get(provider.keyEnv)) continue;
-      const m = provider.models.find(mm => mm.id === modelId);
-      if (m) out.push({ provider, modelId });
-    }
-    // Defensive last-resort: if neither curated provider is configured,
-    // include any vision-capable model we have so the request doesn't fail.
-    if (out.length === 0) {
-      for (const provider of PROVIDERS) {
-        if (!Deno.env.get(provider.keyEnv)) continue;
-        for (const m of provider.models) {
-          if (m.vision && !out.find(o => o.modelId === m.id)) {
-            out.push({ provider, modelId: m.id });
-          }
-        }
-      }
-    }
-    return out;
+    // Vision queries bypass the external mesh and go directly to native Gemini
+    // (the official Google Gen AI SDK). Open-source models hallucinate badly
+    // on dense game UIs — only Gemini 2.0 Flash / 1.5 Pro are trusted here.
+    return [];
   }
 
   // ── Simple / fast queries → small-model-first for sub-second responses ──
@@ -1531,53 +1501,16 @@ async function runNeuralMesh(opts: {
   //  - TEXT queries: Gemini first (always-available key), then externals.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ─── VISION PATH ────────────────────────────────────────────────────────
+  // ─── VISION PATH — NATIVE GEMINI ONLY ──────────────────────────────────
+  // Vision queries MUST use the official Google Gen AI SDK. Open-source
+  // models (Groq Llama, Mistral, Cerebras) hallucinate badly on dense game
+  // UIs — they pattern-match icons to the closest training-data prototype
+  // instead of reading the actual pixels. Gemini 2.0 Flash / 1.5 Pro are
+  // the only models trusted for vision. Skip the route loop entirely and
+  // jump directly to the native Gemini block below.
   if (opts.profile.hasVision) {
-    const route = optimizeRoute(opts.profile);
-    const skippedProviders = new Set<string>();
-
-    for (const { provider, modelId } of route) {
-      if (skippedProviders.has(provider.name)) continue;
-      if (!Deno.env.get(provider.keyEnv)) {
-        skippedProviders.add(provider.name);
-        continue;
-      }
-      const modelMeta = provider.models.find(m => m.id === modelId)!;
-      if (!modelMeta.vision) continue; // safety
-
-      const messages = buildOpenAIMessages(
-        opts.systemInstruction,
-        opts.chatHistory,
-        opts.userPrompt,
-        opts.attachments,
-        true,
-      );
-
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          console.log(`[VISION] ${provider.name} → ${modelId} (attempt ${attempt})`);
-          // Vision: very low temperature (0.15) for grounded reads, no
-          // creative padding. The new GODMODE protocol explicitly tells the
-          // model to refuse rather than guess — temp must match.
-          const text = await callOpenAICompat(provider, modelId, messages, {
-            maxTokens: 3500,
-            temperature: 0.15,
-          });
-          console.log(`[VISION] ✓ ${provider.name}/${modelId}`);
-          return { text, provider: provider.name, model: modelId };
-        } catch (err: any) {
-          const msg = err.message || String(err);
-          errors.push(`${provider.name}/${modelId}#${attempt}: ${msg.slice(0, 100)}`);
-          console.warn(`[VISION] ✗ ${provider.name}/${modelId}: ${msg.slice(0, 150)}`);
-          if (isProviderFatal(msg)) { skippedProviders.add(provider.name); break; }
-          if (!isRetryable(msg)) break;
-          if (attempt < 2) await new Promise(r => setTimeout(r, 800 * attempt));
-        }
-      }
-    }
-
-    // Vision external providers exhausted → fall through to Gemini below
-    console.log('[VISION] External providers exhausted, falling back to Gemini...');
+    console.log('[VISION] Bypassing external mesh — going directly to native Gemini SDK');
+    // Falls through to the native Gemini block below; nothing to do here.
   }
 
   // ── SPEED FAST-PATH: simple text queries → Groq Llama-3.1-8B-instant ───
