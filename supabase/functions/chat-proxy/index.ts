@@ -147,16 +147,21 @@ Your responses should look like a well-formatted game guide page — clean heade
 // Each entry teaches the model what icons/regions mean for THAT game.
 const HUD_KNOWLEDGE: Record<string, string> = {
   minecraft: `
-**MINECRAFT HUD GUIDE** (study before answering):
-- **Hearts (red ❤)**: bottom-left, 10 hearts max = 20 HP. Each FULL heart = 2 HP. Half hearts exist. COUNT THEM ONE BY ONE — do not assume.
-- **Hunger (drumstick 🍗)**: bottom-right, 10 max. Same half-counting logic.
-- **Armor (chestplate icons above hearts)**: 10 icons max = 20 armor points. ONLY APPEARS WHEN ARMOR IS EQUIPPED. If you see this row, armor IS equipped.
-- **XP bar (green)**: above hotbar. Number on it = level.
+**MINECRAFT HUD & VISUAL GUIDE** (STRICT ADHERENCE REQUIRED):
+- **Tools/Armor Materials (CRITICAL)**: Look at the color of the tools in the hotbar/inventory! 
+  - Wood = Brown
+  - Stone = Light Grey
+  - Iron = White / Very Light Grey
+  - Gold = Yellow
+  - Diamond = Cyan / Teal / Light Blue (DO NOT confuse with Iron!)
+  - Netherite = Dark Grey / Black
+- **F3 Debug Screen (CRITICAL OCR)**: Top-right text shows hardware (CPU, GPU, Display). READ EVERY DIGIT CAREFULLY. If it says RTX 5060, DO NOT "correct" it to RTX 3060. Top-left shows FPS, XYZ coords, biome, game version.
+- **Hearts (red ❤)**: bottom-left. 10 hearts max = 20 HP. Each FULL heart = 2 HP. Half hearts exist. COUNT THEM ONE BY ONE.
+- **Hunger (drumstick 🍗)**: bottom-right. 10 max. Same half-counting logic.
+- **Armor (chestplate icons)**: above hearts. Only appears when wearing armor.
+- **XP bar (green)**: above hotbar. Number on it = current level.
+- **Hotbar**: 9 slots at the bottom. Identify the exact material of each item based on its color.
 - **Air bubbles**: only when underwater.
-- **Hotbar**: 9 slots, currently selected slot has a thicker border. Each slot may show item + stack count number (1-64).
-- **F3 Debug Screen**: top-left text shows FPS, XYZ coords, biome, version, server. Top-right shows hardware. THIS TEXT IS GROUND TRUTH — read it character-by-character.
-- **Subtitles** (bottom-right when on): show last 2-3 audio events ("Spider hisses", "Footsteps").
-- **Common mistake**: confusing the hunger bar (drumsticks, right side) with hearts (red, left side). Look at the icon SHAPE, not just the row.
 `,
   fortnite: `
 **FORTNITE HUD**: Shield (blue bar, top), Health (white/green bar, below shield, max 100), Materials (wood/brick/metal counts top-right), minimap top-right, ammo bottom-right, weapon slots bottom.`,
@@ -197,47 +202,40 @@ const HUD_KNOWLEDGE: Record<string, string> = {
 };
 
 const VISION_GODMODE_INSTRUCTION = `
-# 🎯 VISION GODMODE v2 — REFUSAL CONTRACT FIRST
+# 🎯 PRECISION VISION ENGINE v3 — ZERO HALLUCINATION PROTOCOL
 
-The user attached an image. You will read it in **3 PASSES** — no more, no fewer.
-Slim is a feature: padding observations to fill sections is the #1 cause of hallucination. Refuse to guess; refusing is **CORRECT**.
+You are tasked with analyzing an image with absolute, pixel-perfect accuracy. Your primary directive is to NEVER hallucinate, guess, or assume. 
 
-## ⛔ REFUSAL CONTRACT (READ THIS TWICE)
-- If you cannot read a number/icon/text/character with **HIGH confidence**, write \`(unclear)\` instead of guessing.
-- If a region is dark, blurry, partially off-screen, or pixelated, write \`(not legible)\` for that region.
-- "I cannot determine X from this image" is a CORRECT answer. Guessing wrong is a FAILURE.
-- Do NOT invent items, stats, characters, locations, abilities, or HUD elements that are not clearly visible.
-- Do NOT count icons unless you can identify each one individually. If unsure, write "(several visible — count not certain)".
-- If the user's question requires data not in the image, **say so** and ask a clarifying question.
+## ⛔ STRICT REFUSAL RULES
+1. **Never auto-correct text or numbers.** If you see "RTX 5060", write "RTX 5060". Do not assume it's a typo for a more common model. Read text character by character.
+2. **Never guess items by context.** A player at level 21 could have Wood or Diamond tools. Identify items purely by their visual characteristics (e.g., color, shape). If a tool is Cyan/Teal, it is Diamond. If it is White/Grey, it is Iron.
+3. **If unsure, state uncertainty.** Use \`[UNCLEAR]\` if a region is blurry or ambiguous. Do not invent details to sound helpful.
+4. **Never deny live features.** NEVER deny a card/character/feature that an INTEL block confirms exists, even if your training predates it.
 
-## PASS 1 :: OBSERVE (only what is clearly visible)
-List ONLY what you can see CLEARLY. Skip pixel clusters you can't identify. For each thing you list, prefix with one of:
-  • [TEXT]  — readable text/numbers (treat as ground truth)
-  • [ICON]  — a recognizable game-specific icon you can name
-  • [SHAPE] — a UI element whose function is obvious but content is partial
-Items you can't classify with confidence: SKIP them entirely. Do not list "(unclear)" speculations.
+## REQUIRED ANALYSIS WORKFLOW (THINK OUT LOUD):
+You must structure your initial analysis strictly using these steps before answering the user:
 
-## PASS 2 :: IDENTIFY (game + scene + key entities)
-Using PASS 1 + the game-specific HUD knowledge below:
-- Game name + edition/platform (cite the [TEXT] string that confirmed it, if any)
-- Scene type (menu / combat / death screen / inventory / cutscene / settings / etc.)
-- Key visible entities (boss name, character class, item, biome) — only if HIGH-confidence
-If you can't identify the game with HIGH confidence: state the game's *visual signature* (UI style, palette, font) and stop. Do NOT fabricate a name.
+### STEP 1: OCR & TEXT EXTRACTION
+Extract ALL text visible on the screen EXACTLY as written. Pay special attention to:
+- Debug menus (e.g., Minecraft F3 screen: coords, FPS, CPU, GPU).
+- Chat logs.
+- UI labels or numbers.
+*(Self-Correction during Step 1: Verify every digit of hardware specs or coordinates against the image. Do not hallucinate standard specs.)*
 
-## PASS 3 :: ANSWER
-Answer the user's actual question, grounded ONLY in PASS 1+2. If the question requires info not in the image (e.g. "what's the meta build?"), use the live INTEL blocks at the prompt body — those override training data. If the live blocks are silent, say "based on my training — verify against the current patch".
+### STEP 2: VISUAL INVENTORY & HUD
+List the items, icons, and HUD elements you see.
+- **Hotbar/Inventory**: Look closely at the color of items. (e.g., Cyan tools = Diamond, White tools = Iron). List them accurately.
+- **Status Bars**: Health, stamina, mana, armor, experience levels. Give exact counts if possible.
 
-## OUTPUT FORMAT
-- Open with a small "**🔍 Confirmed**" section ONLY IF you have at least 3 HIGH-confidence observations from PASS 1. Otherwise skip it — do not pad.
-- Then deliver the answer per the active persona's format rules.
+### STEP 3: ENVIRONMENT & CONTEXT
+Describe the game world. What biome is it? What structures or mobs are visible? What is the lighting like?
+
+### STEP 4: ANSWER THE USER's QUESTION
+Using ONLY the verified data from Steps 1-3 (and any provided live INTEL blocks), answer the user's specific question. 
+- Use the active persona's formatting rules.
+- If your advice depends on an item or stat, ensure it matches your findings in Steps 1 and 2.
+- Do NOT provide generic advice that contradicts the visual evidence.
 - End with the standard \`[?]\` follow-up questions.
-
-## ANTI-HALLUCINATION ABSOLUTES (re-read before submitting)
-- Hearts/HP: NEVER state "low HP" unless you can COUNT the missing heart icons.
-- Armor: a row of armor icons being visible means armor IS equipped. Period.
-- Game ID: F3/version-screen/watermark text is **ground truth** — outranks any visual guess.
-- Inventory: only items YOU SAW. No "you probably also have X".
-- Live-service feature denial: NEVER deny a card/character/feature that an INTEL block confirms exists, even if your training predates it.
 `;
 
 function buildVisionPrompt(profile: QueryProfile): string {
