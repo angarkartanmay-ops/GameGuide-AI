@@ -19,6 +19,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper: re-flag every attachment as image/jpeg. Used as a one-shot retry
+// path against Gemini when it rejects an attachment with a 400/invalid error.
+// (Most images post-EDIT-3a already arrive as image/jpeg from client preprocessing,
+// but legacy/Discord paths may pass other MIME types.)
+function normalizeAttachmentsToJpeg(atts: any[]) {
+  return atts.map(a => ({ ...a, mimeType: 'image/jpeg' }));
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  BASE SYSTEM PROMPT (formatting rules — stays identical)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -211,6 +219,9 @@ You are tasked with analyzing an image with absolute, pixel-perfect accuracy. Yo
 2. **Never guess items by context.** A player at level 21 could have Wood or Diamond tools. Identify items purely by their visual characteristics (e.g., color, shape). If a tool is Cyan/Teal, it is Diamond. If it is White/Grey, it is Iron.
 3. **If unsure, state uncertainty.** Use \`[UNCLEAR]\` if a region is blurry or ambiguous. Do not invent details to sound helpful.
 4. **Never deny live features.** NEVER deny a card/character/feature that an INTEL block confirms exists, even if your training predates it.
+5. **Hard refusal on unreadable input.** If the image is genuinely too blurry, too dark, cropped, or otherwise illegible to ground answers in pixel evidence, your ENTIRE reply must be:
+   "🚫 **I can't read this image clearly.** Specifically: [describe what's wrong — e.g. 'the text is below ~10px and pixelated', 'the screen is mostly black except a small region']. Please re-upload a higher-resolution screenshot, or describe what you're seeing in text and I'll help that way."
+   Do NOT proceed to STEP 1-4 in this case. Do NOT guess. Do NOT pad with generic advice.
 
 ## REQUIRED ANALYSIS WORKFLOW (THINK OUT LOUD):
 You must structure your initial analysis strictly using these steps before answering the user:
@@ -552,9 +563,13 @@ const PROVIDERS: ProviderConfig[] = [
     endpoint: 'https://openrouter.ai/api/v1/chat/completions',
     keyEnv: 'OPENROUTER_API_KEY',
     models: [
+      // Vision-capable models FIRST so optimizeRoute prefers them on vision queries
+      { id: 'google/gemini-2.0-flash-exp:free', vision: true, speed: 'fast', tier: 'flagship' },
+      { id: 'meta-llama/llama-4-scout-17b-16e-instruct:free', vision: true, speed: 'fast', tier: 'balanced' },
+      { id: 'mistralai/pixtral-12b:free', vision: true, speed: 'normal', tier: 'balanced' },
+      // Text-only flagships
       { id: 'deepseek/deepseek-chat-v3-0324:free', vision: false, speed: 'normal', tier: 'flagship' },
       { id: 'meta-llama/llama-3.3-70b-instruct:free', vision: false, speed: 'normal', tier: 'flagship' },
-      { id: 'google/gemini-2.0-flash-exp:free', vision: true, speed: 'fast', tier: 'balanced' },
       { id: 'mistralai/mistral-small-3.1-24b-instruct:free', vision: false, speed: 'fast', tier: 'balanced' },
     ],
     timeoutMs: 30_000,
@@ -583,10 +598,16 @@ function optimizeRoute(profile: QueryProfile): Array<{ provider: ProviderConfig;
   const out: Array<{ provider: ProviderConfig; modelId: string }> = [];
 
   if (profile.hasVision) {
-    // Vision queries bypass the external mesh and go directly to native Gemini
-    // (the official Google Gen AI SDK). Open-source models hallucinate badly
-    // on dense game UIs — only Gemini 2.0 Flash / 1.5 Pro are trusted here.
-    return [];
+    // Vision queries: native Gemini SDK runs first (handled in runNeuralMesh).
+    // This list is the EXTERNAL fallback chain used when native Gemini fails.
+    // Only include models flagged vision: true.
+    for (const provider of PROVIDERS) {
+      if (!Deno.env.get(provider.keyEnv)) continue;
+      for (const m of provider.models) {
+        if (m.vision) out.push({ provider, modelId: m.id });
+      }
+    }
+    return out;
   }
 
   // ── Simple / fast queries → small-model-first for sub-second responses ──
@@ -718,12 +739,12 @@ async function cacheKey(
   attachments: any[],
 ): Promise<string> {
   const histTail = hist.slice(-2).map(m => `${m.sender}:${(m.text || '').slice(0, 80)}`).join('|');
-  // Hash a small slice of each attachment's base64 so different images
-  // never collide in the cache (previously they did — vision queries with
-  // the same caption could return a stale result for a different screenshot).
-  const attFingerprint = attachments
-    .map(a => `${a.mimeType}:${(a.data || '').slice(0, 64)}:${(a.data || '').length}`)
-    .join('|');
+  // Full SHA-256 per attachment so two visually-different but similar-byte-
+  // length images can never collide in the cache.
+  const attHashes = await Promise.all(
+    attachments.map(async a => `${a.mimeType}:${await sha256((a.data || ''))}`)
+  );
+  const attFingerprint = attHashes.join('|');
   const raw = `${prompt}|${histTail}|R${reddit.length}|W${wiki.length}|P${price.length}|A${attachments.length}|${attFingerprint}`;
   return await sha256(raw);
 }
@@ -1391,70 +1412,45 @@ function rankAndCapContext(blocks: ScrapeBlock[], maxChars: number): ScrapeBlock
 // Used ONLY when vision is active AND text didn't surface a known game.
 async function resolveGameFromImage(geminiAi: any, attachments: any[]): Promise<string | null> {
   if (!attachments?.length) return null;
+  const tinyPrompt = `Identify the video game from this screenshot. Reply ONLY with: "GAME: <name> | CONFIDENCE: high|medium|low". If unsure, GAME: unknown.`;
 
-  const tinyPrompt = `You are a game-recognition specialist with encyclopedic knowledge of video game UI, art styles, and HUDs across PC/console/mobile.
-
-Identify the video game shown in this screenshot. Look at: art style, UI fonts, HUD elements, character/card designs, color palette, version numbers, watermarks.
-
-CRITICAL:
-- Live-service games update frequently. Do NOT assume a screenshot showing a feature you don't recognize means it's a "different game" — features get added.
-- If you see "Clash Royale" UI elements (purple frame, elixir cost diamond, card portrait) — it's Clash Royale, even if the card or ability is unfamiliar.
-- If you see Minecraft blocks/HUD — it's Minecraft, regardless of edition.
-- Modern mobile games like Brawl Stars, Clash of Clans, Brawl Stars, Marvel Snap, MLBB, Wild Rift, Genshin Impact, Honkai Star Rail, Wuthering Waves, Zenless Zone Zero have very distinct UI signatures — name them precisely.
-
-Reply ONLY in this exact format on a single line, NO other text:
-GAME: <lowercase canonical name> | CONFIDENCE: <high|medium|low>
-
-Examples of canonical names: "clash royale", "clash of clans", "brawl stars", "minecraft", "valorant", "elden ring", "genshin impact", "wuthering waves", "fortnite", "league of legends", "honkai star rail", "marvel rivals".
-If you genuinely cannot identify the game with at least medium confidence, reply exactly: GAME: unknown | CONFIDENCE: low.`;
-
-  // Try Llama 4 Scout via Groq first (fast vision)
-  const groqKey = Deno.env.get('GROQ_API_KEY');
-  if (groqKey) {
+  // Try OpenRouter Gemini-Flash-Exp first (separate quota from native Gemini)
+  const orProvider = PROVIDERS.find(p => p.name === 'OpenRouter');
+  if (orProvider && Deno.env.get(orProvider.keyEnv)) {
     try {
-      const messages = buildOpenAIMessages(tinyPrompt, [], '', attachments, true);
-      const provider = PROVIDERS.find(p => p.name === 'Groq')!;
-      const txt = await callOpenAICompat(provider, 'meta-llama/llama-4-scout-17b-16e-instruct', messages, {
-        maxTokens: 80, temperature: 0.1,
+      const messages = buildOpenAIMessages('You identify video games from screenshots.', [], tinyPrompt, attachments, true);
+      const txt = await callOpenAICompat(orProvider, 'google/gemini-2.0-flash-exp:free', messages, {
+        maxTokens: 60, temperature: 0.1,
       });
-      const match = txt.match(/GAME:\s*([^|\n]+?)\s*\|\s*CONFIDENCE:\s*(high|medium|low)/i);
-      if (match) {
-        const game = match[1].trim().toLowerCase();
-        const conf = match[2].toLowerCase();
-        if (game && game !== 'unknown' && (conf === 'high' || conf === 'medium')) {
-          console.log(`[GAME-RESOLVER] Pass-1 → "${game}" (${conf})`);
-          return game;
-        }
+      const m = txt.match(/GAME:\s*([^|\n]+?)\s*\|\s*CONFIDENCE:\s*(high|medium|low)/i);
+      if (m && m[1].trim().toLowerCase() !== 'unknown' && m[2].toLowerCase() !== 'low') {
+        console.log(`[GAME-RESOLVER] OR/gemini-flash-exp → "${m[1].trim()}" (${m[2]})`);
+        return m[1].trim().toLowerCase();
       }
     } catch (e: any) {
-      console.warn(`[GAME-RESOLVER] Groq pass-1 failed: ${e.message}`);
+      console.warn(`[GAME-RESOLVER] OR pass-1 failed: ${e.message}`);
     }
   }
 
-  // Fallback: Gemini Flash
+  // Fallback: native Gemini Flash
   if (geminiAi) {
     try {
       const contents = buildGeminiContents([], tinyPrompt, attachments);
       const result = await geminiAi.models.generateContent({
         model: 'gemini-2.0-flash',
         contents,
-        config: { temperature: 0.1, maxOutputTokens: 80 },
+        config: { temperature: 0.1, maxOutputTokens: 60 },
       });
       const txt = result?.text || '';
-      const match = txt.match(/GAME:\s*([^|\n]+?)\s*\|\s*CONFIDENCE:\s*(high|medium|low)/i);
-      if (match) {
-        const game = match[1].trim().toLowerCase();
-        const conf = match[2].toLowerCase();
-        if (game && game !== 'unknown' && (conf === 'high' || conf === 'medium')) {
-          console.log(`[GAME-RESOLVER] Pass-1 (Gemini) → "${game}" (${conf})`);
-          return game;
-        }
+      const m = txt.match(/GAME:\s*([^|\n]+?)\s*\|\s*CONFIDENCE:\s*(high|medium|low)/i);
+      if (m && m[1].trim().toLowerCase() !== 'unknown' && m[2].toLowerCase() !== 'low') {
+        console.log(`[GAME-RESOLVER] Gemini → "${m[1].trim()}" (${m[2]})`);
+        return m[1].trim().toLowerCase();
       }
     } catch (e: any) {
       console.warn(`[GAME-RESOLVER] Gemini pass-1 failed: ${e.message}`);
     }
   }
-
   return null;
 }
 
@@ -1547,7 +1543,8 @@ async function runNeuralMesh(opts: {
 
   // ── PRIMARY PATH: Gemini (GOOGLE_API_KEY is always available) ──────────
   if (opts.geminiAi) {
-    const contents = buildGeminiContents(opts.chatHistory, opts.userPrompt, opts.attachments);
+    let contents = buildGeminiContents(opts.chatHistory, opts.userPrompt, opts.attachments);
+    let mimeRetryUsed = false;
     for (const model of GEMINI_MODELS) {
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
@@ -1576,7 +1573,19 @@ async function runNeuralMesh(opts: {
 
           // 404/not-found → skip to next model immediately
           if (msg.includes('404') || msg.includes('not found') || msg.includes('not supported')) break;
-          // 400 → bad input, won't help retrying
+
+          // 400/invalid/unsupported on FIRST attempt + we have attachments → retry once
+          // with all attachments re-flagged as image/jpeg (handles legacy MIME mismatches)
+          if ((msg.includes('400') || msg.includes('invalid') || msg.includes('unsupported'))
+              && attempt === 1
+              && !mimeRetryUsed
+              && opts.attachments?.length > 0) {
+            mimeRetryUsed = true;
+            console.log('[MESH] Retrying Gemini with attachments normalized to image/jpeg');
+            contents = buildGeminiContents(opts.chatHistory, opts.userPrompt, normalizeAttachmentsToJpeg(opts.attachments));
+            continue;
+          }
+          // Otherwise 400 → bad input, won't help retrying
           if (msg.includes('400') || msg.includes('invalid')) break;
 
           // 429/503 → wait with backoff then retry
@@ -1599,15 +1608,9 @@ async function runNeuralMesh(opts: {
   }
 
   // ── FALLBACK PATH: External OpenAI-compatible providers ─────────────────
-  // For vision queries we already exhausted external vision models above —
-  // skip this redundant pass.
-  if (opts.profile.hasVision) {
-    console.error('[MESH] ALL PROVIDERS FAILED (vision):', errors);
-    throw new Error(`MESH_EXHAUSTED:${errors.join(' | ')}`);
-  }
-
+  // For vision queries this is the Tier-2 vision fallback when native Gemini
+  // fails. For text queries it's the standard external fallback chain.
   const route = optimizeRoute(opts.profile);
-  // Only log if there are configured providers
   const configuredRoute = route.filter(r => Deno.env.get(r.provider.keyEnv));
   if (configuredRoute.length > 0) {
     console.log(`[CORTEX] External route: ${configuredRoute.map(r => `${r.provider.name}/${r.modelId}`).slice(0, 4).join(' → ')}`);
@@ -1624,6 +1627,10 @@ async function runNeuralMesh(opts: {
     }
 
     const modelMeta = provider.models.find(m => m.id === modelId)!;
+
+    // Vision queries: only attempt models flagged vision: true.
+    if (opts.profile.hasVision && !modelMeta.vision) continue;
+
     const messages = buildOpenAIMessages(
       opts.systemInstruction,
       opts.chatHistory,
@@ -1758,6 +1765,13 @@ Deno.serve(async (req) => {
   try {
     const { prompt, chatHistory = [], redditContext = '', wikiContext = '', priceContext = '', attachments = [] } = await req.json();
 
+    // Server-side attachment validation: reject malformed payloads, cap to 3,
+    // restrict to common image MIME types. Downstream code uses cleanAttachments.
+    const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+    const cleanAttachments = (Array.isArray(attachments) ? attachments : [])
+      .filter(a => a && typeof a.data === 'string' && a.data.length > 100 && ALLOWED_MIME.has(a.mimeType))
+      .slice(0, 3);
+
     pruneCache();
 
     const geminiKey = Deno.env.get('GOOGLE_API_KEY');
@@ -1777,14 +1791,14 @@ Deno.serve(async (req) => {
     }
 
     // ── LAYER 1: QUERY CORTEX ──────────────────────────────────────────
-    const profile = classifyQuery(prompt, attachments, chatHistory);
+    const profile = classifyQuery(prompt, cleanAttachments, chatHistory);
     console.log(`[CORTEX] intent=${profile.intent} game=${profile.game || 'none'} complexity=${profile.complexity} persona=${profile.persona.name}`);
 
     // ── SPEED: cache check FIRST (saves 2.5s omni-scrape + LLM call on hit) ──
     // We hash on the inputs we already have: the user's prompt + any client-
     // provided contexts + last 2 messages of history + attachment fingerprints.
     // If hit, return immediately — skip omni-scrape AND the mesh.
-    const earlyCacheKey = await cacheKey(prompt, chatHistory, redditContext, wikiContext, priceContext, attachments);
+    const earlyCacheKey = await cacheKey(prompt, chatHistory, redditContext, wikiContext, priceContext, cleanAttachments);
     const earlyCached = responseCache.get(earlyCacheKey);
     if (earlyCached && (Date.now() - earlyCached.ts) < CACHE_TTL_MS) {
       console.log(`[CACHE-EARLY] HIT ${earlyCacheKey} (${earlyCached.provider}/${earlyCached.model}) — skipping scrape + mesh`);
@@ -1808,7 +1822,7 @@ Deno.serve(async (req) => {
     // for cases like "which card is this?" where the user provides no name.
     let resolvedGame: string | null = profile.game;
     if (profile.hasVision && !resolvedGame) {
-      resolvedGame = await resolveGameFromImage(geminiAi, attachments);
+      resolvedGame = await resolveGameFromImage(geminiAi, cleanAttachments);
       if (resolvedGame) {
         console.log(`[CORTEX] Game resolved from image: ${resolvedGame}`);
         // Update profile so downstream HUD knowledge picks the right game
@@ -1873,7 +1887,7 @@ Deno.serve(async (req) => {
     }
 
     // ── LAYER 5 (early): cache check ──
-    const cKey = await cacheKey(prompt, chatHistory, redditContext, wikiContext, priceContext, attachments);
+    const cKey = await cacheKey(prompt, chatHistory, redditContext, wikiContext, priceContext, cleanAttachments);
     const cached = responseCache.get(cKey);
     if (cached && (Date.now() - cached.ts) < CACHE_TTL_MS) {
       console.log(`[CACHE] HIT ${cKey} (${cached.provider}/${cached.model})`);
@@ -1903,7 +1917,7 @@ Deno.serve(async (req) => {
       systemInstruction,
       chatHistory,
       userPrompt: augmentedPrompt,
-      attachments,
+      attachments: cleanAttachments,
       geminiAi,
       profile,
     });
@@ -1923,9 +1937,10 @@ Deno.serve(async (req) => {
         try {
           console.log('[VISION-2OP] First answer was uncertain on an ID query — fetching second opinion');
           const route = optimizeRoute(profile);
+          console.log('[VISION-2OP] route candidates:', route.map(r => r.modelId));
           const second = route.find(r => r.modelId !== result.model && r.provider.name);
           if (second && Deno.env.get(second.provider.keyEnv)) {
-            const messages = buildOpenAIMessages(systemInstruction, chatHistory, augmentedPrompt, attachments, true);
+            const messages = buildOpenAIMessages(systemInstruction, chatHistory, augmentedPrompt, cleanAttachments, true);
             const altText = await callOpenAICompat(second.provider, second.modelId, messages, {
               maxTokens: 2000, temperature: 0.15,
             });
@@ -1970,6 +1985,13 @@ Deno.serve(async (req) => {
         game: profile.game,
         complexity: profile.complexity,
         vision: profile.hasVision,
+        visionMeta: profile.hasVision ? {
+          attachmentCount: cleanAttachments.length,
+          provider: result.provider,
+          model: result.model,
+          secondOpinion: secondOpinionUsed,
+          gameResolved: !!resolvedGame,
+        } : undefined,
         secondOpinion: secondOpinionUsed,
         cached: false,
         latencyMs: Date.now() - startTime,

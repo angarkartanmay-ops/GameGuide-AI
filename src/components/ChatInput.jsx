@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { SendHorizonal, Paperclip, X, ChevronRight, Square, AlertTriangle } from 'lucide-react';
+import { preprocessImage } from '../utils/imagePreprocess';
 
 const MAX_CHARS = 1500; // warn above this threshold
 
@@ -77,17 +78,28 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
     if (!files.length) return;
 
     const newAttachments = [];
+    const errors = [];
+
     for (const file of files.slice(0, 3)) {
-      if (!file.type.startsWith('image/')) continue;
-      if (file.size > 10 * 1024 * 1024) continue;
-      const base64 = await fileToBase64(file);
-      newAttachments.push({
-        file,
-        previewUrl: URL.createObjectURL(file),
-        data: base64,
-        mimeType: file.type,
-      });
+      try {
+        const processed = await preprocessImage(file);
+        newAttachments.push({
+          file,
+          previewUrl: URL.createObjectURL(file),
+          data: processed.data,
+          mimeType: processed.mimeType,    // always image/jpeg now
+          meta: { w: processed.width, h: processed.height, bytes: processed.bytes },
+        });
+      } catch (err) {
+        errors.push(`${file.name}: ${err.code === 'TOO_LARGE' ? 'too large after compression' : err.code === 'UNSUPPORTED' ? 'not a supported image' : 'could not read'}`);
+      }
     }
+
+    if (errors.length) {
+      // Use whatever toast/banner system the app already has; if none, console.warn is OK
+      console.warn('[VISION] some files rejected:', errors);
+    }
+
     setAttachments(prev => [...prev, ...newAttachments].slice(0, 3));
     e.target.value = '';
   };
@@ -100,14 +112,6 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
       return updated;
     });
   };
-
-  const fileToBase64 = (file) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
 
   const charCount = inputText.length;
   const isOverLimit = charCount > MAX_CHARS;

@@ -39,7 +39,15 @@ Standard AI models suffer from knowledge cut-offs. We bypassed this by building 
     *   Renders a high-end `PriceBadge` widget with direct links and savings percentages.
 
 ### 👁️ D. Multimodal Systems (Vision & Generation)
-*   **Image Analysis (Vision):** Users can attach up to 3 images. Images are processed into Base64 and injected into the Gemini context for UI reading, map identification, or character build analysis.
+*   **Image Analysis (Vision):** Users can attach up to 3 images. Pipeline:
+    1.  **Client-side preprocessing** (`src/utils/imagePreprocess.js`): Canvas-API resize to 1568px long-edge, EXIF strip, JPEG re-encode at 88% quality, hard 4MB cap. Handles HEIC/AVIF/WebP transparently.
+    2.  **Three-tier vision mesh** in `chat-proxy`:
+        - **Tier 1:** Native Google Gen AI SDK (`gemini-2.0-flash` → `gemini-2.5-flash` → `gemini-2.0-flash-lite`).
+        - **Tier 2:** OpenRouter free vision pool (`google/gemini-2.0-flash-exp:free`, `meta-llama/llama-4-scout`, `mistralai/pixtral-12b:free`) — kicks in on Tier-1 rate-limit/5xx.
+        - **Tier 3:** Graceful refusal with specific error context.
+    3.  **GODMODE protocol** (in `VISION_GODMODE_INSTRUCTION`): forces 4-step OCR-first reasoning + hard-refusal clause for unreadable images.
+    4.  **Game Resolver** runs OpenRouter Gemini-Flash-Exp first (separate quota from native), Gemini fallback.
+    5.  **Second-Opinion hop** triggers when ID-critical queries return uncertain language; cross-checks against a second vision provider.
 *   **Image Generation:** A Regex detector triggers a fallback chain of image generation models when keywords like `"generate image"` or `"draw me"` are detected. Images render inline with a `🎨 AI Generated` badge.
 
 ### ⌨️ E. Slash Command System
