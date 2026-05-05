@@ -13,6 +13,9 @@ const SOURCE_LABELS = {
   'fandom-wiki': '📖 Fandom Wiki',
   'reddit': '👥 Reddit (live threads)',
   'cheapshark': '💰 CheapShark (current prices)',
+  'official-api': '🏛️ Official Game API',
+  'official-news': '📰 Official News Page',
+  'web-search': '🔍 Live Web Search',
 };
 
 export default function MessageBubble({ message, onFollowUpClick }) {

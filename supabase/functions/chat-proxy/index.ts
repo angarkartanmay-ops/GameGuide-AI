@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "npm:@google/genai";
+import { runPulse } from './pulseEngine.ts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  GAMEGUIDE-AI :: CORTEX v2.0
@@ -1830,6 +1831,15 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── STAGE 1.5: PROJECT PULSE (recency-first for temporal queries) ──
+    // Runs ONLY when the query has temporal markers ("new", "latest", "current",
+    // "this season", etc.). Returns "" otherwise — zero overhead for normal queries.
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const pulse = await runPulse(prompt, resolvedGame, todayISO);
+    if (pulse.fired) {
+      console.log(`[PULSE] fired — sources=${pulse.sourcesUsed.join(',')} blocks=${pulse.diagnostics.blocksUsed}/${pulse.diagnostics.blocksFound}`);
+    }
+
     // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 1.6s budget) ─────
     // Tightened from 2.5s → 1.6s for speed. Most sources resolve in <1s.
     // VISION queries ALWAYS get omni context — even "simple" classification —
@@ -1876,6 +1886,8 @@ Deno.serve(async (req) => {
       ...(wikiContext ? ['fandom-wiki'] : []),
       ...(redditContext ? ['reddit'] : []),
       ...(priceContext ? ['cheapshark'] : []),
+      ...(pulse.fired && pulse.sourcesUsed.some(s => s.startsWith('official:')) ? ['official-api'] : []),
+      ...(pulse.fired && pulse.sourcesUsed.some(s => s.startsWith('web:')) ? ['web-search'] : []),
     ];
 
     // ── ACCURACY LOCK: when high-authority sources confirmed a game, append a
@@ -1910,7 +1922,19 @@ Deno.serve(async (req) => {
     // game-specific HUD knowledge BEFORE the persona overlay. This forces the
     // model to ground its analysis in pixel-level facts instead of guessing.
     const visionBlock = profile.hasVision ? '\n\n' + buildVisionPrompt(profile) : '';
-    const systemInstruction = BASE_SYSTEM + visionBlock + (profile.persona.overlay || '');
+    const dateGroundingBlock = pulse.fired ? `
+
+=== 📅 TEMPORAL GROUNDING (read carefully) ===
+TODAY'S DATE IS: ${todayISO}
+Your training data has a cutoff date that is most likely SEVERAL MONTHS to YEARS before today.
+Therefore:
+1. NEVER state that something is "the newest", "the latest", "the current", or "just released" using ONLY your training data. Such claims MUST be backed by the PULSE LIVE INTEL block below (if present) OR cited from one of the live INTEL blocks.
+2. If the PULSE block is present, IT OVERRIDES YOUR TRAINING DATA on temporal facts. Cite it explicitly: "According to [source] from [date]…"
+3. If the user asks "what's new" and you have NO PULSE/INTEL data on the topic, you MUST reply: "I don't have verified live data on this right now — my training cut off before today (${todayISO}). The most recent thing I know of from training is [X], but please double-check the official site for anything newer."
+4. NEVER invent release dates or season numbers. If unsure, say "I'm not sure — verify on the official source."
+=== END TEMPORAL GROUNDING ===
+` : '';
+    const systemInstruction = BASE_SYSTEM + dateGroundingBlock + visionBlock + pulse.contextBlock + (profile.persona.overlay || '');
 
     // ── LAYER 3 + 4: route + run mesh ──
     const result = await runNeuralMesh({
@@ -1998,6 +2022,11 @@ Deno.serve(async (req) => {
         cortex: 'v4.2-vision-refusal',
         sources: sourcesList,
         gameResolved: resolvedGame !== profile.game ? false : !!resolvedGame,
+        pulse: pulse.fired ? {
+          sourcesUsed: pulse.sourcesUsed,
+          blocksUsed: pulse.diagnostics.blocksUsed,
+          query: pulse.diagnostics.query,
+        } : undefined,
       },
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

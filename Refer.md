@@ -28,15 +28,25 @@ This document serves as a highly detailed summary of the architecture, capabilit
 *   **Automatic Retry & Backoff:** Implements exponential backoff to handle `503` (High Demand) and `429` (Rate Limit) errors from Google.
 *   **Model Fallback Chain:** If the primary model fails or is overloaded, the proxy automatically switches to the fallback model mid-flight, making the UI feel bulletproof.
 
-### 🌐 C. The Intelligence Engine (Live Scraping)
-Standard AI models suffer from knowledge cut-offs. We bypassed this by building an Intelligence Engine to ground the models.
-*   **Vercel Proxy Functions:** Scrapers are deployed as serverless functions in `/api` (Reddit and Wiki) to bypass CORS while maintaining production stability.
-*   **Reddit Scraper:** Pulls live JSON data from specific gaming subreddits to inject current community dialogue, complaints, meta discussions, and "sentiment".
-*   **Wiki Scraper:** Maps game titles to Fandom MediaWiki endpoints, pulling lore, weapon stats, and quest steps directly from the source.
-*   **Price Engine (Is It Worth It?):** Integrated with the **CheapShark API** (`src/services/priceScraper.js`). 
-    *   Detects game titles in queries and fetches live pricing across multiple stores (Steam, GOG, Epic).
-    *   Identifies **Historic Lows** and active deals.
-    *   Renders a high-end `PriceBadge` widget with direct links and savings percentages.
+### 🌐 C. The Intelligence Engine (Project PULSE + Live Scraping)
+We bypassed LLM training-data staleness with a two-tier live-data system:
+
+**Project PULSE (recency-first, temporal queries only):**
+*   **Temporal Detector** (`temporalDetector.ts`) flags queries containing words like "new", "latest", "current", "this season", "patch X", or "202[4-9]". Non-temporal queries skip PULSE entirely → zero overhead.
+*   **Official Sources Registry** (`officialSources.ts`) maps each known game to its authoritative endpoints — Supercell APIs (Clash Royale / CoC / Brawl Stars), Mojang RSS (Minecraft), fortnite-api.com (Fortnite), and HTML news pages for Valorant / League / Apex / Overwatch / BGMI / PUBG Mobile / Genshin / HSR / Destiny 2 / Call of Duty.
+*   **Free Web Search** (`webSearch.ts`) — three free providers in parallel:
+    *   SearXNG public instances (rotated, JSON output, no key needed).
+    *   DuckDuckGo HTML lite (regex-parsed, no key needed).
+    *   Brave Search API (only if `BRAVE_SEARCH_API_KEY` env is set, free 2000/mo).
+*   **Recency Ranker** (`recencyRanker.ts`) scores every block as `authority × freshness_multiplier`. Anything > 1 year old is demoted to 0.3×, < 7 days gets 1.6×. Web-search hits on official publisher domains get an authority bump.
+*   **Date Grounding** — every system prompt now contains today's ISO date and a hard rule: "Never claim 'newest/latest' from training data alone."
+
+**Standard Live Scraping (`omniScrape`):**
+*   Vercel proxy functions for Reddit (`/api/reddit-proxy`) and Wiki (`/api/wiki-proxy`) — bypass CORS for client-side fallbacks.
+*   Reddit JSON, Fandom MediaWiki, Steam News, Wikipedia, Invidious (YouTube), and gaming RSS feeds (IGN/Polygon/Eurogamer/PCGamer/GameSpot).
+*   CheapShark API for live game pricing.
+
+The two systems are complementary: PULSE handles "what is the newest X" queries with publisher-grade authority; standard scraping handles general lore/strategy/community-sentiment queries.
 
 ### 👁️ D. Multimodal Systems (Vision & Generation)
 *   **Image Analysis (Vision):** Users can attach up to 3 images. Pipeline:
