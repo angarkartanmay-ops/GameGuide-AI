@@ -6,6 +6,7 @@ import { HelpCircle } from 'lucide-react';
  * Handles them whether they appear on separate lines, inline, or mixed.
  * Returns { cleanText, followUps[] }
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function parseFollowUps(text) {
   if (!text) return { cleanText: '', followUps: [] };
 

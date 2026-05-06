@@ -22,16 +22,11 @@ const BOOT_TEXTS = [
 ];
 
 export default function LoadingScreen({ isExiting }) {
-  const [animType, setAnimType] = useState('');
-  const [bootText, setBootText] = useState('');
+  const [animType] = useState(() => ANIMATIONS[Math.floor(Math.random() * ANIMATIONS.length)]);
+  const [bootText] = useState(() => BOOT_TEXTS[Math.floor(Math.random() * BOOT_TEXTS.length)]);
   const [subText, setSubText] = useState('0x000000');
 
-  useEffect(() => {
-    // Randomize on mount
-    setAnimType(ANIMATIONS[Math.floor(Math.random() * ANIMATIONS.length)]);
-    setBootText(BOOT_TEXTS[Math.floor(Math.random() * BOOT_TEXTS.length)]);
-
-    // Simulate fast hacker text for subtext
+  useEffect(() => {    // Simulate fast hacker text for subtext
     const interval = setInterval(() => {
       const randomHex = '0x' + Math.floor(Math.random() * 16777215).toString(16).toUpperCase().padStart(6, '0');
       setSubText(randomHex);

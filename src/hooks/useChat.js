@@ -3,7 +3,7 @@ import { supabase, supabaseAnonKey } from '../services/supabaseClient';
 import { generateChatResponse } from '../services/aiProvider';
 import { searchReddit } from '../services/redditScraper';
 import { searchWikis } from '../services/wikiScraper';
-import { fetchPrices, fetchPricesSummary, fetchPriceDirect, fetchPriceSummaryDirect } from '../services/priceScraper';
+import { fetchPriceDirect, fetchPriceSummaryDirect } from '../services/priceScraper';
 
 // Cheap client-side heuristic: does this message warrant Reddit/Wiki scraping?
 // Skip the 2-3s scrape for greetings, meta-questions ("what can you do"), and
@@ -184,7 +184,7 @@ export default function useChat(user) {
             images: [],
             isCommand: true,
           };
-        } catch (err) {
+        } catch {
           return {
             text: `## 💰 Live Price Check — **${game}**\n\n**Error contacting CheapShark.** This is usually temporary — try again in a few seconds.`,
             images: [],
@@ -516,7 +516,7 @@ export default function useChat(user) {
       description: 'Secret glitch mode activated',
       emoji: '👻',
       action: async () => ({
-        text: `## 👻 NOCLIP MODE ACTIVATED\n\n\`\`\`\nWARNING: You have clipped outside the world boundary.\nPhysics: DISABLED\nCollision: DISABLED  \nGame Master awareness: ENABLED\n\nYou can see the void now.\nThe dev notes are everywhere.\nSomeone left a sticky note that says: \'fix this before launch\'\nThey did not fix it before launch.\n\`\`\`\n*Type anything to re-enter the simulation.*`,
+        text: `## 👻 NOCLIP MODE ACTIVATED\n\n\`\`\`\nWARNING: You have clipped outside the world boundary.\nPhysics: DISABLED\nCollision: DISABLED  \nGame Master awareness: ENABLED\n\nYou can see the void now.\nThe dev notes are everywhere.\nSomeone left a sticky note that says: 'fix this before launch'\nThey did not fix it before launch.\n\`\`\`\n*Type anything to re-enter the simulation.*`,
         images: [],
         isCommand: true,
       }),
@@ -635,7 +635,7 @@ export default function useChat(user) {
           // Franchise deep cuts
           `**Final Fantasy 7 Lore:** Sephiroth's mother is technically **an alien named Jenova** that Shinra dug out of a 2,000-year-old crater. Sephiroth never found out his "real" mother was Lucrecia — a human Shinra scientist. Every character's tragedy in FF7 traces back to Shinra digging up something they shouldn't have.`,
           `**Persona 5 Lore:** The "Phantom Thieves" are technically **Jungian Shadow projections.** The Metaverse is the collective unconscious. Each Palace boss isn't really their target — it's the *worst version of themselves* the target lets exist. The thieves are stealing distorted self-perception, not literal hearts.`,
-          `**Pokémon Lore:** Cubone wears the skull of its dead mother. **Marowak in Pokémon Red is canonically the ghost of a Cubone's mother killed by Team Rocket** in the Pokémon Tower. The Cubone wandering Lavender Town is its orphaned child. Game Freak put this in a children\'s game in 1996.`,
+          `**Pokémon Lore:** Cubone wears the skull of its dead mother. **Marowak in Pokémon Red is canonically the ghost of a Cubone's mother killed by Team Rocket** in the Pokémon Tower. The Cubone wandering Lavender Town is its orphaned child. Game Freak put this in a children's game in 1996.`,
           `**Kingdom Hearts Lore:** The convoluted timeline is intentional. **Tetsuya Nomura confirmed the lore is impossible to follow** because Sora's identity is meant to feel disjointed, mirroring the game's themes of fragmented memory and identity.`,
 
           // Modern indie / live service
@@ -658,7 +658,6 @@ export default function useChat(user) {
         };
       },
     },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [clearChat]);
 
   const processCommand = async (text) => {

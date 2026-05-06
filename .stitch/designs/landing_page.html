@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>GameGuide AI | Neural Hub</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container-lowest": "#060f15",
+                        "outline": "#988ca0",
+                        "on-primary-fixed": "#2c0051",
+                        "tertiary-fixed-dim": "#c8c5cd",
+                        "on-surface": "#dae4ec",
+                        "surface-container-low": "#131d23",
+                        "secondary-fixed": "#7df4ff",
+                        "on-error-container": "#ffdad6",
+                        "inverse-primary": "#8422dc",
+                        "on-tertiary-fixed": "#1b1b21",
+                        "inverse-on-surface": "#283238",
+                        "surface-variant": "#2c363d",
+                        "secondary-fixed-dim": "#00dbe9",
+                        "on-tertiary-fixed-variant": "#47464d",
+                        "primary": "#dcb8ff",
+                        "surface-container": "#172127",
+                        "surface": "#0b151a",
+                        "on-primary-fixed-variant": "#6700b5",
+                        "background": "#0b151a",
+                        "error-container": "#93000a",
+                        "surface-dim": "#0b151a",
+                        "on-primary": "#480081",
+                        "primary-fixed-dim": "#dcb8ff",
+                        "on-surface-variant": "#cfc2d7",
+                        "tertiary-container": "#64636a",
+                        "on-secondary-fixed": "#002022",
+                        "surface-container-highest": "#2c363d",
+                        "on-tertiary-container": "#e3e0e8",
+                        "primary-fixed": "#efdbff",
+                        "secondary-container": "#00eefc",
+                        "outline-variant": "#4c4354",
+                        "surface-tint": "#dcb8ff",
+                        "inverse-surface": "#dae4ec",
+                        "surface-container-high": "#222b32",
+                        "on-secondary": "#00363a",
+                        "error": "#ffb4ab",
+                        "on-tertiary": "#303036",
+                        "tertiary": "#c8c5cd",
+                        "primary-container": "#8a2be2",
+                        "surface-bright": "#313a41",
+                        "on-secondary-fixed-variant": "#004f54",
+                        "tertiary-fixed": "#e4e1ea",
+                        "secondary": "#d3fbff",
+                        "on-background": "#dae4ec",
+                        "on-secondary-container": "#00686f",
+                        "on-error": "#690005",
+                        "on-primary-container": "#eed9ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "container-margin": "32px",
+                        "gutter": "20px",
+                        "xl": "40px",
+                        "unit": "4px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "sm": "8px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "headline-md": ["Space Grotesk"],
+                        "label-caps": ["Space Grotesk"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Space Grotesk"],
+                        "display-xl": ["Space Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-md": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.1em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-lg": ["18px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "headline-lg": ["40px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "display-xl": ["72px", {"lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(30, 30, 36, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .glass-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 100%;
+            height: 100%;
+            border-bottom: 1px solid rgba(0, 219, 233, 0.3);
+            border-right: 1px solid rgba(0, 219, 233, 0.3);
+            pointer-events: none;
+        }
+        .cyber-grid {
+            background-image: linear-gradient(to right, rgba(0, 219, 233, 0.05) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(0, 219, 233, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .neon-glow-purple {
+            box-shadow: 0 0 20px rgba(220, 184, 255, 0.3);
+        }
+        .neon-glow-cyan {
+            box-shadow: 0 0 20px rgba(0, 219, 233, 0.3);
+        }
+        .hud-bracket-tl {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 20px;
+            height: 20px;
+            border-top: 2px solid #00eefc;
+            border-left: 2px solid #00eefc;
+        }
+        .hud-bracket-br {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 20px;
+            height: 20px;
+            border-bottom: 2px solid #00eefc;
+            border-right: 2px solid #00eefc;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface/70 backdrop-blur-xl border-b border-white/10 shadow-[0_8px_32px_rgba(6,15,21,0.5)]">
+<div class="flex justify-between items-center px-container-margin h-20 w-full max-w-screen-2xl mx-auto">
+<div class="flex items-center gap-sm">
+<img alt="GameGuide AI Logo" class="w-10 h-10" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiolu8c41TxdnfLcSqffri0D6wNIQYdisoYnv4wXh6nR-L6xAe0gSNPTbf3ixlZ7vc0QfVnce9IsTVB54fxaSsxIqsJp_buIQ0_wUxX9Ycgv6cmV_-RTO_TiYzPBNt8jTKCCm1cOR_oGg0XDhmDhIrRa2O-ASCYPDr_bzr1mGS-ymqPJHwGTfAhITC26jpN7P5VxwjMOXrLAs_xFNCq0w1pVfOA931YW3MHGAVe_ExrVNfXCcj3-D019e1QuV0gXTXF_yiBvwRavbo"/>
+<span class="font-headline-md text-headline-md font-bold text-primary drop-shadow-[0_0_8px_rgba(220,184,255,0.8)]">GameGuide AI</span>
+</div>
+<nav class="hidden md:flex items-center gap-xl">
+<a class="text-secondary-container font-bold border-b-2 border-secondary-container pb-1 transition-all active:scale-95 duration-200 ease-out" href="#">Neural Mesh</a>
+<a class="text-on-surface-variant font-body-md hover:text-secondary-fixed hover:drop-shadow-[0_0_5px_rgba(0,219,233,0.5)] transition-all active:scale-95 duration-200 ease-out" href="#">Pulse</a>
+<a class="text-on-surface-variant font-body-md hover:text-secondary-fixed hover:drop-shadow-[0_0_5px_rgba(0,219,233,0.5)] transition-all active:scale-95 duration-200 ease-out" href="#">Vision Decoder</a>
+<a class="text-on-surface-variant font-body-md hover:text-secondary-fixed hover:drop-shadow-[0_0_5px_rgba(0,219,233,0.5)] transition-all active:scale-95 duration-200 ease-out" href="#">Intelligence</a>
+</nav>
+<button class="bg-primary-container text-on-primary-container px-lg py-sm font-label-caps rounded-lg font-bold hover:scale-105 active:scale-95 transition-all shadow-[0_0_15px_rgba(138,43,226,0.4)]">
+                Launch Cortex
+            </button>
+</div>
+</header>
+<main class="pt-20">
+<!-- Hero Section -->
+<section class="relative min-h-[90vh] flex items-center cyber-grid overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-b from-transparent via-background/50 to-background pointer-events-none"></div>
+<div class="max-w-screen-2xl mx-auto px-container-margin grid grid-cols-1 lg:grid-cols-2 gap-xl items-center relative z-10">
+<div class="space-y-lg">
+<div class="inline-flex items-center gap-sm bg-surface-container-high border border-primary/30 px-md py-xs rounded-full">
+<span class="w-2 h-2 rounded-full bg-secondary-container animate-pulse shadow-[0_0_8px_#00eefc]"></span>
+<span class="font-label-caps text-secondary text-label-caps">v2.4 CORE ACTIVE</span>
+</div>
+<h1 class="font-display-xl text-display-xl leading-none">
+                        Unleash <span class="text-primary drop-shadow-[0_0_15px_rgba(220,184,255,0.6)]">Vision</span><br/>
+<span class="bg-gradient-to-r from-secondary-container to-primary bg-clip-text text-transparent">GODMODE</span>
+</h1>
+<p class="font-body-lg text-body-lg text-outline max-w-xl">
+                        The ultimate 6-stage AI pipeline for real-time game intelligence. Decipher patterns, orchestrate strategy, and dominate the neural mesh with millisecond latency.
+                    </p>
+<div class="flex flex-wrap gap-md pt-md">
+<button class="bg-gradient-to-r from-primary-container to-secondary-container text-white px-xl py-md font-label-caps rounded-lg hover:brightness-110 hover:shadow-[0_0_25px_rgba(0,238,252,0.4)] transition-all">
+                            Get Started
+                        </button>
+<button class="border border-outline-variant/50 bg-surface/50 backdrop-blur-md px-xl py-md font-label-caps rounded-lg hover:border-secondary transition-all text-on-surface">
+                            View Documentation
+                        </button>
+</div>
+</div>
+<div class="relative lg:h-[600px] flex items-center justify-center">
+<div class="glass-card w-full max-w-lg aspect-video rounded-xl p-md neon-glow-cyan">
+<div class="hud-bracket-tl"></div>
+<div class="hud-bracket-br"></div>
+<div class="flex items-center justify-between border-b border-outline-variant/30 pb-sm mb-md">
+<span class="font-label-caps text-secondary-container">PULSE v2 ACTIVE</span>
+<span class="text-outline text-xs">STREAMING DATA...</span>
+</div>
+<div class="space-y-xs font-mono text-[10px] text-primary/70">
+<p>&gt; Initializing Neural Mesh...</p>
+<p>&gt; Scanning Game Environment... [OK]</p>
+<p>&gt; Object Detection: 12 Enemy Units Found</p>
+<p>&gt; Pathfinding: Optimal Route Calculated</p>
+<p>&gt; Pulse Engine: 120ms Analysis Lag</p>
+<p>&gt; Intelligence Overlay: ENABLED</p>
+<p class="text-secondary-container animate-pulse">&gt; WARNING: EXTREME THREAT DETECTED</p>
+</div>
+<div class="mt-xl h-24 bg-surface-container-lowest/50 rounded border border-outline-variant/20 relative overflow-hidden">
+<div class="absolute inset-0 flex items-end gap-1 px-sm pb-1">
+<div class="w-2 h-[40%] bg-secondary-container/50"></div>
+<div class="w-2 h-[60%] bg-secondary-container/50"></div>
+<div class="w-2 h-[30%] bg-secondary-container/50"></div>
+<div class="w-2 h-[80%] bg-secondary-container/50"></div>
+<div class="w-2 h-[50%] bg-secondary-container/50"></div>
+<div class="w-2 h-[90%] bg-secondary-container/50"></div>
+<div class="w-2 h-[70%] bg-secondary-container/50"></div>
+<div class="w-2 h-[40%] bg-secondary-container/50"></div>
+</div>
+</div>
+</div>
+<!-- Background blobs -->
+<div class="absolute -top-10 -right-10 w-64 h-64 bg-primary/20 blur-[100px] -z-10 rounded-full"></div>
+<div class="absolute -bottom-10 -left-10 w-64 h-64 bg-secondary-container/20 blur-[100px] -z-10 rounded-full"></div>
+</div>
+</div>
+</section>
+<!-- Features Bento Grid -->
+<section class="py-xl bg-surface-container-lowest">
+<div class="max-w-screen-2xl mx-auto px-container-margin">
+<div class="text-center mb-xl">
+<h2 class="font-headline-lg text-headline-lg mb-sm">Neural Capabilities</h2>
+<div class="w-20 h-1 bg-gradient-to-r from-primary to-secondary-container mx-auto"></div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter auto-rows-[280px]">
+<!-- Large Feature -->
+<div class="md:col-span-2 md:row-span-2 glass-card rounded-xl p-xl group">
+<div class="flex h-full flex-col justify-between">
+<div>
+<span class="material-symbols-outlined text-primary text-4xl mb-md">hub</span>
+<h3 class="font-headline-md text-headline-md mb-md">Neural Mesh Orchestrator</h3>
+<p class="text-outline max-w-md">The core processor that connects all intelligence nodes. Our proprietary mesh handles over 1 million concurrent game-state vectors per second.</p>
+</div>
+<div class="relative h-48 mt-md rounded-lg bg-surface-container overflow-hidden">
+<img class="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" data-alt="A complex 3D visualization of a neural network mesh with glowing purple nodes and electric cyan connections against a deep black background. The structure looks like an organic computer system, featuring sharp geometric lines and high-contrast digital artifacts to represent real-time gaming intelligence data processing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAAU12jhhLbQkHqzvmX7Sg6pWRpNwJxKgUetzkTlSmLxbTG14Xe--5cSqV_Mz2J4X88BRz_gPXS5r1xNB5LwGCMfH9XY9bHoDrE-q6lnR1viobFTrFbuoE_PNqItDB-prNDIjvDOxBqhGwBIjYmLucr9GG4cljwblEdaeurHYyt-8_Hg7uIpGyNKf7-bMAb04MzXMMPyVCXK4r4L4H-6Z3AIZGrT0qAwjnbInGU6tFuIuwEgyQyTrnu2HoeH0-3HxUHPx7guSnTvAh9"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container to-transparent"></div>
+</div>
+</div>
+</div>
+<!-- Pulse Feature -->
+<div class="glass-card rounded-xl p-lg group hover:border-secondary-container/50 transition-all">
+<div class="flex flex-col h-full">
+<div class="flex items-center justify-between mb-md">
+<span class="material-symbols-outlined text-secondary-container">speed</span>
+<span class="text-[10px] font-label-caps text-secondary-container">LIVE STATUS</span>
+</div>
+<h3 class="font-headline-md text-headline-md mb-sm text-sm">Real-time Pulse</h3>
+<div class="flex-grow flex items-center justify-center">
+<div class="w-full space-y-sm">
+<div class="flex justify-between text-[10px] font-mono text-outline">
+<span>LATENCY</span>
+<span class="text-secondary-container">14ms</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[85%] bg-secondary-container neon-glow-cyan"></div>
+</div>
+<div class="flex justify-between text-[10px] font-mono text-outline">
+<span>BANDWIDTH</span>
+<span class="text-primary">9.8 GB/s</span>
+</div>
+<div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full w-[92%] bg-primary neon-glow-purple"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Vision Feature -->
+<div class="glass-card rounded-xl p-lg group hover:border-primary/50 transition-all">
+<div class="flex flex-col h-full">
+<span class="material-symbols-outlined text-primary mb-md">visibility</span>
+<h3 class="font-headline-md text-headline-md mb-sm text-sm">Vision Decoder</h3>
+<p class="text-xs text-outline mb-md">Scanning frames for tactical advantages and enemy positioning in real-time.</p>
+<div class="mt-auto relative rounded border border-outline-variant/30 overflow-hidden aspect-video">
+<img class="w-full h-full object-cover" data-alt="A sophisticated HUD interface overlaying a first-person shooter game perspective. The screen features scanning rectangles in electric cyan highlighting enemy players, mini-maps with radar sweeps, and digital telemetry data in crisp white text. The scene is dark and gritty, emphasized by high-octane neon lens flares and futuristic glassmorphic UI elements." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBFKu8AJlz-p1yjxjbsN_rxl_Zj7x6LjlMAAt4Ejiut9yyTCTxws63VgWiXNAGdcU_rR8ax2Z9AEeE7yhRvaCIEvRdWzAbYPJ07tb-q6DQOL-y54rDtj48y_x2G4-KuWfHxRSQfv3yYIvFwofBd6ktWDHw80hIcxuIPm4OIqoS_CvZaFS1FiGkpKApdUGWuGhYeVBKYlI3ksy1pB8QbrQnrYZbwGq2303uppwGck3b7Xc1GR1U9-71OenGUhhJ1VyB5GrohwDz6SiCa"/>
+</div>
+</div>
+</div>
+<!-- Intelligence Box -->
+<div class="md:col-span-3 glass-card rounded-xl p-lg flex items-center gap-xl border-l-4 border-l-primary">
+<div class="flex-1">
+<h4 class="font-headline-md text-headline-md mb-xs">Advanced Intelligence Protocol</h4>
+<p class="text-outline text-sm">Seamlessly integrate GameGuide AI into your stack via our low-latency gRPC interface.</p>
+</div>
+<button class="bg-surface-container-high border border-outline-variant/50 px-lg py-md rounded font-label-caps hover:bg-primary/10 transition-all text-primary">
+                            Explore API
+                        </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Interactive Demo -->
+<section class="py-xl">
+<div class="max-w-screen-2xl mx-auto px-container-margin">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-xl items-stretch">
+<!-- Chat Interface -->
+<div class="glass-card rounded-xl flex flex-col h-[500px]">
+<div class="px-lg py-md border-b border-outline-variant/30 flex items-center justify-between">
+<div class="flex items-center gap-sm">
+<div class="w-3 h-3 rounded-full bg-primary neon-glow-purple"></div>
+<span class="font-label-caps">CORTEX CHAT</span>
+</div>
+<span class="text-outline text-xs">ENCRYPTED CHANNEL</span>
+</div>
+<div class="flex-grow p-lg space-y-md overflow-y-auto">
+<div class="flex gap-md">
+<div class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-sm">person</span>
+</div>
+<div class="bg-surface-container-high p-md rounded-xl rounded-tl-none max-w-[80%]">
+<p class="text-sm">Analyze my current match. What's the winning play?</p>
+</div>
+</div>
+<div class="flex gap-md flex-row-reverse">
+<div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0 border border-primary/50">
+<span class="material-symbols-outlined text-primary text-sm">smart_toy</span>
+</div>
+<div class="bg-primary/10 p-md rounded-xl rounded-tr-none max-w-[80%] border border-primary/20">
+<p class="text-sm">Neural Mesh has identified a weakness in the enemy's left flank. Rotate your squadron to Sector 7G. Use 'Tactical Pulse' to disrupt their comms.</p>
+</div>
+</div>
+</div>
+<div class="p-md border-t border-outline-variant/30">
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border border-outline-variant/30 rounded-lg px-md py-sm text-sm focus:border-secondary-container focus:ring-0 transition-all" placeholder="Direct query to Neural Mesh..." type="text"/>
+<button class="absolute right-2 top-2 text-secondary-container">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+</div>
+</div>
+<!-- HUD Analysis -->
+<div class="glass-card rounded-xl p-lg flex flex-col justify-between border-r-4 border-r-secondary-container">
+<div>
+<h3 class="font-headline-md text-headline-md mb-md">Real-time Vision HUD</h3>
+<p class="text-outline mb-lg">See the game world through the eyes of our AI. Vision Decoder highlights threats, predicts enemy movement, and suggests tactical paths.</p>
+</div>
+<div class="relative group cursor-crosshair">
+<img class="rounded-lg w-full h-auto grayscale group-hover:grayscale-0 transition-all duration-500" data-alt="A tactical top-down view of a strategy game battlefield with intricate HUD elements. Bright neon geometric shapes highlight strategic zones, and thin data streamers in electric cyan connect various units. The aesthetic is dark and high-contrast, with cinematic grain and glowing UI elements that suggest a high-level military commander's intelligence display." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfawQHrqC6Prdjs9FpEtRP6UHNzA8SE_of7j0EPo7YXjeaX2CvICmR1q-i3bF5PciF4NBdk7bwNZJQcJuzlyCw9Yia2SsZGYlkRiPnuEIofiPE6VvLvN7YZyPcu6pPBEbAsTRT1RKe9TUmIdxMOZSlDGdCCqZOtlyU-bzlDy0L_-cPmY8z4W_pgXeovoQykJJI86Joeac0MHibEqi_3IQHz0OT8Z0CyWIehdfk3R8CAwE2vKL5wpbq3ToznFaX_uKzZp0dQ6_HwIb-"/>
+<div class="absolute top-4 left-4 flex gap-xs">
+<div class="px-sm py-xs bg-error-container/80 text-error font-label-caps text-[10px] rounded">THREAT: HIGH</div>
+<div class="px-sm py-xs bg-secondary-container/80 text-on-secondary-container font-label-caps text-[10px] rounded">WIN PROBABILITY: 78%</div>
+</div>
+<div class="absolute inset-0 border border-secondary-container/20 pointer-events-none group-hover:border-secondary-container/50 transition-all"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-surface-container-lowest border-t border-outline-variant/30 w-full py-xl mt-xl">
+<div class="flex flex-col md:flex-row justify-between items-center px-container-margin gap-lg max-w-screen-2xl mx-auto">
+<div class="space-y-sm text-center md:text-left">
+<div class="flex items-center gap-sm justify-center md:justify-start">
+<img alt="Logo" class="w-6 h-6 grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBiolu8c41TxdnfLcSqffri0D6wNIQYdisoYnv4wXh6nR-L6xAe0gSNPTbf3ixlZ7vc0QfVnce9IsTVB54fxaSsxIqsJp_buIQ0_wUxX9Ycgv6cmV_-RTO_TiYzPBNt8jTKCCm1cOR_oGg0XDhmDhIrRa2O-ASCYPDr_bzr1mGS-ymqPJHwGTfAhITC26jpN7P5VxwjMOXrLAs_xFNCq0w1pVfOA931YW3MHGAVe_ExrVNfXCcj3-D019e1QuV0gXTXF_yiBvwRavbo"/>
+<span class="font-headline-md text-headline-md font-bold text-primary">GameGuide AI</span>
+</div>
+<div class="flex items-center gap-xs font-label-caps text-outline text-[10px] justify-center md:justify-start">
+<span class="w-2 h-2 rounded-full bg-[#4ade80] animate-pulse"></span>
+                    SYSTEM STATUS: ONLINE
+                </div>
+</div>
+<div class="flex flex-wrap justify-center gap-lg">
+<a class="text-label-caps tracking-widest text-outline font-label-caps hover:text-on-surface transition-colors cursor-pointer" href="#">Privacy Protocol</a>
+<a class="text-label-caps tracking-widest text-outline font-label-caps hover:text-on-surface transition-colors cursor-pointer" href="#">Terminal Access</a>
+<a class="text-label-caps tracking-widest text-outline font-label-caps hover:text-on-surface transition-colors cursor-pointer" href="#">API Docs</a>
+<a class="text-label-caps tracking-widest text-outline font-label-caps hover:text-on-surface transition-colors cursor-pointer" href="#">Support</a>
+</div>
+<div class="text-label-caps tracking-widest text-outline font-label-caps">
+                © 2024 GAMEGUIDE AI. ALL SYSTEMS OPERATIONAL.
+            </div>
+</div>
+</footer>
+</body></html>
