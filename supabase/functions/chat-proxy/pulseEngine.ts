@@ -1,6 +1,13 @@
-// Project PULSE — orchestrates Official Sources + Web Search + Ranking
+// Project PULSE v2 — orchestrates Official Sources + Web Search + Ranking
 // for temporal queries. Returns a compact context block to inject into the
 // system prompt.
+//
+// v2 Changes:
+// - Much more aggressive web search queries (game-specific, multiple variants)
+// - Fires MULTIPLE web searches in parallel for different angles
+// - Increased result budget (top 5 instead of 3)
+// - Uses current year dynamically
+// - Better query formulation for "what's new" type questions
 
 import { detectTemporal } from './temporalDetector.ts';
 import { findOfficial, OfficialSource } from './officialSources.ts';
@@ -15,7 +22,7 @@ interface PulseResult {
 }
 
 const PULSE_CACHE = new Map<string, { ts: number; result: PulseResult }>();
-const PULSE_TTL_MS = 10 * 60 * 1000;
+const PULSE_TTL_MS = 8 * 60 * 1000; // 8 min (reduced from 10 for fresher data)
 
 export async function runPulse(
   prompt: string,
@@ -36,6 +43,11 @@ export async function runPulse(
   const blocks: RankableBlock[] = [];
   const sourcesUsed: string[] = [];
 
+  // Get current year/month for query formulation
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
+  const yyyy_mm = todayISO.slice(0, 7);
+
   // ── Stage 1: Official source (highest authority) ─────────────────────
   const official = findOfficial(game);
   if (official) {
@@ -44,33 +56,77 @@ export async function runPulse(
     if (officialBlocks.length) sourcesUsed.push(`official:${official.game}`);
   }
 
-  // ── Stage 2: Free web search ─────────────────────────────────────────
-  const yyyy_mm = todayISO.slice(0, 7);
-  const subjectStr = sig.subject ? sig.subject : '';
-  const wsQuery = game
-    ? `${game} ${subjectStr} new latest ${yyyy_mm}`.replace(/\s+/g, ' ').trim()
-    : `${prompt} ${yyyy_mm}`;
-  const webHits = await multiWebSearch(wsQuery, 6);
-  for (const h of webHits) {
-    blocks.push({
-      source: 'web-search',
-      text: `${h.title} — ${h.snippet}`,
-      url: h.url,
-      publishedISO: h.publishedISO,
-      baseAuthority: 6,
-    });
+  // ── Stage 2: Aggressive multi-angle web search ──────────────────────
+  // Build multiple search queries for different angles to maximize
+  // chances of finding current information.
+  const searchQueries: string[] = [];
+
+  if (game && sig.subject) {
+    // Primary: game + subject + current context
+    searchQueries.push(`${game} new ${sig.subject} ${currentYear}`);
+    searchQueries.push(`${game} latest ${sig.subject} ${currentMonth} ${currentYear}`);
+    // Direct question reformulation
+    searchQueries.push(`${game} ${sig.subject} ${yyyy_mm}`);
+  } else if (game) {
+    // Game-specific but no clear subject
+    searchQueries.push(`${game} latest news ${currentMonth} ${currentYear}`);
+    searchQueries.push(`${game} new update ${currentYear}`);
+    searchQueries.push(`${game} ${prompt.slice(0, 80)}`);
+  } else {
+    // No game detected — use the raw prompt enhanced with temporal context
+    searchQueries.push(`${prompt} ${currentYear}`);
+    searchQueries.push(`${prompt} latest`);
   }
-  if (webHits.length) sourcesUsed.push(`web:${webHits.length}`);
+
+  // Also search with the user's exact prompt (sometimes the best query)
+  if (prompt.length > 10 && prompt.length < 200) {
+    searchQueries.push(prompt);
+  }
+
+  // Deduplicate queries
+  const uniqueQueries = [...new Set(searchQueries.map(q => q.replace(/\s+/g, ' ').trim()))];
+
+  console.log(`[PULSE] Firing ${uniqueQueries.length} web searches: ${uniqueQueries.map(q => `"${q.slice(0, 60)}"`).join(', ')}`);
+
+  // Fire all searches in parallel
+  const searchResults = await Promise.allSettled(
+    uniqueQueries.slice(0, 4).map(q => multiWebSearch(q, 6))
+  );
+
+  // Collect all hits, dedup by URL
+  const seenUrls = new Set<string>();
+  for (const result of searchResults) {
+    if (result.status !== 'fulfilled') continue;
+    for (const h of result.value) {
+      if (seenUrls.has(h.url)) continue;
+      seenUrls.add(h.url);
+      blocks.push({
+        source: 'web-search',
+        text: `${h.title} — ${h.snippet}`,
+        url: h.url,
+        publishedISO: h.publishedISO,
+        baseAuthority: h.source === 'google-cse' || h.source === 'serper' ? 8 : 6,
+      });
+    }
+  }
+  const webHitCount = blocks.filter(b => b.source === 'web-search').length;
+  if (webHitCount > 0) sourcesUsed.push(`web:${webHitCount}`);
 
   // ── Stage 3: Rank + compact ──────────────────────────────────────────
   const ranked = rankBlocks(blocks);
-  const top = topNCompact(ranked, 3, 800);
+  const top = topNCompact(ranked, 5, 900); // Increased from 3→5 blocks, 800→900 chars
 
   const contextBlock = top ? `
 === 🌊 PULSE LIVE INTEL (recency-ranked, today=${todayISO}) ===
 The user's query asks about something CURRENT/NEW/LATEST. The blocks below
 are ranked by (authority × freshness). Anything older than 1 year has been
 demoted because temporal claims must come from fresh sources.
+
+CRITICAL: Base your answer on THIS data, not your training knowledge.
+If this data says "Hero Dark Prince" is the newest hero, say that — NOT
+whatever your training data says was newest.
+
+Search queries used: ${uniqueQueries.slice(0, 3).map(q => `"${q}"`).join(', ')}
 
 ${top}
 
@@ -85,8 +141,9 @@ ${top}
       temporalReasons: sig.reasons,
       subject: sig.subject,
       blocksFound: blocks.length,
-      blocksUsed: Math.min(3, ranked.length),
-      query: wsQuery,
+      blocksUsed: Math.min(5, ranked.length),
+      queries: uniqueQueries,
+      webHits: webHitCount,
     },
   };
 
@@ -101,7 +158,7 @@ ${top}
 async function fetchOfficial(src: OfficialSource): Promise<RankableBlock[]> {
   const out: RankableBlock[] = [];
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 4000);
+  const t = setTimeout(() => ctrl.abort(), 5000); // Increased from 4s
 
   try {
     if (src.endpoints.api) {

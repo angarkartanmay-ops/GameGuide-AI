@@ -204,8 +204,9 @@ function buildSearchUrl(query, gameSubs) {
   const isMeta = isCurrentMetaQuery(query);
 
   // Boost meta queries with extra keywords for better Reddit results
+  const currentYear = new Date().getFullYear();
   const enhancedQuery = isMeta
-    ? `${query} 2025 2026`
+    ? `${query} ${currentYear - 1} ${currentYear}`
     : query;
 
   // Sort strategy: new for meta queries, top for general info
@@ -253,7 +254,7 @@ export async function searchReddit(query) {
     if (posts.length === 0) {
       // If game sub returned nothing, try a global fallback
       if (gameSubs.length > 0) {
-        const fallbackUrl = `/api/reddit/search.json?q=${encodeURIComponent(query + ' 2025')}&sort=new&t=month&limit=5&type=link`;
+        const fallbackUrl = `/api/reddit/search.json?q=${encodeURIComponent(query + ' ' + new Date().getFullYear())}&sort=new&t=month&limit=5&type=link`;
         const fb = await fetch(fallbackUrl);
         if (fb.ok) {
           const fbData = await fb.json();

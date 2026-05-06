@@ -18,15 +18,17 @@ const AUTHORITY_FLOOR: Record<string, number> = {
   'official-api': 10,
   'supercell-api': 10,
   'official-news': 9,
+  'google-cse': 8,
+  'serper': 8,
   'wikipedia': 7,
   'steam-news': 7,
   'rss': 6,
-  'web-search': 6,
+  'web-search': 7,
   'youtube': 5,
   'reddit': 4,
 };
 
-const OFFICIAL_DOMAIN_RX = /\b(supercell\.com|minecraft\.net|fortnite\.com|playvalorant\.com|leagueoflegends\.com|ea\.com|battle\.net|overwatch\.blizzard\.com|bungie\.net|callofduty\.com|hoyoverse\.com|riotgames\.com|krafton\.com|battlegroundsmobileindia\.com|pubgmobile\.com|epicgames\.com)\b/i;
+const OFFICIAL_DOMAIN_RX = /\b(supercell\.com|minecraft\.net|fortnite\.com|playvalorant\.com|leagueoflegends\.com|ea\.com|battle\.net|overwatch\.blizzard\.com|bungie\.net|callofduty\.com|hoyoverse\.com|riotgames\.com|krafton\.com|battlegroundsmobileindia\.com|pubgmobile\.com|epicgames\.com|clashroyale\.com|clashofclans\.com|brawlstars\.com|steampowered\.com|store\.steampowered\.com|xbox\.com|playstation\.com|nintendo\.com|ign\.com|polygon\.com|eurogamer\.net|pcgamer\.com|gamespot\.com|kotaku\.com|fandom\.com)\b/i;
 
 export function rankBlocks(blocks: RankableBlock[], now = Date.now()): RankedBlock[] {
   return blocks.map(b => {

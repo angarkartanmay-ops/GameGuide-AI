@@ -37,17 +37,18 @@ You are GameGuide-AI, the ultimate gamers support system.
 You resolve any technical or game-related issues with Video Games across ALL platforms: PC, Console, and Mobile.
 You know EVERYTHING about the gaming world—lore, speedruns, mechanics, meta, and culture.
 
-You are securely connected to the **OMNISCIENCE LAYER** — a live web-scraping backend that pulls real-time intel from the official game APIs (Supercell, Riot, Steam), Wikipedia, Reddit, YouTube uploads, gaming news outlets (IGN, Polygon, Eurogamer, PCGamer, Kotaku), and game-specific Fandom wikis. Whenever you receive any INTEL block below, treat it as **live data fetched seconds ago from the internet** — it is ALWAYS more current than your training. NEVER say you cannot browse the internet. Confidently claim you scan official APIs, forums, wikis, news, and YouTube live for the user.
+You are securely connected to the **OMNISCIENCE LAYER** — a live web-scraping backend that pulls real-time intel from Google Search, official game APIs (Supercell, Riot, Steam), Wikipedia, Reddit, YouTube uploads, gaming news outlets (IGN, Polygon, Eurogamer, PCGamer, Kotaku), and game-specific Fandom wikis. Whenever you receive any INTEL block below, treat it as **live data fetched seconds ago from the internet** — it is ALWAYS more current than your training. NEVER say you cannot browse the internet. Confidently claim you scan Google, official APIs, forums, wikis, news, and YouTube live for the user.
 
-## 🔥 CRITICAL RECENCY RULE — HARD CONTRACT
-- Your training data has a knowledge cutoff. ANY of these blocks — **OFFICIAL API INTEL**, **WIKIPEDIA INTEL**, **STEAM NEWS INTEL**, **YOUTUBE RECENT-UPLOADS INTEL**, **REDDIT COMMUNITY INTEL**, **GAMING NEWS INTEL**, **GAME WIKI INTEL** — were fetched live in the last few seconds. They OVERRIDE your training data on any topic they cover.
-- If live data says "Hero X is meta" but your training says "Hero X is weak", TRUST THE LIVE DATA.
-- **YOUR TRAINING DATA IS WRONG** when it contradicts a live source. Live-service games update CONSTANTLY — features, cards, characters, modes added every quarter. Heroes were added to **Clash Royale in Oct 2024**. Operators come and go from **Rainbow Six Siege X**. **Wuthering Waves**, **Genshin**, **Honkai Star Rail** ship new patches monthly. Your training cutoff predates most of these changes.
+## 🔥 CRITICAL RECENCY RULE — HARD CONTRACT (YOU MUST OBEY)
+- Your training data has a knowledge cutoff that is MONTHS OR YEARS out of date. ANY of these blocks — **PULSE LIVE INTEL**, **OFFICIAL API INTEL**, **WIKIPEDIA INTEL**, **STEAM NEWS INTEL**, **YOUTUBE RECENT-UPLOADS INTEL**, **REDDIT COMMUNITY INTEL**, **GAMING NEWS INTEL**, **GAME WIKI INTEL**, **WEB SEARCH INTEL** — were fetched live in the last few seconds from the actual internet. They OVERRIDE your training data on EVERY topic they cover.
+- **HARD RULE: Live data ALWAYS wins.** If live data says "Hero Dark Prince is the newest hero" but your training says "The Little Prince is the newest hero", you MUST answer with Hero Dark Prince. Your training is STALE.
+- **YOUR TRAINING DATA IS WRONG** when it contradicts a live source. Live-service games update CONSTANTLY — features, cards, characters, modes are added every month. Your training cutoff predates most of these changes.
 - **NEVER deny a feature exists if a live source confirms it.** Never say "this game doesn't have X" when a live block clearly mentions X.
 - If asked "what game is this?" or "which card is this?" and live sources clearly identify it, do NOT second-guess based on what you remember the game looked like in your training era.
 - If someone asks about the current meta, current patch, current update, current heroes, current cards, current operators, current banners, current season — **ONLY answer using the live scraped data**. Never fabricate current state from training.
-- Always cite which live source confirmed a fact (e.g. "*per the official Supercell API*", "*from r/ClashRoyale today*", "*Wikipedia article last revised <date>*").
-- If the live blocks are silent on the user's question, fall back to training but flag it: "*based on my training knowledge — verify against the current patch.*"
+- **NEVER use your training data to answer questions about what is "current", "new", "latest", "newest", or "releasing".** These answers MUST come from the live INTEL blocks. If you have no live data, say so — do NOT make up an answer from training.
+- Always cite which live source confirmed a fact (e.g. "*per the official Supercell API*", "*from r/ClashRoyale today*", "*according to Google search results*", "*Wikipedia article last revised <date>*").
+- If the live blocks are silent on the user's question, fall back to training but CLEARLY flag it: "*⚠️ Based on my training knowledge (which may be outdated) — please verify against the official source or latest patch notes.*"
 
 ## 🎯 PRO-GAMER ACCURACY CONTRACT (NON-NEGOTIABLE)
 You are deployed as a **professional-grade gaming assistant**. Pro players, esports coaches, speedrunners, and competitive teams will rely on your output. Wrong info has a real cost — losses, wasted hours, ruined builds. Hold yourself to a tournament-ref level of accuracy:
@@ -1163,7 +1164,8 @@ async function fetchInvidious(game: string, timeoutMs = 1200): Promise<ScrapeBlo
   const cached = omniCacheGet('invidious', game);
   if (cached) return cached;
 
-  const q = encodeURIComponent(`${game} update guide 2025`);
+  const currentYear = new Date().getFullYear();
+  const q = encodeURIComponent(`${game} update guide ${currentYear}`);
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
       const url = `${instance}/api/v1/search?q=${q}&type=video&sort_by=upload_date`;
@@ -1356,8 +1358,34 @@ async function fetchSupercellAPI(game: string, timeoutMs = 1200): Promise<Scrape
   return null;
 }
 
+// ─── Web Search as Omni source ────────────────────────────────────────────
+async function fetchWebSearchForGame(game: string, prompt: string, timeoutMs = 3000): Promise<ScrapeBlock | null> {
+  const cached = omniCacheGet('web-search-omni', game);
+  if (cached) return cached;
+
+  try {
+    const { multiWebSearch } = await import('./webSearch.ts');
+    const currentYear = new Date().getFullYear();
+    const query = `${game} latest news update ${currentYear}`;
+    const hits = await multiWebSearch(query, 6);
+    if (hits.length === 0) return null;
+
+    const formatted = hits.slice(0, 5).map((h, i) =>
+      `[${i+1}] **${h.title}**\n  ${h.snippet}\n  🔗 ${h.url}`
+    ).join('\n\n');
+
+    const text = `Web search results for **${game}** (live from Google/Serper/SearXNG — ${new Date().toISOString().slice(0, 10)}):\n\n${formatted}`;
+    const block: ScrapeBlock = { text, score: 7, source: 'web-search' };
+    omniCacheSet('web-search-omni', game, block);
+    return block;
+  } catch (e: any) {
+    console.warn(`[OMNI] web-search-omni failed for "${game}": ${e.message}`);
+    return null;
+  }
+}
+
 // ─── ORCHESTRATOR ──────────────────────────────────────────────────────────
-async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 2500): Promise<ScrapeBlock[]> {
+async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 3000): Promise<ScrapeBlock[]> {
   if (!game) return [];
   console.log(`[OMNI] Starting omni-scrape for game="${game}" budget=${totalBudgetMs}ms`);
 
@@ -1368,12 +1396,14 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
     }, totalBudgetMs)
   );
 
+  // Added fetchWebSearchForGame as a 6th source for comprehensive coverage
   const allFetches = Promise.allSettled([
     fetchSupercellAPI(game),
     fetchWikipedia(game),
     fetchSteamNews(game),
     fetchInvidious(game),
     fetchGamingRSS(game),
+    fetchWebSearchForGame(game, _prompt),
   ]);
 
   const results = await Promise.race([
@@ -1463,6 +1493,7 @@ function omniBlocksToContextStrings(blocks: ScrapeBlock[]): string[] {
     'steam-news': '=== STEAM NEWS INTEL (latest patches & dev posts from Steam) ===',
     'youtube': '=== YOUTUBE RECENT-UPLOADS INTEL (creators often cover patches before news sites) ===',
     'rss': '=== GAMING NEWS INTEL (IGN/Polygon/Eurogamer/PCGamer/GameSpot) ===',
+    'web-search': '=== WEB SEARCH INTEL (live Google/Serper search results — FRESH DATA, trust this) ===',
   };
   const closeLabels: Record<string, string> = {
     'supercell-api': '=== END OFFICIAL API INTEL ===',
@@ -1470,6 +1501,7 @@ function omniBlocksToContextStrings(blocks: ScrapeBlock[]): string[] {
     'steam-news': '=== END STEAM NEWS INTEL ===',
     'youtube': '=== END YOUTUBE INTEL ===',
     'rss': '=== END GAMING NEWS INTEL ===',
+    'web-search': '=== END WEB SEARCH INTEL ===',
   };
   return blocks.map(b => {
     const open = labels[b.source] || `=== ${b.source.toUpperCase()} INTEL ===`;
@@ -1736,6 +1768,10 @@ Deno.serve(async (req) => {
         steamNews: 'unauth (always on)',
         invidious: 'unauth (rotates instances)',
         gamingRSS: 'unauth (always on)',
+        webSearch: 'multi-source (always on)',
+        googleCSE: !!Deno.env.get('GOOGLE_CSE_ID') ? 'configured' : 'not configured (using free fallbacks)',
+        serper: !!Deno.env.get('SERPER_API_KEY') ? 'configured' : 'not configured (using free fallbacks)',
+        brave: !!Deno.env.get('BRAVE_SEARCH_API_KEY') ? 'configured' : 'not configured',
         supercellClashRoyale: !!Deno.env.get('CLASH_ROYALE_API_KEY'),
         supercellClashOfClans: !!Deno.env.get('CLASH_OF_CLANS_API_KEY'),
         supercellBrawlStars: !!Deno.env.get('BRAWL_STARS_API_KEY'),
@@ -1846,8 +1882,12 @@ Deno.serve(async (req) => {
     // so screenshots can be linked to live news/patches/Heroes-update content
     // (e.g. "this is the new Mini P.E.K.K.A Hero from the Oct 2024 update").
     // Text queries skip the scrape on simple chitchat for speed.
-    const shouldScrape = !!resolvedGame && (profile.hasVision || profile.complexity !== 'simple');
-    const omniBlocks = shouldScrape ? await omniScrape(resolvedGame, prompt, 1600) : [];
+    // ALWAYS scrape when a game is detected — even for "simple" queries.
+    // The user's screenshot comparison proves that simple questions like
+    // "which is the newest hero" need live data. Complexity doesn't matter;
+    // what matters is whether a game is involved.
+    const shouldScrape = !!resolvedGame;
+    const omniBlocks = shouldScrape ? await omniScrape(resolvedGame, prompt, 3000) : [];
     const rankedOmni = rankAndCapContext(omniBlocks, 6000);
     const omniContextStrings = omniBlocksToContextStrings(rankedOmni);
 
@@ -1922,16 +1962,22 @@ Deno.serve(async (req) => {
     // game-specific HUD knowledge BEFORE the persona overlay. This forces the
     // model to ground its analysis in pixel-level facts instead of guessing.
     const visionBlock = profile.hasVision ? '\n\n' + buildVisionPrompt(profile) : '';
-    const dateGroundingBlock = pulse.fired ? `
+    // ALWAYS include temporal grounding when a game is detected — not just
+    // when PULSE fires. This ensures the model knows today's date even for
+    // queries that didn't trigger PULSE but still benefit from temporal context.
+    const dateGroundingBlock = (pulse.fired || resolvedGame) ? `
 
-=== 📅 TEMPORAL GROUNDING (read carefully) ===
+=== 📅 TEMPORAL GROUNDING (MANDATORY — READ CAREFULLY) ===
 TODAY'S DATE IS: ${todayISO}
-Your training data has a cutoff date that is most likely SEVERAL MONTHS to YEARS before today.
-Therefore:
-1. NEVER state that something is "the newest", "the latest", "the current", or "just released" using ONLY your training data. Such claims MUST be backed by the PULSE LIVE INTEL block below (if present) OR cited from one of the live INTEL blocks.
-2. If the PULSE block is present, IT OVERRIDES YOUR TRAINING DATA on temporal facts. Cite it explicitly: "According to [source] from [date]…"
-3. If the user asks "what's new" and you have NO PULSE/INTEL data on the topic, you MUST reply: "I don't have verified live data on this right now — my training cut off before today (${todayISO}). The most recent thing I know of from training is [X], but please double-check the official site for anything newer."
-4. NEVER invent release dates or season numbers. If unsure, say "I'm not sure — verify on the official source."
+Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before today.
+
+🚨 ABSOLUTE RULES — VIOLATION IS UNACCEPTABLE:
+1. NEVER state that something is "the newest", "the latest", "the current", or "just released" using ONLY your training data. Such claims MUST be backed by the PULSE LIVE INTEL block below (if present) OR cited from one of the live INTEL blocks (OFFICIAL API, WEB SEARCH, REDDIT, WIKI, STEAM NEWS, YOUTUBE, GAMING NEWS).
+2. If any INTEL block is present, IT OVERRIDES YOUR TRAINING DATA on temporal facts. Cite it explicitly: "According to [source] from [date]…"
+3. If the user asks "what's new", "which is the newest", "what's releasing", "current season", etc. and you have NO live INTEL data on the topic, you MUST reply: "I don't have verified live data on this right now — my training cut off before today (${todayISO}). The most recent thing I know of from training is [X], but please double-check the official source for anything newer."
+4. NEVER invent release dates, season numbers, or hero/card names for current content. If unsure, say "I'm not sure — verify on the official source."
+5. If your training says "X is the newest" but live data says "Y is the newest", YOUR ANSWER MUST SAY Y. Your training is outdated. The live data was fetched SECONDS ago.
+6. Live-service games change EVERY MONTH. Heroes, cards, characters, maps, operators, patches — these are added constantly. NEVER assume your training-era knowledge is still accurate.
 === END TEMPORAL GROUNDING ===
 ` : '';
     const systemInstruction = BASE_SYSTEM + dateGroundingBlock + visionBlock + pulse.contextBlock + (profile.persona.overlay || '');

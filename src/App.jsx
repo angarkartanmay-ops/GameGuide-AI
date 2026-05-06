@@ -9,8 +9,10 @@ import PriceBadge from './components/PriceBadge';
 import useChat from './hooks/useChat';
 import useAuth from './hooks/useAuth';
 import LoadingScreen from './components/LoadingScreen';
+import LandingPage from './components/LandingPage';
 
 function App() {
+  const [showLanding, setShowLanding] = useState(() => sessionStorage.getItem('gg_entered') !== '1');
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'default');
   const { user, loading: authLoading } = useAuth();
   const { messages, isLoading, sendMessage, cancelRequest, redditActive, wikiActive, priceActive, priceData, SLASH_COMMANDS } = useChat(user);
@@ -40,6 +42,17 @@ function App() {
 
     return () => clearTimeout(exitTimer);
   }, [authLoading]);
+
+  if (showLanding) {
+    return (
+      <LandingPage
+        onEnter={() => {
+          sessionStorage.setItem('gg_entered', '1');
+          setShowLanding(false);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="app-container">
