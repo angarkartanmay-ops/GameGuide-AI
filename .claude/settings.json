@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"index.html %{http_code}\\\\n\" http://localhost:5175/)",
+      "Bash(curl -s -o /dev/null -w \"LandingPage.jsx %{http_code}\\\\n\" http://localhost:5175/src/components/LandingPage.jsx)",
+      "Bash(curl -s -o /dev/null -w \"Hero.jsx %{http_code}\\\\n\" http://localhost:5175/src/components/landing/Hero.jsx)",
+      "Bash(curl -s -o /dev/null -w \"PinnedFeatures.jsx %{http_code}\\\\n\" http://localhost:5175/src/components/landing/PinnedFeatures.jsx)",
+      "Bash(curl -s -o /dev/null -w \"easings.js %{http_code}\\\\n\" http://localhost:5175/src/components/landing/easings.js)"
+    ]
+  }
+}

@@ -1,10 +1,10 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
-/* =========================================================================
-   ARCADE PHANTOM — Global landing styles
-   Theme variables below are consumed by the chat app (App.css), preserved.
-   ========================================================================= */
+/* =============================================================================
+   QUIET POWER — global styles
+   Chat-app theme variables preserved (consumed by App.css).
+   ============================================================================= */
 
 :root {
   /* Chat-app theme variables (default = Cyberpunk) */
@@ -31,10 +31,14 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  /* Smoother native scroll on Webkit/Blink */
+  scroll-padding-top: 96px;
+}
 
 body {
-  font-family: 'Sora', system-ui, -apple-system, sans-serif;
+  font-family: 'Geist', system-ui, -apple-system, sans-serif;
   background-color: var(--bg-color);
   color: var(--text-primary);
   min-height: 100dvh;
@@ -43,12 +47,13 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "ss03", "cv11";
   transition: background-color 0.5s ease;
 }
 
-h1, h2, h3, h4, h5, h6 { font-family: 'Anton', sans-serif; }
+h1, h2, h3, h4, h5, h6 { font-family: 'Geist', sans-serif; }
 
-/* Glassmorphism utility used by chat app */
+/* Glassmorphism utility used by chat app — keep */
 .glass-panel {
   background: var(--panel-bg);
   backdrop-filter: blur(12px);
@@ -58,7 +63,7 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Anton', sans-serif; }
   transition: all 0.3s ease;
 }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--accent-1); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent-2); }
@@ -66,168 +71,164 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Anton', sans-serif; }
 @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 .animate-fade-in { animation: fadeIn 0.4s ease forwards; }
 
-@keyframes pulse-glow { 0%{ box-shadow:0 0 5px var(--accent-glow);} 50%{ box-shadow:0 0 20px var(--accent-glow);} 100%{ box-shadow:0 0 5px var(--accent-glow);} }
+@keyframes pulse-glow {
+  0%   { box-shadow: 0 0 5px var(--accent-glow); }
+  50%  { box-shadow: 0 0 20px var(--accent-glow); }
+  100% { box-shadow: 0 0 5px var(--accent-glow); }
+}
 
-/* =========================================================================
-   LANDING — Arcade Phantom utilities
-   ========================================================================= */
+/* =============================================================================
+   QUIET POWER — landing-only utilities
+   ============================================================================= */
 
 /* Body override when landing is mounted */
 body.landing-mounted {
   background-color: #06060A;
-  color: #F5F5F0;
+  color: #F6F5F1;
+  font-family: 'Geist', system-ui, sans-serif;
 }
+body.landing-mounted ::-webkit-scrollbar-thumb { background: #3D3D48; }
+body.landing-mounted ::-webkit-scrollbar-thumb:hover { background: #65656F; }
 
-/* Hide native cursor inside the landing root for custom HUD cursor */
-.arcade-cursor, .arcade-cursor * { cursor: none !important; }
-@media (hover: none) { .arcade-cursor, .arcade-cursor * { cursor: auto !important; } }
+/* Custom cursor (landing) */
+.cursor-hide, .cursor-hide * { cursor: none !important; }
+@media (hover: none) { .cursor-hide, .cursor-hide * { cursor: auto !important; } }
 
-/* Dotted/grain noise overlay (SVG, no extra request) */
-.grain::before {
-  content: '';
-  position: fixed;
-  inset: -50%;
+/* Animated mesh gradient (hero) — pure CSS, GPU-friendly */
+.mesh-bg {
+  position: absolute;
+  inset: -10%;
   pointer-events: none;
-  z-index: 9999;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.55'/></svg>");
-  opacity: 0.06;
-  mix-blend-mode: overlay;
-  animation: noise 0.9s steps(6) infinite;
+  filter: blur(80px) saturate(140%);
+  opacity: 0.7;
+}
+.mesh-bg::before, .mesh-bg::after,
+.mesh-bg > .blob {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
   will-change: transform;
 }
-
-/* CRT scan-line single sweep */
-.scanline-sweep {
-  position: absolute;
-  left: 0; right: 0;
-  height: 220px;
-  background: linear-gradient(180deg, transparent 0%, rgba(204,255,0,0.05) 45%, rgba(204,255,0,0.18) 50%, rgba(204,255,0,0.05) 55%, transparent 100%);
-  filter: blur(1px);
-  pointer-events: none;
-  z-index: 4;
+.mesh-bg::before {
+  width: 55%; height: 55%;
+  top: -10%; left: -5%;
+  background: radial-gradient(circle, #8B5CF6 0%, transparent 65%);
+  animation: drift 22s ease-in-out infinite;
+}
+.mesh-bg::after {
+  width: 50%; height: 50%;
+  bottom: -10%; right: -5%;
+  background: radial-gradient(circle, #5EEAD4 0%, transparent 65%);
+  animation: drift 28s ease-in-out infinite reverse;
+}
+.mesh-bg > .blob {
+  width: 40%; height: 40%;
+  top: 30%; left: 35%;
+  background: radial-gradient(circle, #F0ABFC 0%, transparent 60%);
+  animation: drift 32s ease-in-out infinite;
+}
+@keyframes drift {
+  0%, 100% { transform: translate3d(0,0,0) scale(1) rotate(0deg); }
+  33%      { transform: translate3d(8%, -6%, 0) scale(1.1) rotate(40deg); }
+  66%      { transform: translate3d(-6%, 8%, 0) scale(0.95) rotate(-30deg); }
 }
 
-/* Static CRT lines overlay */
-.crt-lines {
-  background-image: repeating-linear-gradient(
-    0deg,
-    rgba(255,255,255,0.025) 0px,
-    rgba(255,255,255,0.025) 1px,
-    transparent 1px,
-    transparent 3px
-  );
-}
-
-/* Perspective floor grid (animated) */
-.floor-grid {
-  position: absolute;
+/* Subtle noise grain — refined, very low opacity */
+.grain-soft::before {
+  content: "";
+  position: fixed;
   inset: 0;
-  perspective: 800px;
-  perspective-origin: 50% 0%;
   pointer-events: none;
-  overflow: hidden;
-}
-.floor-grid::after {
-  content: '';
-  position: absolute;
-  bottom: -50%;
-  left: -50%;
-  width: 200%;
-  height: 140%;
-  background-image:
-    linear-gradient(rgba(204,255,0,0.35) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(204,255,0,0.35) 1px, transparent 1px);
-  background-size: 60px 60px;
-  transform: rotateX(72deg) translateZ(0);
-  transform-origin: 50% 0%;
-  mask-image: linear-gradient(to top, #000 10%, transparent 80%);
-  -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 80%);
-  animation: floor-roll 14s linear infinite;
-  will-change: background-position;
-}
-@keyframes floor-roll {
-  0%   { background-position: 0 0,   0 0; }
-  100% { background-position: 0 60px, 60px 0; }
+  z-index: 9999;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: 0.04;
+  mix-blend-mode: overlay;
 }
 
-/* Glitch text — used on hero accents */
-.glitch {
+/* Hairline divider */
+.hairline {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+}
+
+/* Magnetic button hover halo */
+.halo {
   position: relative;
-  display: inline-block;
+  isolation: isolate;
 }
-.glitch::before, .glitch::after {
-  content: attr(data-text);
+.halo::after {
+  content: "";
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  mix-blend-mode: screen;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(120deg, #8B5CF6, #5EEAD4, #F0ABFC, #8B5CF6);
+  background-size: 200% 200%;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  animation: shimmer 4s linear infinite;
 }
-.glitch::before {
-  color: #FF1F8A;
-  transform: translate(2px, 0);
-  clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%);
-  animation: glitch-a 3.6s infinite steps(1);
-}
-.glitch::after {
-  color: #00E0FF;
-  transform: translate(-2px, 0);
-  clip-path: polygon(0 67%, 100% 67%, 100% 100%, 0 100%);
-  animation: glitch-b 4.4s infinite steps(1);
-}
-@keyframes glitch-a {
-  0%, 92%, 100% { transform: translate(0,0); opacity: 0; }
-  93%           { transform: translate(3px,-1px); opacity: 1; }
-  94%           { transform: translate(-2px,2px); opacity: 1; }
-  95%           { transform: translate(1px,1px); opacity: 1; }
-  96%           { transform: translate(0,0);     opacity: 0; }
-}
-@keyframes glitch-b {
-  0%, 88%, 100% { transform: translate(0,0); opacity: 0; }
-  89%           { transform: translate(-3px,2px); opacity: 1; }
-  90%           { transform: translate(2px,-1px); opacity: 1; }
-  91%           { transform: translate(-1px,0);   opacity: 1; }
-  92%           { transform: translate(0,0);      opacity: 0; }
+.halo:hover::after { opacity: 1; }
+@keyframes shimmer {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
 }
 
-/* HUD corner brackets */
-.hud-corners { position: relative; }
-.hud-corners::before, .hud-corners::after,
-.hud-corners > .corner-tr, .hud-corners > .corner-bl {
-  content: '';
-  position: absolute;
-  width: 14px; height: 14px;
-  border-color: #CCFF00;
-  pointer-events: none;
-  z-index: 2;
-}
-.hud-corners::before { top: 0; left: 0;  border-top: 2px solid; border-left: 2px solid; }
-.hud-corners::after  { bottom: 0; right: 0; border-bottom: 2px solid; border-right: 2px solid; }
-.hud-corners > .corner-tr { top: 0; right: 0; border-top: 2px solid; border-right: 2px solid; }
-.hud-corners > .corner-bl { bottom: 0; left: 0; border-bottom: 2px solid; border-left: 2px solid; }
-
-/* Diagonal stripe band (warning tape) */
-.warning-tape {
-  background-image: repeating-linear-gradient(
-    -45deg,
-    #CCFF00 0 14px,
-    #06060A 14px 28px
-  );
+/* Mask sweep reveal — used for hero word reveal */
+.sweep-reveal {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2.4s linear infinite;
+  -webkit-background-clip: text;
+          background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
-/* Conic spinner ring */
-.conic-ring {
-  background: conic-gradient(from 0deg,
-    transparent 0%, transparent 60%,
-    #CCFF00 70%, #FF1F8A 80%, #FF6B00 90%, transparent 100%);
-  -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%);
-          mask: radial-gradient(circle, transparent 60%, #000 61%);
+/* Editorial italic display */
+.editorial {
+  font-family: 'Fraunces', Georgia, serif;
+  font-style: italic;
+  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 0;
+  font-weight: 400;
+  letter-spacing: -0.04em;
 }
 
-/* Reduced motion — kill the showy stuff */
+/* Section eyebrow style */
+.eyebrow {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #A2A2B0;
+}
+
+/* Smooth scroll progress bar (top of page) */
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #8B5CF6, #5EEAD4, #F0ABFC);
+  transform-origin: 0 0;
+  z-index: 100;
+}
+
+/* Apple-style sticky pin container */
+.pin-section { position: relative; }
+.pin-stage  { position: sticky; top: 0; height: 100vh; }
+
+/* Hover ring glow */
+.ring-glow {
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.06), 0 30px 60px -30px rgba(0,0,0,0.7);
+  transition: box-shadow 0.5s ease, transform 0.5s ease;
+}
+.ring-glow:hover {
+  box-shadow: 0 0 0 1px rgba(139,92,246,0.4), 0 30px 80px -20px rgba(139,92,246,0.25);
+  transform: translateY(-2px);
+}
+
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .grain::before,
-  .floor-grid::after,
-  .glitch::before, .glitch::after,
-  .scanline-sweep { animation: none !important; }
+  .mesh-bg::before, .mesh-bg::after, .mesh-bg > .blob,
+  .halo::after, .sweep-reveal { animation: none !important; }
   html { scroll-behavior: auto; }
 }
