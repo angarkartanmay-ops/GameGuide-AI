@@ -1,65 +1,20 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
-.glass-card {
-    background: rgba(30, 30, 36, 0.7);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    position: relative;
-    overflow: hidden;
-}
-.glass-card::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 100%;
-    height: 100%;
-    border-bottom: 1px solid rgba(0, 219, 233, 0.3);
-    border-right: 1px solid rgba(0, 219, 233, 0.3);
-    pointer-events: none;
-}
-.cyber-grid {
-    background-image: linear-gradient(to right, rgba(0, 219, 233, 0.05) 1px, transparent 1px),
-                      linear-gradient(to bottom, rgba(0, 219, 233, 0.05) 1px, transparent 1px);
-    background-size: 40px 40px;
-}
-.neon-glow-purple {
-    box-shadow: 0 0 20px rgba(220, 184, 255, 0.3);
-}
-.neon-glow-cyan {
-    box-shadow: 0 0 20px rgba(0, 219, 233, 0.3);
-}
-.hud-bracket-tl {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 20px;
-    height: 20px;
-    border-top: 2px solid #00eefc;
-    border-left: 2px solid #00eefc;
-}
-.hud-bracket-br {
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    width: 20px;
-    height: 20px;
-    border-bottom: 2px solid #00eefc;
-    border-right: 2px solid #00eefc;
-}
+/* =========================================================================
+   ARCADE PHANTOM — Global landing styles
+   Theme variables below are consumed by the chat app (App.css), preserved.
+   ========================================================================= */
 
-/* index.css */
 :root {
-  /* Default/Fallback Theme Variables (Cyberpunk) */
+  /* Chat-app theme variables (default = Cyberpunk) */
   --bg-color: #0d0914;
   --panel-bg: rgba(20, 15, 30, 0.6);
   --panel-border: rgba(0, 243, 255, 0.2);
   --text-primary: #e0e0f0;
   --text-secondary: #9aa0af;
-  --accent-1: #00f3ff; /* Cyan */
-  --accent-2: #ff00ea; /* Magenta */
+  --accent-1: #00f3ff;
+  --accent-2: #ff00ea;
   --accent-glow: rgba(0, 243, 255, 0.4);
   --user-bubble: rgba(0, 243, 255, 0.1);
   --ai-bubble: rgba(255, 0, 234, 0.1);
@@ -67,153 +22,212 @@
   --button-hover: #00e0eb;
 }
 
-[data-theme='matrix'] {
-  --bg-color: #0a120a;
-  --panel-bg: rgba(10, 22, 10, 0.7);
-  --panel-border: rgba(80, 200, 120, 0.25);
-  --text-primary: #c8e6c9;
-  --text-secondary: #6a9f6e;
-  --accent-1: #4caf50;
-  --accent-2: #2e7d32;
-  --accent-glow: rgba(76, 175, 80, 0.35);
-  --user-bubble: rgba(76, 175, 80, 0.1);
-  --ai-bubble: rgba(46, 125, 50, 0.15);
-  --input-bg: rgba(8, 16, 8, 0.8);
-  --button-hover: #43a047;
-}
+[data-theme='matrix']     { --bg-color:#0a120a; --panel-bg:rgba(10,22,10,.7);  --panel-border:rgba(80,200,120,.25); --text-primary:#c8e6c9; --text-secondary:#6a9f6e; --accent-1:#4caf50; --accent-2:#2e7d32; --accent-glow:rgba(76,175,80,.35);  --user-bubble:rgba(76,175,80,.1);   --ai-bubble:rgba(46,125,50,.15);  --input-bg:rgba(8,16,8,.8);  --button-hover:#43a047; }
+[data-theme='stealth']    { --bg-color:#0f0f11; --panel-bg:rgba(20,20,24,.8); --panel-border:rgba(255,40,40,.2);   --text-primary:#f0f0f0; --text-secondary:#70757a; --accent-1:#ff2828; --accent-2:#555555; --accent-glow:rgba(255,40,40,.4); --user-bubble:rgba(70,70,75,.2);    --ai-bubble:rgba(255,40,40,.1);   --input-bg:rgba(10,10,12,.7); --button-hover:#e02020; }
+[data-theme='neon-tokyo'] { --bg-color:#120810; --panel-bg:rgba(25,12,22,.7); --panel-border:rgba(255,100,50,.25); --text-primary:#f5e0d0; --text-secondary:#b08070; --accent-1:#ff6b35; --accent-2:#ff1493; --accent-glow:rgba(255,107,53,.4); --user-bubble:rgba(255,107,53,.12); --ai-bubble:rgba(255,20,147,.1);  --input-bg:rgba(15,8,12,.8); --button-hover:#ff5722; }
+[data-theme='arctic']     { --bg-color:#0c1420; --panel-bg:rgba(15,25,45,.6); --panel-border:rgba(120,200,255,.2); --text-primary:#e0eef8; --text-secondary:#7a9ab8; --accent-1:#64b5f6; --accent-2:#e1f5fe; --accent-glow:rgba(100,181,246,.3); --user-bubble:rgba(100,181,246,.1); --ai-bubble:rgba(225,245,254,.08); --input-bg:rgba(10,18,30,.7); --button-hover:#42a5f5; }
+[data-theme='voxel']      { --bg-color:#1a1208; --panel-bg:rgba(30,22,10,.75); --panel-border:rgba(100,160,60,.3);  --text-primary:#d4c8a0; --text-secondary:#8a7a55; --accent-1:#5b8c2a; --accent-2:#8b6914; --accent-glow:rgba(91,140,42,.35);  --user-bubble:rgba(139,105,20,.15); --ai-bubble:rgba(91,140,42,.12);  --input-bg:rgba(20,15,5,.8); --button-hover:#4a7a20; }
+[data-theme='nitro-arena']{ --bg-color:#080c18; --panel-bg:rgba(10,15,30,.7);  --panel-border:rgba(30,144,255,.25); --text-primary:#e8ecf4; --text-secondary:#7a8aa8; --accent-1:#1e90ff; --accent-2:#ff8c00; --accent-glow:rgba(30,144,255,.4);  --user-bubble:rgba(255,140,0,.12);  --ai-bubble:rgba(30,144,255,.1);  --input-bg:rgba(8,10,20,.8); --button-hover:#1a80e6; }
 
-[data-theme='stealth'] {
-  --bg-color: #0f0f11;
-  --panel-bg: rgba(20, 20, 24, 0.8);
-  --panel-border: rgba(255, 40, 40, 0.2);
-  --text-primary: #f0f0f0;
-  --text-secondary: #70757a;
-  --accent-1: #ff2828;
-  --accent-2: #555555;
-  --accent-glow: rgba(255, 40, 40, 0.4);
-  --user-bubble: rgba(70, 70, 75, 0.2);
-  --ai-bubble: rgba(255, 40, 40, 0.1);
-  --input-bg: rgba(10, 10, 12, 0.7);
-  --button-hover: #e02020;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-[data-theme='neon-tokyo'] {
-  --bg-color: #120810;
-  --panel-bg: rgba(25, 12, 22, 0.7);
-  --panel-border: rgba(255, 100, 50, 0.25);
-  --text-primary: #f5e0d0;
-  --text-secondary: #b08070;
-  --accent-1: #ff6b35;
-  --accent-2: #ff1493;
-  --accent-glow: rgba(255, 107, 53, 0.4);
-  --user-bubble: rgba(255, 107, 53, 0.12);
-  --ai-bubble: rgba(255, 20, 147, 0.1);
-  --input-bg: rgba(15, 8, 12, 0.8);
-  --button-hover: #ff5722;
-}
-
-[data-theme='arctic'] {
-  --bg-color: #0c1420;
-  --panel-bg: rgba(15, 25, 45, 0.6);
-  --panel-border: rgba(120, 200, 255, 0.2);
-  --text-primary: #e0eef8;
-  --text-secondary: #7a9ab8;
-  --accent-1: #64b5f6;
-  --accent-2: #e1f5fe;
-  --accent-glow: rgba(100, 181, 246, 0.3);
-  --user-bubble: rgba(100, 181, 246, 0.1);
-  --ai-bubble: rgba(225, 245, 254, 0.08);
-  --input-bg: rgba(10, 18, 30, 0.7);
-  --button-hover: #42a5f5;
-}
-
-[data-theme='voxel'] {
-  --bg-color: #1a1208;
-  --panel-bg: rgba(30, 22, 10, 0.75);
-  --panel-border: rgba(100, 160, 60, 0.3);
-  --text-primary: #d4c8a0;
-  --text-secondary: #8a7a55;
-  --accent-1: #5b8c2a;
-  --accent-2: #8b6914;
-  --accent-glow: rgba(91, 140, 42, 0.35);
-  --user-bubble: rgba(139, 105, 20, 0.15);
-  --ai-bubble: rgba(91, 140, 42, 0.12);
-  --input-bg: rgba(20, 15, 5, 0.8);
-  --button-hover: #4a7a20;
-}
-
-[data-theme='nitro-arena'] {
-  --bg-color: #080c18;
-  --panel-bg: rgba(10, 15, 30, 0.7);
-  --panel-border: rgba(30, 144, 255, 0.25);
-  --text-primary: #e8ecf4;
-  --text-secondary: #7a8aa8;
-  --accent-1: #1e90ff;
-  --accent-2: #ff8c00;
-  --accent-glow: rgba(30, 144, 255, 0.4);
-  --user-bubble: rgba(255, 140, 0, 0.12);
-  --ai-bubble: rgba(30, 144, 255, 0.1);
-  --input-bg: rgba(8, 10, 20, 0.8);
-  --button-hover: #1a80e6;
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+html { scroll-behavior: smooth; }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Sora', system-ui, -apple-system, sans-serif;
   background-color: var(--bg-color);
   color: var(--text-primary);
   min-height: 100dvh;
   margin: 0;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   transition: background-color 0.5s ease;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: 'Outfit', sans-serif;
-}
+h1, h2, h3, h4, h5, h6 { font-family: 'Anton', sans-serif; }
 
-/* Glassmorphism Utilities */
+/* Glassmorphism utility used by chat app */
 .glass-panel {
   background: var(--panel-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--panel-border);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  box-shadow: 0 8px 32px 0 rgba(0,0,0,0.37);
   transition: all 0.3s ease;
 }
 
-/* Scroller */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--accent-1);
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-2);
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--accent-1); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-2); }
+
+@keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.animate-fade-in { animation: fadeIn 0.4s ease forwards; }
+
+@keyframes pulse-glow { 0%{ box-shadow:0 0 5px var(--accent-glow);} 50%{ box-shadow:0 0 20px var(--accent-glow);} 100%{ box-shadow:0 0 5px var(--accent-glow);} }
+
+/* =========================================================================
+   LANDING — Arcade Phantom utilities
+   ========================================================================= */
+
+/* Body override when landing is mounted */
+body.landing-mounted {
+  background-color: #06060A;
+  color: #F5F5F0;
 }
 
-/* Base animations */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+/* Hide native cursor inside the landing root for custom HUD cursor */
+.arcade-cursor, .arcade-cursor * { cursor: none !important; }
+@media (hover: none) { .arcade-cursor, .arcade-cursor * { cursor: auto !important; } }
+
+/* Dotted/grain noise overlay (SVG, no extra request) */
+.grain::before {
+  content: '';
+  position: fixed;
+  inset: -50%;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.55'/></svg>");
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  animation: noise 0.9s steps(6) infinite;
+  will-change: transform;
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.4s ease forwards;
+/* CRT scan-line single sweep */
+.scanline-sweep {
+  position: absolute;
+  left: 0; right: 0;
+  height: 220px;
+  background: linear-gradient(180deg, transparent 0%, rgba(204,255,0,0.05) 45%, rgba(204,255,0,0.18) 50%, rgba(204,255,0,0.05) 55%, transparent 100%);
+  filter: blur(1px);
+  pointer-events: none;
+  z-index: 4;
 }
 
-@keyframes pulse-glow {
-  0% { box-shadow: 0 0 5px var(--accent-glow); }
-  50% { box-shadow: 0 0 20px var(--accent-glow); }
-  100% { box-shadow: 0 0 5px var(--accent-glow); }
+/* Static CRT lines overlay */
+.crt-lines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(255,255,255,0.025) 0px,
+    rgba(255,255,255,0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+/* Perspective floor grid (animated) */
+.floor-grid {
+  position: absolute;
+  inset: 0;
+  perspective: 800px;
+  perspective-origin: 50% 0%;
+  pointer-events: none;
+  overflow: hidden;
+}
+.floor-grid::after {
+  content: '';
+  position: absolute;
+  bottom: -50%;
+  left: -50%;
+  width: 200%;
+  height: 140%;
+  background-image:
+    linear-gradient(rgba(204,255,0,0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(204,255,0,0.35) 1px, transparent 1px);
+  background-size: 60px 60px;
+  transform: rotateX(72deg) translateZ(0);
+  transform-origin: 50% 0%;
+  mask-image: linear-gradient(to top, #000 10%, transparent 80%);
+  -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 80%);
+  animation: floor-roll 14s linear infinite;
+  will-change: background-position;
+}
+@keyframes floor-roll {
+  0%   { background-position: 0 0,   0 0; }
+  100% { background-position: 0 60px, 60px 0; }
+}
+
+/* Glitch text — used on hero accents */
+.glitch {
+  position: relative;
+  display: inline-block;
+}
+.glitch::before, .glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+.glitch::before {
+  color: #FF1F8A;
+  transform: translate(2px, 0);
+  clip-path: polygon(0 0, 100% 0, 100% 33%, 0 33%);
+  animation: glitch-a 3.6s infinite steps(1);
+}
+.glitch::after {
+  color: #00E0FF;
+  transform: translate(-2px, 0);
+  clip-path: polygon(0 67%, 100% 67%, 100% 100%, 0 100%);
+  animation: glitch-b 4.4s infinite steps(1);
+}
+@keyframes glitch-a {
+  0%, 92%, 100% { transform: translate(0,0); opacity: 0; }
+  93%           { transform: translate(3px,-1px); opacity: 1; }
+  94%           { transform: translate(-2px,2px); opacity: 1; }
+  95%           { transform: translate(1px,1px); opacity: 1; }
+  96%           { transform: translate(0,0);     opacity: 0; }
+}
+@keyframes glitch-b {
+  0%, 88%, 100% { transform: translate(0,0); opacity: 0; }
+  89%           { transform: translate(-3px,2px); opacity: 1; }
+  90%           { transform: translate(2px,-1px); opacity: 1; }
+  91%           { transform: translate(-1px,0);   opacity: 1; }
+  92%           { transform: translate(0,0);      opacity: 0; }
+}
+
+/* HUD corner brackets */
+.hud-corners { position: relative; }
+.hud-corners::before, .hud-corners::after,
+.hud-corners > .corner-tr, .hud-corners > .corner-bl {
+  content: '';
+  position: absolute;
+  width: 14px; height: 14px;
+  border-color: #CCFF00;
+  pointer-events: none;
+  z-index: 2;
+}
+.hud-corners::before { top: 0; left: 0;  border-top: 2px solid; border-left: 2px solid; }
+.hud-corners::after  { bottom: 0; right: 0; border-bottom: 2px solid; border-right: 2px solid; }
+.hud-corners > .corner-tr { top: 0; right: 0; border-top: 2px solid; border-right: 2px solid; }
+.hud-corners > .corner-bl { bottom: 0; left: 0; border-bottom: 2px solid; border-left: 2px solid; }
+
+/* Diagonal stripe band (warning tape) */
+.warning-tape {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #CCFF00 0 14px,
+    #06060A 14px 28px
+  );
+}
+
+/* Conic spinner ring */
+.conic-ring {
+  background: conic-gradient(from 0deg,
+    transparent 0%, transparent 60%,
+    #CCFF00 70%, #FF1F8A 80%, #FF6B00 90%, transparent 100%);
+  -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%);
+          mask: radial-gradient(circle, transparent 60%, #000 61%);
+}
+
+/* Reduced motion — kill the showy stuff */
+@media (prefers-reduced-motion: reduce) {
+  .grain::before,
+  .floor-grid::after,
+  .glitch::before, .glitch::after,
+  .scanline-sweep { animation: none !important; }
+  html { scroll-behavior: auto; }
 }
