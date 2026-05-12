@@ -58,26 +58,22 @@ function useLenis(enabled) {
   useEffect(() => {
     if (!enabled) return;
     let lenis;
-    let rafId;
+    let tick;
     let mounted = true;
     (async () => {
       const Lenis = (await import('lenis')).default;
       if (!mounted) return;
       lenis = new Lenis({ duration: 1.05, smoothWheel: true });
       lenis.on('scroll', ScrollTrigger.update);
-      const tick = (time) => {
+      tick = (time) => {
         lenis?.raf(time * 1000);
       };
       gsap.ticker.add(tick);
       gsap.ticker.lagSmoothing(0);
-      const raf = (t) => {
-        rafId = requestAnimationFrame(raf);
-      };
-      rafId = requestAnimationFrame(raf);
     })();
     return () => {
       mounted = false;
-      cancelAnimationFrame(rafId);
+      if (tick) gsap.ticker.remove(tick);
       try { lenis?.destroy(); } catch {}
     };
   }, [enabled]);
@@ -214,9 +210,17 @@ function Hero({ webgl, onEnter }) {
     setTimeout(() => onEnter?.(), 800);
   }, [exiting, webgl, onEnter]);
 
-  // Char-stagger reveal
+  // Word-level stagger reveal to prevent mid-word line breaks
   const headline = 'Built for the moment before you press play.';
-  const chars = useMemo(() => headline.split(''), []);
+  const words = useMemo(() => {
+    const w = headline.split(' ');
+    let charIndex = 0;
+    return w.map((word) => {
+      const chars = word.split('').map((c) => ({ c, i: charIndex++ }));
+      charIndex++; // account for the space
+      return { word, chars };
+    });
+  }, []);
 
   return (
     <section className="hg-hero" id="top">
@@ -241,16 +245,21 @@ function Hero({ webgl, onEnter }) {
         </motion.div>
 
         <h1 className="hg-hero__headline" aria-label={headline}>
-          {chars.map((c, i) => (
-            <span key={i} className="hg-char" aria-hidden="true">
-              <span
-                className="hg-char__inner"
-                style={{
-                  animationDelay: reduce ? '0s' : `${0.25 + i * 0.022}s`,
-                }}
-              >
-                {c === ' ' ? ' ' : c}
-              </span>
+          {words.map((w, wi) => (
+            <span key={wi} className="hg-word" aria-hidden="true">
+              {w.chars.map(({ c, i }) => (
+                <span key={i} className="hg-char">
+                  <span
+                    className="hg-char__inner"
+                    style={{
+                      animationDelay: reduce ? '0s' : `${0.25 + i * 0.022}s`,
+                    }}
+                  >
+                    {c}
+                  </span>
+                </span>
+              ))}
+              {wi < words.length - 1 && ' '}
             </span>
           ))}
         </h1>
@@ -312,24 +321,165 @@ function Manifesto() {
         <motion.div
           key={i}
           className="hg-manifesto__row"
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true, amount: 0.6 }}
-          transition={{ duration: 0.5, delay: i * 0.05 }}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.6, delay: i * 0.1 }}
         >
           <span className="hg-manifesto__num">0{i + 1}</span>
           <motion.p
             className="hg-manifesto__line"
-            initial={{ clipPath: 'inset(0 100% 0 0)' }}
-            whileInView={{ clipPath: 'inset(0 0% 0 0)' }}
-            viewport={{ once: true, amount: 0.6 }}
-            transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.05 + i * 0.08 }}
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.15 + i * 0.12 }}
           >
             {line}
           </motion.p>
         </motion.div>
       ))}
     </section>
+  );
+}
+
+/* ============================================================
+   SECTION: Signal Path — scroll-morphing shape with text reveal
+   ============================================================ */
+const SIGNAL_STEPS = [
+  { label: 'QUERY', desc: 'Your question enters the mesh', morph: 'circle(50% at 50% 50%)' },
+  { label: 'ROUTE', desc: '4 providers race to respond', morph: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' },
+  { label: 'FUSE', desc: 'Sources merge into one answer', morph: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' },
+  { label: 'DELIVER', desc: 'Streamed back in under 400ms', morph: 'circle(50% at 50% 50%)' },
+];
+
+function SignalPath() {
+  const containerRef = useRef(null);
+  const orbRef = useRef(null);
+  const [activeStep, setActiveStep] = useState(0);
+
+  useLayoutEffect(() => {
+    const ctx = gsap.context(() => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      // Pin the section and scrub through morph stages
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: container,
+          start: 'top top',
+          end: '+=200%',
+          pin: true,
+          scrub: 0.5,
+          onUpdate: (self) => {
+            const step = Math.min(
+              SIGNAL_STEPS.length - 1,
+              Math.floor(self.progress * SIGNAL_STEPS.length)
+            );
+            setActiveStep(step);
+          },
+        },
+      });
+
+      // Animate the orb scale pulsing
+      tl.fromTo(
+        orbRef.current,
+        { scale: 0.85, rotation: 0 },
+        { scale: 1.1, rotation: 360, ease: 'none' }
+      );
+    }, containerRef);
+    return () => ctx.revert();
+  }, []);
+
+  return (
+    <section className="hg-signal" ref={containerRef} aria-label="Signal path">
+      <div className="hg-signal__inner">
+        {/* Morphing orb */}
+        <div className="hg-signal__orb-wrap">
+          <div
+            ref={orbRef}
+            className="hg-signal__orb"
+            style={{ clipPath: SIGNAL_STEPS[activeStep].morph }}
+          >
+            <div className="hg-signal__orb-glow" />
+            <span className="hg-signal__orb-label">{String(activeStep + 1).padStart(2, '0')}</span>
+          </div>
+          {/* Orbit rings */}
+          <div className="hg-signal__ring hg-signal__ring--1" aria-hidden="true" />
+          <div className="hg-signal__ring hg-signal__ring--2" aria-hidden="true" />
+        </div>
+
+        {/* Text reveal */}
+        <div className="hg-signal__text">
+          <span className="hg-section__kicker">SIGNAL PATH</span>
+          {SIGNAL_STEPS.map((step, i) => (
+            <div
+              key={i}
+              className={`hg-signal__step ${i === activeStep ? 'is-active' : ''} ${i < activeStep ? 'is-past' : ''}`}
+            >
+              <span className="hg-signal__step-label">{step.label}</span>
+              <p className="hg-signal__step-desc">{step.desc}</p>
+            </div>
+          ))}
+          {/* Progress dots */}
+          <div className="hg-signal__dots">
+            {SIGNAL_STEPS.map((_, i) => (
+              <span key={i} className={`hg-signal__dot ${i === activeStep ? 'is-active' : ''} ${i < activeStep ? 'is-past' : ''}`} />
+            ))}
+          </div>
+        </div>
+      </div>
+      {/* Connecting beam line */}
+      <div className="hg-signal__beam" aria-hidden="true" />
+    </section>
+  );
+}
+
+/* ============================================================
+   SECTION: Game Marquee — infinite ticker of supported titles
+   ============================================================ */
+const GAME_TITLES = [
+  'Elden Ring', 'Path of Exile 2', 'Valorant', 'League of Legends', 'Counter-Strike 2',
+  'Diablo IV', 'Destiny 2', 'Baldur\'s Gate 3', 'Dota 2', 'Warframe',
+  'Monster Hunter', 'Final Fantasy XIV', 'Apex Legends', 'Genshin Impact', 'Helldivers 2',
+  'Deadlock', 'The Finals', 'Palworld', 'Wuthering Waves', 'Zenless Zone Zero',
+];
+
+function GameMarquee() {
+  // Double the array for seamless loop
+  const doubled = [...GAME_TITLES, ...GAME_TITLES];
+  return (
+    <div className="hg-marquee" aria-label="Supported game titles">
+      <div className="hg-marquee__track">
+        {doubled.map((title, i) => (
+          <span key={i} className="hg-marquee__item">
+            <span className="hg-marquee__diamond" aria-hidden="true">◆</span>
+            {title}
+          </span>
+        ))}
+      </div>
+      <div className="hg-marquee__track hg-marquee__track--reverse">
+        {doubled.map((title, i) => (
+          <span key={i} className="hg-marquee__item">
+            <span className="hg-marquee__diamond" aria-hidden="true">◆</span>
+            {title}
+          </span>
+        ))}
+      </div>
+      <div className="hg-marquee__fade hg-marquee__fade--l" aria-hidden="true" />
+      <div className="hg-marquee__fade hg-marquee__fade--r" aria-hidden="true" />
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION: Glowing section divider
+   ============================================================ */
+function SectionDivider({ variant = 'default' }) {
+  return (
+    <div className={`hg-divider hg-divider--${variant}`} aria-hidden="true">
+      <div className="hg-divider__line" />
+      <div className="hg-divider__glow" />
+    </div>
   );
 }
 
@@ -618,7 +768,6 @@ function Footer() {
 export default function LandingPage({ onEnter }) {
   const caps = useCapability();
   const [exiting, setExiting] = useState(false);
-  const heroDollyRef = useRef(false);
 
   useLenis(!caps.reduce);
 
@@ -643,10 +792,16 @@ export default function LandingPage({ onEnter }) {
       <main>
         <Hero webgl={caps.webgl} onEnter={handleEnter} />
         <Manifesto />
+        <SignalPath />
         <PinnedPipeline pinned={caps.webgl /* same threshold = desktop+motion */} />
-        <FeatureGrid />
-        <LiveDemo />
-        <FinalCTA onEnter={handleEnter} exiting={exiting} />
+        <div className="hg-post-pipeline">
+          <GameMarquee />
+          <FeatureGrid />
+          <SectionDivider variant="glow" />
+          <LiveDemo />
+          <SectionDivider variant="glow" />
+          <FinalCTA onEnter={handleEnter} exiting={exiting} />
+        </div>
       </main>
       <Footer />
       <div className={`hg-exit-flash ${exiting ? 'is-active' : ''}`} aria-hidden="true" />
