@@ -487,13 +487,93 @@ function SectionDivider({ variant = 'default' }) {
    SECTION: Pinned horizontal pipeline
    ============================================================ */
 const STAGES = [
-  { id: 1, name: 'Intent', body: 'Slash commands, natural language, vision uploads — all parsed in parallel.', accent: '#67E8F9' },
-  { id: 2, name: 'Mesh route', body: '4 providers. Load-aware. Self-healing fallback at the token level.', accent: '#A5B4FC' },
-  { id: 3, name: 'PULSE search', body: 'Multi-source live web search. Wikipedia, Steam, Reddit, RSS — fused.', accent: '#C084FC' },
-  { id: 4, name: 'Vision GODMODE', body: 'Screenshot-grade scene understanding for builds, fits, comps.', accent: '#F0ABFC' },
-  { id: 5, name: 'Persona blend', body: 'Tone, depth, voice — adapted to the player at the keyboard.', accent: '#FB7185' },
-  { id: 6, name: 'Stream', body: 'Tokens land in <400ms. Sources, follow-ups, prices — all attached.', accent: '#FDBA74' },
+  { id: 1, name: 'Intent', body: 'Slash commands, natural language, vision uploads — all parsed in parallel.', accent: '#67E8F9', viz: 'intent' },
+  { id: 2, name: 'Mesh route', body: '4 providers. Load-aware. Self-healing fallback at the token level.', accent: '#A5B4FC', viz: 'mesh' },
+  { id: 3, name: 'PULSE search', body: 'Multi-source live web search. Wikipedia, Steam, Reddit, RSS — fused.', accent: '#C084FC', viz: 'pulse' },
+  { id: 4, name: 'Vision GODMODE', body: 'Screenshot-grade scene understanding for builds, fits, comps.', accent: '#F0ABFC', viz: 'vision' },
+  { id: 5, name: 'Persona blend', body: 'Tone, depth, voice — adapted to the player at the keyboard.', accent: '#FB7185', viz: 'persona' },
+  { id: 6, name: 'Stream', body: 'Tokens land in <400ms. Sources, follow-ups, prices — all attached.', accent: '#FDBA74', viz: 'stream' },
 ];
+
+function StageViz({ kind }) {
+  switch (kind) {
+    case 'intent':
+      return (
+        <div className="hg-viz hg-viz--intent" aria-hidden="true">
+          <span className="hg-modality hg-modality--1">T</span>
+          <span className="hg-modality hg-modality--2">~</span>
+          <span className="hg-modality hg-modality--3">▣</span>
+          <span className="hg-viz-line hg-viz-line--1" />
+          <span className="hg-viz-line hg-viz-line--2" />
+          <span className="hg-viz-line hg-viz-line--3" />
+          <span className="hg-converge" />
+        </div>
+      );
+    case 'mesh':
+      return (
+        <div className="hg-viz hg-viz--mesh" aria-hidden="true">
+          <svg viewBox="0 0 120 120" preserveAspectRatio="xMidYMid meet">
+            <line className="hg-mesh-line" x1="60" y1="20" x2="100" y2="60" />
+            <line className="hg-mesh-line" x1="100" y1="60" x2="60" y2="100" />
+            <line className="hg-mesh-line" x1="60" y1="100" x2="20" y2="60" />
+            <line className="hg-mesh-line" x1="20" y1="60" x2="60" y2="20" />
+            <line className="hg-mesh-line" x1="60" y1="20" x2="60" y2="100" />
+            <line className="hg-mesh-line" x1="20" y1="60" x2="100" y2="60" />
+            <circle className="hg-mesh-node" cx="60" cy="20" r="6" />
+            <circle className="hg-mesh-node hg-mesh-heal" cx="100" cy="60" r="6" />
+            <circle className="hg-mesh-node" cx="60" cy="100" r="6" />
+            <circle className="hg-mesh-node" cx="20" cy="60" r="6" />
+            <circle className="hg-mesh-core" cx="60" cy="60" r="4" />
+          </svg>
+        </div>
+      );
+    case 'pulse':
+      return (
+        <div className="hg-viz hg-viz--pulse" aria-hidden="true">
+          <span className="hg-ripple hg-ripple--1" />
+          <span className="hg-ripple hg-ripple--2" />
+          <span className="hg-ripple hg-ripple--3" />
+          <span className="hg-ripple-core" />
+        </div>
+      );
+    case 'vision':
+      return (
+        <div className="hg-viz hg-viz--vision" aria-hidden="true">
+          <span className="hg-vision-grid" />
+          <span className="hg-bracket hg-bracket--tl" />
+          <span className="hg-bracket hg-bracket--tr" />
+          <span className="hg-bracket hg-bracket--bl" />
+          <span className="hg-bracket hg-bracket--br" />
+          <span className="hg-vision-label">DETECT · 0.94</span>
+        </div>
+      );
+    case 'persona':
+      return (
+        <div className="hg-viz hg-viz--persona" aria-hidden="true">
+          <span className="hg-persona hg-persona--1" />
+          <span className="hg-persona hg-persona--2" />
+          <span className="hg-persona hg-persona--3" />
+          <span className="hg-persona-tag hg-persona-tag--1">TACT</span>
+          <span className="hg-persona-tag hg-persona-tag--2">CASUAL</span>
+          <span className="hg-persona-tag hg-persona-tag--3">COMP</span>
+        </div>
+      );
+    case 'stream':
+      return (
+        <div className="hg-viz hg-viz--stream" aria-hidden="true">
+          {Array.from({ length: 14 }).map((_, i) => (
+            <span
+              key={i}
+              className="hg-token"
+              style={{ animationDelay: `${i * 0.08}s`, height: `${10 + (i % 4) * 4}px` }}
+            />
+          ))}
+        </div>
+      );
+    default:
+      return null;
+  }
+}
 
 function PinnedPipeline({ pinned }) {
   const wrapRef = useRef(null);
@@ -535,6 +615,7 @@ function PinnedPipeline({ pinned }) {
             <article key={s.id} className="hg-stage hg-stage--stacked" style={{ '--stage-accent': s.accent }}>
               <div className="hg-stage__bg" aria-hidden="true" />
               <div className="hg-stage__num">0{s.id}</div>
+              <div className="hg-stage__viz"><StageViz kind={s.viz} /></div>
               <h3>{s.name}</h3>
               <p>{s.body}</p>
             </article>
@@ -561,10 +642,316 @@ function PinnedPipeline({ pinned }) {
             >
               <div className="hg-stage__bg" aria-hidden="true" />
               <div className="hg-stage__num">0{s.id}</div>
+              <div className="hg-stage__viz"><StageViz kind={s.viz} /></div>
               <h3>{s.name}</h3>
               <p>{s.body}</p>
             </article>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ============================================================
+   SECTION: ARSENAL — pinned scroll morph through commands & features
+   ============================================================ */
+const ARSENAL = [
+  {
+    id: 'price',
+    label: '/price',
+    sub: 'LIVE MULTI-STORE INTEL',
+    accent: '#FDBA74',
+    desc: 'Real-time price scrape across 20+ stores — Steam, GOG, Humble, Fanatical, Epic — via the CheapShark mesh.',
+    sample: [
+      '$ /price elden ring',
+      '↻ scanning 20 storefronts...',
+      '→ Steam       $59.99',
+      '→ GOG         $59.99  ─ DRM-free',
+      '→ Fanatical   $24.99  ▼ 58%',
+      '⏚ best deal flagged in 312ms',
+    ],
+  },
+  {
+    id: 'lore',
+    label: '/lore',
+    sub: 'WORLDBUILDING DEEP DIVE',
+    accent: '#C084FC',
+    desc: 'Spoiler-aware long-form lore investigations grounded in canonical sources and community archives.',
+    sample: [
+      '$ /lore Marika',
+      '↻ wiki · 184ms',
+      '↻ reddit · 211ms',
+      '↻ patch · 92ms',
+      '⏚ cross-checked across 12 sources',
+      '→ rendering narrative thread...',
+    ],
+  },
+  {
+    id: 'vision',
+    label: 'Vision GODMODE',
+    sub: 'SCREENSHOT-GRADE READING',
+    accent: '#F0ABFC',
+    desc: 'Drop a screenshot. Get build reads, kit fits, comp analysis — pixel-grade scene understanding.',
+    sample: [
+      'IMG ▣ uploaded · 1920×1080',
+      '→ detect: 4 items · 2 modifiers',
+      '→ infer: cold-conv Sunder',
+      '→ scale: Replica Restless Ward',
+      '⏚ verdict: BiS for boss rush',
+    ],
+  },
+  {
+    id: 'pulse',
+    label: 'PULSE Search',
+    sub: 'LIVE WEB FUSION',
+    accent: '#67E8F9',
+    desc: 'Wikipedia, Steam, Reddit, RSS — fused into one answer. Ranked, deduped, and citation-linked.',
+    sample: [
+      '↻ wiki    · 184ms · 6 hits',
+      '↻ steam   · 122ms · 4 hits',
+      '↻ reddit  · 211ms · 18 hits',
+      '↻ rss     · 168ms · 9 hits',
+      '⏚ fused · 387ms · cited',
+    ],
+  },
+  {
+    id: 'mesh',
+    label: 'Neural Mesh',
+    sub: 'SELF-HEALING ROUTING',
+    accent: '#A5B4FC',
+    desc: '4 providers race. Token-level fallback. No single LLM is a single point of failure.',
+    sample: [
+      '→ provider A · 92ms  · ✓',
+      '→ provider B · 88ms  · ✓',
+      '→ provider C · ⊘ retrying',
+      '→ provider D · 104ms · ✓',
+      '⏚ healed mid-stream · 41ms',
+    ],
+  },
+  {
+    id: 'discord',
+    label: 'Discord Bot',
+    sub: 'SERVER-NATIVE COMPANION',
+    accent: '#FB7185',
+    desc: 'Same brain, in your server. Slash commands, thread-aware replies, inline price + lore lookups.',
+    sample: [
+      '/gg build assassin poe',
+      '→ thread opened in #builds',
+      '→ 6 sources attached',
+      '→ follow-ups primed',
+      '⏚ delivered · 298ms',
+    ],
+  },
+];
+
+function ArsenalGlyph({ id }) {
+  switch (id) {
+    case 'price':
+      return (
+        <svg viewBox="0 0 100 100" fill="none">
+          <path d="M18 28 L62 28 L82 50 L62 72 L18 72 Z" />
+          <circle cx="32" cy="50" r="3" />
+          <path d="M58 38 v24 M50 44 h12 a4 4 0 0 1 0 8 h-12 a4 4 0 0 0 0 8 h12" />
+        </svg>
+      );
+    case 'lore':
+      return (
+        <svg viewBox="0 0 100 100" fill="none">
+          <path d="M14 22 Q50 14 50 24 Q50 14 86 22 L86 78 Q50 70 50 80 Q50 70 14 78 Z" />
+          <path d="M50 24 L50 80" />
+          <circle cx="26" cy="40" r="2" />
+          <circle cx="34" cy="34" r="1.4" />
+          <circle cx="76" cy="48" r="1.4" />
+          <circle cx="68" cy="42" r="2" />
+        </svg>
+      );
+    case 'vision':
+      return (
+        <svg viewBox="0 0 100 100" fill="none">
+          <path d="M10 50 Q50 18 90 50 Q50 82 10 50 Z" />
+          <circle cx="50" cy="50" r="14" />
+          <circle cx="50" cy="50" r="5" fill="currentColor" stroke="none" />
+          <path d="M14 18 v8 M14 18 h8 M86 18 v8 M86 18 h-8 M14 82 v-8 M14 82 h8 M86 82 v-8 M86 82 h-8" />
+        </svg>
+      );
+    case 'pulse':
+      return (
+        <svg viewBox="0 0 100 100" fill="none">
+          <circle cx="50" cy="50" r="6" />
+          <path d="M30 50 a20 20 0 0 1 40 0" />
+          <path d="M20 50 a30 30 0 0 1 60 0" />
+          <path d="M10 50 a40 40 0 0 1 80 0" />
+          <path d="M10 50 L4 50 M90 50 L96 50 M50 10 L50 4 M50 90 L50 96" />
+        </svg>
+      );
+    case 'mesh':
+      return (
+        <svg viewBox="0 0 100 100" fill="none">
+          <circle cx="50" cy="18" r="5" />
+          <circle cx="82" cy="50" r="5" />
+          <circle cx="50" cy="82" r="5" />
+          <circle cx="18" cy="50" r="5" />
+          <circle cx="50" cy="50" r="3" />
+          <path d="M50 23 L50 47 M77 50 L53 50 M50 77 L50 53 M23 50 L47 50" />
+          <path d="M55 22 L77 45 M55 78 L77 55 M45 78 L23 55 M45 22 L23 45" strokeDasharray="3 4" />
+        </svg>
+      );
+    case 'discord':
+      return (
+        <svg viewBox="0 0 100 100" fill="none">
+          <path d="M16 26 Q16 18 24 18 L76 18 Q84 18 84 26 L84 60 Q84 68 76 68 L46 68 L30 82 L30 68 L24 68 Q16 68 16 60 Z" />
+          <path d="M40 36 L46 50 L36 50 L42 64" />
+          <circle cx="60" cy="40" r="2" fill="currentColor" stroke="none" />
+          <circle cx="68" cy="48" r="2" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
+function ArsenalDeck({ pinned }) {
+  const containerRef = useRef(null);
+  const [active, setActive] = useState(0);
+
+  useLayoutEffect(() => {
+    if (!pinned) return;
+    const ctx = gsap.context(() => {
+      const container = containerRef.current;
+      if (!container) return;
+      ScrollTrigger.create({
+        trigger: container,
+        start: 'top top',
+        end: '+=300%',
+        pin: true,
+        scrub: 0.5,
+        onUpdate: (self) => {
+          const step = Math.min(
+            ARSENAL.length - 1,
+            Math.floor(self.progress * ARSENAL.length)
+          );
+          setActive(step);
+        },
+      });
+    }, containerRef);
+    return () => ctx.revert();
+  }, [pinned]);
+
+  const accent = ARSENAL[active].accent;
+
+  if (!pinned) {
+    return (
+      <section className="hg-arsenal hg-arsenal--stacked" id="arsenal" aria-label="Arsenal">
+        <div className="hg-section__head">
+          <span className="hg-section__kicker">ARSENAL</span>
+          <h2>Every verb in one console.</h2>
+        </div>
+        <div className="hg-arsenal__stack">
+          {ARSENAL.map((a) => (
+            <article key={a.id} className="hg-arsenal__tile" style={{ '--arsenal-accent': a.accent }}>
+              <div className="hg-arsenal__tile-glyph"><ArsenalGlyph id={a.id} /></div>
+              <div className="hg-arsenal__tile-body">
+                <span className="hg-arsenal__sub">{a.sub}</span>
+                <h3 className="hg-arsenal__label">{a.label}</h3>
+                <p className="hg-arsenal__desc">{a.desc}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className="hg-arsenal"
+      id="arsenal"
+      ref={containerRef}
+      style={{ '--arsenal-accent': accent }}
+      aria-label="Arsenal"
+    >
+      <div className="hg-arsenal__bg" aria-hidden="true" />
+      <div className="hg-arsenal__inner">
+        <div className="hg-arsenal__head">
+          <span className="hg-section__kicker">ARSENAL</span>
+          <h2>Every verb in one console.</h2>
+        </div>
+
+        <div className="hg-arsenal__viz" aria-hidden="true">
+          <div className="hg-arsenal__plate" />
+          <div className="hg-arsenal__plate hg-arsenal__plate--inner" />
+
+          {ARSENAL.map((a, i) => (
+            <div
+              key={a.id}
+              className={`hg-arsenal__glyph ${i === active ? 'is-active' : ''}`}
+            >
+              <ArsenalGlyph id={a.id} />
+            </div>
+          ))}
+
+          <div className="hg-arsenal__constellation">
+            {ARSENAL.map((a, i) => (
+              <div
+                key={a.id}
+                className={`hg-arsenal__orbit hg-arsenal__orbit--${i} ${i === active ? 'is-active' : ''}`}
+                style={{ '--orbit-accent': a.accent }}
+              >
+                <ArsenalGlyph id={a.id} />
+              </div>
+            ))}
+          </div>
+
+          <svg className="hg-arsenal__beam" viewBox="0 0 200 200">
+            <defs>
+              <linearGradient id="hg-beam-grad" x1="0%" y1="50%" x2="100%" y2="50%">
+                <stop offset="0%" stopColor={accent} stopOpacity="0" />
+                <stop offset="50%" stopColor={accent} stopOpacity="0.9" />
+                <stop offset="100%" stopColor={accent} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <line
+              x1="100" y1="100"
+              x2={100 + 90 * Math.cos((active / ARSENAL.length) * Math.PI * 2 - Math.PI / 2)}
+              y2={100 + 90 * Math.sin((active / ARSENAL.length) * Math.PI * 2 - Math.PI / 2)}
+              stroke="url(#hg-beam-grad)"
+              strokeWidth="1.4"
+            />
+          </svg>
+        </div>
+
+        <div className="hg-arsenal__panel">
+          <span className="hg-arsenal__sub">{ARSENAL[active].sub}</span>
+          <h3 className="hg-arsenal__label">{ARSENAL[active].label}</h3>
+          <p className="hg-arsenal__desc">{ARSENAL[active].desc}</p>
+
+          <div className="hg-arsenal__sample" key={ARSENAL[active].id}>
+            <div className="hg-arsenal__sample-chrome">
+              <span /> <span /> <span />
+              <span className="hg-arsenal__sample-title">gameguide://{ARSENAL[active].id}</span>
+            </div>
+            <div className="hg-arsenal__sample-lines">
+              {ARSENAL[active].sample.map((line, i) => (
+                <span
+                  key={`${ARSENAL[active].id}-${i}`}
+                  className="hg-arsenal__sample-line"
+                  style={{ animationDelay: `${0.05 + i * 0.08}s` }}
+                >
+                  {line}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="hg-arsenal__dots">
+            {ARSENAL.map((a, i) => (
+              <span
+                key={a.id}
+                className={`hg-arsenal__dot ${i === active ? 'is-active' : ''} ${i < active ? 'is-past' : ''}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -794,6 +1181,7 @@ export default function LandingPage({ onEnter }) {
         <Manifesto />
         <SignalPath />
         <PinnedPipeline pinned={caps.webgl /* same threshold = desktop+motion */} />
+        <ArsenalDeck pinned={caps.webgl} />
         <div className="hg-post-pipeline">
           <GameMarquee />
           <FeatureGrid />
