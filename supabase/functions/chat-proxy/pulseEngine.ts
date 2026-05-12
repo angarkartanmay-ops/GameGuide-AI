@@ -24,15 +24,31 @@ interface PulseResult {
 const PULSE_CACHE = new Map<string, { ts: number; result: PulseResult }>();
 const PULSE_TTL_MS = 8 * 60 * 1000; // 8 min (reduced from 10 for fresher data)
 
+// Pure chitchat — never worth a live search.
+// Anything beyond a one-word greeting/thanks goes through PULSE.
+const CHITCHAT_RX = /^(hi+|hello+|hey+|yo+|sup|hru|thanks?|thx|ty|ok+|okay|cool|lol+|lmao|haha+|nice|gg|bye+|cya|cheers|test|ping|👋|🙏|❤️)[.!?\s]*$/i;
+
+function isPureChitchat(prompt: string): boolean {
+  const trimmed = prompt.trim();
+  if (!trimmed) return true;
+  if (trimmed.length < 3) return true;
+  return CHITCHAT_RX.test(trimmed);
+}
+
 export async function runPulse(
   prompt: string,
   game: string | null,
   todayISO: string,
 ): Promise<PulseResult> {
-  const sig = detectTemporal(prompt);
-  if (!sig.isTemporal) {
-    return { fired: false, contextBlock: '', sourcesUsed: [], diagnostics: { reason: 'not-temporal' } };
+  // Skip ONLY pure chitchat ("hi", "thanks", "lol"). Every real question
+  // — temporal or not — gets a live search. The model then fuses live data
+  // with its training-side reasoning for the final answer.
+  if (isPureChitchat(prompt)) {
+    return { fired: false, contextBlock: '', sourcesUsed: [], diagnostics: { reason: 'chitchat' } };
   }
+
+  const sig = detectTemporal(prompt);
+  const isTemporal = sig.isTemporal;
 
   const cacheKey = `${game || 'nogame'}|${prompt.slice(0, 200).toLowerCase()}`;
   const cached = PULSE_CACHE.get(cacheKey);
@@ -58,27 +74,37 @@ export async function runPulse(
 
   // ── Stage 2: Aggressive multi-angle web search ──────────────────────
   // Build multiple search queries for different angles to maximize
-  // chances of finding current information.
+  // chances of finding current information. Queries differ depending on
+  // whether the user used temporal language — but PULSE always fires.
   const searchQueries: string[] = [];
+  const promptForSearch = prompt.length > 200 ? prompt.slice(0, 200) : prompt;
 
-  if (game && sig.subject) {
-    // Primary: game + subject + current context
-    searchQueries.push(`${game} new ${sig.subject} ${currentYear}`);
-    searchQueries.push(`${game} latest ${sig.subject} ${currentMonth} ${currentYear}`);
-    // Direct question reformulation
-    searchQueries.push(`${game} ${sig.subject} ${yyyy_mm}`);
-  } else if (game) {
-    // Game-specific but no clear subject
-    searchQueries.push(`${game} latest news ${currentMonth} ${currentYear}`);
-    searchQueries.push(`${game} new update ${currentYear}`);
-    searchQueries.push(`${game} ${prompt.slice(0, 80)}`);
+  if (isTemporal) {
+    if (game && sig.subject) {
+      searchQueries.push(`${game} new ${sig.subject} ${currentYear}`);
+      searchQueries.push(`${game} latest ${sig.subject} ${currentMonth} ${currentYear}`);
+      searchQueries.push(`${game} ${sig.subject} ${yyyy_mm}`);
+    } else if (game) {
+      searchQueries.push(`${game} latest news ${currentMonth} ${currentYear}`);
+      searchQueries.push(`${game} new update ${currentYear}`);
+      searchQueries.push(`${game} ${promptForSearch}`);
+    } else {
+      searchQueries.push(`${promptForSearch} ${currentYear}`);
+      searchQueries.push(`${promptForSearch} latest`);
+    }
   } else {
-    // No game detected — use the raw prompt enhanced with temporal context
-    searchQueries.push(`${prompt} ${currentYear}`);
-    searchQueries.push(`${prompt} latest`);
+    // Evergreen / non-temporal query — lead with the user's actual question so
+    // we get directly relevant results, then add game-anchored variants for breadth.
+    searchQueries.push(promptForSearch);
+    if (game) {
+      searchQueries.push(`${game} ${promptForSearch}`);
+      searchQueries.push(`${game} guide ${currentYear}`);
+    } else {
+      searchQueries.push(`${promptForSearch} ${currentYear}`);
+    }
   }
 
-  // Also search with the user's exact prompt (sometimes the best query)
+  // Always include the raw prompt as a final fallback query
   if (prompt.length > 10 && prompt.length < 200) {
     searchQueries.push(prompt);
   }
@@ -116,15 +142,23 @@ export async function runPulse(
   const ranked = rankBlocks(blocks);
   const top = topNCompact(ranked, 5, 900); // Increased from 3→5 blocks, 800→900 chars
 
+  const headerLine = isTemporal
+    ? `The user's query asks about CURRENT / NEW / LATEST state. Live data below OVERRIDES your training on any fact it covers.`
+    : `Live data fetched for this query just now. FUSE these facts with your training-side reasoning — live data wins on any conflict.`;
+
   const contextBlock = top ? `
 === 🌊 PULSE LIVE INTEL (recency-ranked, today=${todayISO}) ===
-The user's query asks about something CURRENT/NEW/LATEST. The blocks below
-are ranked by (authority × freshness). Anything older than 1 year has been
-demoted because temporal claims must come from fresh sources.
+${headerLine}
 
-CRITICAL: Base your answer on THIS data, not your training knowledge.
-If this data says "Hero Dark Prince" is the newest hero, say that — NOT
-whatever your training data says was newest.
+The blocks below are ranked by (authority × freshness). Stale items are demoted.
+
+ANSWERING CONTRACT (NON-NEGOTIABLE):
+1. Read every block before answering. Treat them as ground truth for any fact they cover.
+2. If the blocks contradict your training, the blocks win — your training is stale by months/years.
+3. If the blocks are silent on a sub-question, you may use training reasoning, but mark it clearly: "*based on training, not live data*".
+4. Cite which block confirmed each non-obvious fact ("*per Steam News*", "*per Wikipedia*", "*per official API*").
+5. Combine: live data for facts/numbers/dates, your reasoning for analysis/explanation/recommendation.
+6. Never tell the user you "can't browse the internet" — these blocks ARE the internet, fetched seconds ago.
 
 Search queries used: ${uniqueQueries.slice(0, 3).map(q => `"${q}"`).join(', ')}
 
@@ -138,6 +172,7 @@ ${top}
     contextBlock,
     sourcesUsed,
     diagnostics: {
+      mode: isTemporal ? 'temporal' : 'evergreen',
       temporalReasons: sig.reasons,
       subject: sig.subject,
       blocksFound: blocks.length,

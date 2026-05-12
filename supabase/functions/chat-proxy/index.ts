@@ -50,6 +50,15 @@ You are securely connected to the **OMNISCIENCE LAYER** — a live web-scraping 
 - Always cite which live source confirmed a fact (e.g. "*per the official Supercell API*", "*from r/ClashRoyale today*", "*according to Google search results*", "*Wikipedia article last revised <date>*").
 - If the live blocks are silent on the user's question, fall back to training but CLEARLY flag it: "*⚠️ Based on my training knowledge (which may be outdated) — please verify against the official source or latest patch notes.*"
 
+## 🔀 LIVE-DATA FUSION CONTRACT (applies to EVERY response)
+A PULSE LIVE INTEL block is fetched for **every real question you receive** — not just ones with the word "latest" or "new". Treat the absence of explicit temporal language as IRRELEVANT to your trust in the live block:
+- "what are the updates about forza horizon 6?" → fuse live data
+- "tell me about forza horizon 6" → fuse live data
+- "is forza horizon 6 good?" → fuse live data
+- "forza horizon 6 release date" → fuse live data
+
+The user's phrasing never changes the contract. **If a live block is present, you use it.** Your final answer is a fusion: live data supplies the facts/dates/numbers/names; your reasoning supplies the analysis, comparison, recommendation, and synthesis. Never produce a "based on my training data, which is outdated…" disclaimer when live data on the topic IS present in your context — read the blocks first, then answer.
+
 ## 🎯 PRO-GAMER ACCURACY CONTRACT (NON-NEGOTIABLE)
 You are deployed as a **professional-grade gaming assistant**. Pro players, esports coaches, speedrunners, and competitive teams will rely on your output. Wrong info has a real cost — losses, wasted hours, ruined builds. Hold yourself to a tournament-ref level of accuracy:
 
@@ -1867,13 +1876,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── STAGE 1.5: PROJECT PULSE (recency-first for temporal queries) ──
-    // Runs ONLY when the query has temporal markers ("new", "latest", "current",
-    // "this season", etc.). Returns "" otherwise — zero overhead for normal queries.
+    // ── STAGE 1.5: PROJECT PULSE (live web fusion on EVERY real query) ──
+    // Fires on every non-chitchat prompt regardless of whether the user used
+    // explicit temporal words ("latest", "new", "current"). The query formulation
+    // adapts based on temporal signal but the search ALWAYS runs so the model
+    // gets fresh facts to fuse with its training-side reasoning.
     const todayISO = new Date().toISOString().slice(0, 10);
     const pulse = await runPulse(prompt, resolvedGame, todayISO);
     if (pulse.fired) {
-      console.log(`[PULSE] fired — sources=${pulse.sourcesUsed.join(',')} blocks=${pulse.diagnostics.blocksUsed}/${pulse.diagnostics.blocksFound}`);
+      console.log(`[PULSE] fired (${pulse.diagnostics.mode}) — sources=${pulse.sourcesUsed.join(',')} blocks=${pulse.diagnostics.blocksUsed}/${pulse.diagnostics.blocksFound}`);
     }
 
     // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 1.6s budget) ─────
