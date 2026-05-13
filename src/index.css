@@ -83,12 +83,12 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Geist', sans-serif; }
 
 /* Body override when landing is mounted */
 body.landing-mounted {
-  background-color: #06060A;
-  color: #F6F5F1;
+  background-color: #04060C;
+  color: #E5F7FF;
   font-family: 'Geist', system-ui, sans-serif;
 }
-body.landing-mounted ::-webkit-scrollbar-thumb { background: #3D3D48; }
-body.landing-mounted ::-webkit-scrollbar-thumb:hover { background: #65656F; }
+body.landing-mounted ::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.35); }
+body.landing-mounted ::-webkit-scrollbar-thumb:hover { background: #00E5FF; }
 
 /* Custom cursor (landing) */
 .cursor-hide, .cursor-hide * { cursor: none !important; }

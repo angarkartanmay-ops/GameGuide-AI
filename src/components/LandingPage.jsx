@@ -487,12 +487,12 @@ function SectionDivider({ variant = 'default' }) {
    SECTION: Pinned horizontal pipeline
    ============================================================ */
 const STAGES = [
-  { id: 1, name: 'Intent', body: 'Slash commands, natural language, vision uploads — all parsed in parallel.', accent: '#67E8F9', viz: 'intent' },
-  { id: 2, name: 'Mesh route', body: '4 providers. Load-aware. Self-healing fallback at the token level.', accent: '#A5B4FC', viz: 'mesh' },
-  { id: 3, name: 'PULSE search', body: 'Multi-source live web search. Wikipedia, Steam, Reddit, RSS — fused.', accent: '#C084FC', viz: 'pulse' },
-  { id: 4, name: 'Vision GODMODE', body: 'Screenshot-grade scene understanding for builds, fits, comps.', accent: '#F0ABFC', viz: 'vision' },
-  { id: 5, name: 'Persona blend', body: 'Tone, depth, voice — adapted to the player at the keyboard.', accent: '#FB7185', viz: 'persona' },
-  { id: 6, name: 'Stream', body: 'Tokens land in <400ms. Sources, follow-ups, prices — all attached.', accent: '#FDBA74', viz: 'stream' },
+  { id: 1, name: 'Intent', body: 'Slash commands, natural language, vision uploads — all parsed in parallel.', accent: '#00E5FF', viz: 'intent' },
+  { id: 2, name: 'Mesh route', body: '4 providers. Load-aware. Self-healing fallback at the token level.', accent: '#22D3EE', viz: 'mesh' },
+  { id: 3, name: 'PULSE search', body: 'Multi-source live web search. Wikipedia, Steam, Reddit, RSS — fused.', accent: '#3B82F6', viz: 'pulse' },
+  { id: 4, name: 'Vision GODMODE', body: 'Screenshot-grade scene understanding for builds, fits, comps.', accent: '#7C5CFC', viz: 'vision' },
+  { id: 5, name: 'Persona blend', body: 'Tone, depth, voice — adapted to the player at the keyboard.', accent: '#FF2A6D', viz: 'persona' },
+  { id: 6, name: 'Stream', body: 'Tokens land in <400ms. Sources, follow-ups, prices — all attached.', accent: '#FFB800', viz: 'stream' },
 ];
 
 function StageViz({ kind }) {
@@ -661,7 +661,7 @@ const ARSENAL = [
     id: 'price',
     label: '/price',
     sub: 'LIVE MULTI-STORE INTEL',
-    accent: '#FDBA74',
+    accent: '#FFB800',
     desc: 'Real-time price scrape across 20+ stores — Steam, GOG, Humble, Fanatical, Epic — via the CheapShark mesh.',
     sample: [
       '$ /price elden ring',
@@ -676,7 +676,7 @@ const ARSENAL = [
     id: 'lore',
     label: '/lore',
     sub: 'WORLDBUILDING DEEP DIVE',
-    accent: '#C084FC',
+    accent: '#A855F7',
     desc: 'Spoiler-aware long-form lore investigations grounded in canonical sources and community archives.',
     sample: [
       '$ /lore Marika',
@@ -691,7 +691,7 @@ const ARSENAL = [
     id: 'vision',
     label: 'Vision GODMODE',
     sub: 'SCREENSHOT-GRADE READING',
-    accent: '#F0ABFC',
+    accent: '#7C5CFC',
     desc: 'Drop a screenshot. Get build reads, kit fits, comp analysis — pixel-grade scene understanding.',
     sample: [
       'IMG ▣ uploaded · 1920×1080',
@@ -705,7 +705,7 @@ const ARSENAL = [
     id: 'pulse',
     label: 'PULSE Search',
     sub: 'LIVE WEB FUSION',
-    accent: '#67E8F9',
+    accent: '#00E5FF',
     desc: 'Wikipedia, Steam, Reddit, RSS — fused into one answer. Ranked, deduped, and citation-linked.',
     sample: [
       '↻ wiki    · 184ms · 6 hits',
@@ -719,7 +719,7 @@ const ARSENAL = [
     id: 'mesh',
     label: 'Neural Mesh',
     sub: 'SELF-HEALING ROUTING',
-    accent: '#A5B4FC',
+    accent: '#3B82F6',
     desc: '4 providers race. Token-level fallback. No single LLM is a single point of failure.',
     sample: [
       '→ provider A · 92ms  · ✓',
@@ -733,7 +733,7 @@ const ARSENAL = [
     id: 'discord',
     label: 'Discord Bot',
     sub: 'SERVER-NATIVE COMPANION',
-    accent: '#FB7185',
+    accent: '#FF2A6D',
     desc: 'Same brain, in your server. Slash commands, thread-aware replies, inline price + lore lookups.',
     sample: [
       '/gg build assassin poe',
@@ -1173,6 +1173,8 @@ export default function LandingPage({ onEnter }) {
   return (
     <div className={`hg-root ${exiting ? 'is-exiting' : ''}`}>
       <div className="hg-noise" aria-hidden="true" />
+      <div className="hg-scanlines" aria-hidden="true" />
+      <div className="hg-vignette" aria-hidden="true" />
       <Starfield />
       <MagneticCursor enabled={caps.magnetic} />
       <Nav />

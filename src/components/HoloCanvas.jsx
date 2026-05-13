@@ -37,7 +37,7 @@ function Crystal({ tiltRef }) {
   return (
     <mesh ref={ref} geometry={geo} castShadow>
       <meshPhysicalMaterial
-        color="#e8e6ff"
+        color="#e0f4ff"
         roughness={0.12}
         metalness={0.65}
         iridescence={1}
@@ -69,11 +69,11 @@ export default function HoloCanvas({ tiltRef, dollyRef }) {
       camera={{ position: [0, 0, 4], fov: 45 }}
       aria-hidden="true"
     >
-      {/* Iridescent rim lights — cyan / violet / rose */}
+      {/* Voltage rim lights — electric cyan / electric blue / hot magenta */}
       <ambientLight intensity={0.35} />
-      <directionalLight position={[4, 3, 5]} intensity={2.4} color="#67E8F9" />
-      <directionalLight position={[-5, -2, 2]} intensity={1.8} color="#C084FC" />
-      <directionalLight position={[2, -4, -3]} intensity={1.6} color="#FB7185" />
+      <directionalLight position={[4, 3, 5]} intensity={2.4} color="#00E5FF" />
+      <directionalLight position={[-5, -2, 2]} intensity={1.8} color="#3B82F6" />
+      <directionalLight position={[2, -4, -3]} intensity={1.6} color="#FF2A6D" />
       <pointLight position={[0, 0, 5]} intensity={0.4} color="#ffffff" />
       <Crystal tiltRef={tiltRef} />
       <CameraRig dollyState={dollyRef} />
