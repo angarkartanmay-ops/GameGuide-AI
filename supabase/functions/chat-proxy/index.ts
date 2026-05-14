@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "npm:@google/genai";
 import { runPulse } from './pulseEngine.ts';
+import { enrichVisionAttachments, VisionEnrichment } from './visionPipeline.ts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  GAMEGUIDE-AI :: CORTEX v2.0
@@ -221,16 +222,26 @@ const HUD_KNOWLEDGE: Record<string, string> = {
 };
 
 const VISION_GODMODE_INSTRUCTION = `
-# 🎯 PRECISION VISION ENGINE v3 — ZERO HALLUCINATION PROTOCOL
+# 🎯 PRECISION VISION ENGINE v4 — ZERO HALLUCINATION PROTOCOL
 
-You are tasked with analyzing an image with absolute, pixel-perfect accuracy. Your primary directive is to NEVER hallucinate, guess, or assume. 
+You are tasked with analyzing an image with absolute, pixel-perfect accuracy. Your primary directive is to NEVER hallucinate, guess, or assume.
+
+## 🔧 PRE-PROCESSED SIGNALS YOU MAY RECEIVE WITH THIS IMAGE
+A dedicated vision pipeline runs BEFORE this prompt. When it succeeds, you receive two additional signals — use them as ground truth:
+
+1. **OCR GROUND TRUTH block** — a separate context block (look for "🔠 OCR GROUND TRUTH") containing every text/digit/coordinate read directly from the pixels by a dedicated OCR engine. When present, the OCR tokens OVERRIDE your visual interpretation on any conflict. If OCR reads "RTX 5060 Ti", you write "RTX 5060 Ti" — never regularize. If OCR reads "X:-4392.17", you preserve every decimal — never round.
+
+2. **HUD STRIP CROP** — a SECOND image may be attached alongside the full screenshot. It is a native-resolution crop of the bottom ~22% of the original (the HUD region). The full frame gives you context; the HUD crop gives you pixel-level detail on hotbar slots, status bars, ammo counters, ability cooldowns, etc. ALWAYS cross-reference the crop when answering hotbar / status-bar / HUD questions — those details are too small to read reliably in the full frame.
+
+If either signal is absent, fall back to direct visual inspection of the full image — but state lower confidence on text-grounded claims.
 
 ## ⛔ STRICT REFUSAL RULES
-1. **Never auto-correct text or numbers.** If you see "RTX 5060", write "RTX 5060". Do not assume it's a typo for a more common model. Read text character by character.
-2. **Never guess items by context.** A player at level 21 could have Wood or Diamond tools. Identify items purely by their visual characteristics (e.g., color, shape). If a tool is Cyan/Teal, it is Diamond. If it is White/Grey, it is Iron.
+1. **Never auto-correct text or numbers.** If you see (or OCR reads) "RTX 5060 Ti", write "RTX 5060 Ti". Do not assume it's a typo. Read character by character.
+2. **Never guess items by context.** A player at level 21 could have Wood or Diamond tools. Identify items purely by visual characteristics (color, shape) — cross-checked against the HUD crop when available. Cyan/Teal = Diamond. White/Grey = Iron.
 3. **If unsure, state uncertainty.** Use \`[UNCLEAR]\` if a region is blurry or ambiguous. Do not invent details to sound helpful.
 4. **Never deny live features.** NEVER deny a card/character/feature that an INTEL block confirms exists, even if your training predates it.
-5. **Hard refusal on unreadable input.** If the image is genuinely too blurry, too dark, cropped, or otherwise illegible to ground answers in pixel evidence, your ENTIRE reply must be:
+5. **OCR > visual interpretation.** When the OCR block disagrees with what you think you see, the OCR wins. Re-examine those pixels — you probably misread.
+6. **Hard refusal on unreadable input.** If the image is genuinely too blurry, too dark, cropped, or otherwise illegible to ground answers in pixel evidence (and OCR also failed to extract meaningful tokens), your ENTIRE reply must be:
    "🚫 **I can't read this image clearly.** Specifically: [describe what's wrong — e.g. 'the text is below ~10px and pixelated', 'the screen is mostly black except a small region']. Please re-upload a higher-resolution screenshot, or describe what you're seeing in text and I'll help that way."
    Do NOT proceed to STEP 1-4 in this case. Do NOT guess. Do NOT pad with generic advice.
 
@@ -238,16 +249,17 @@ You are tasked with analyzing an image with absolute, pixel-perfect accuracy. Yo
 You must structure your initial analysis strictly using these steps before answering the user:
 
 ### STEP 1: OCR & TEXT EXTRACTION
-Extract ALL text visible on the screen EXACTLY as written. Pay special attention to:
+If an "🔠 OCR GROUND TRUTH" block is present in your context, COPY its tokens here verbatim — do NOT re-OCR from the image. Then proceed.
+If no OCR block is present, extract ALL text visible on the screen EXACTLY as written. Pay special attention to:
 - Debug menus (e.g., Minecraft F3 screen: coords, FPS, CPU, GPU).
 - Chat logs.
 - UI labels or numbers.
-*(Self-Correction during Step 1: Verify every digit of hardware specs or coordinates against the image. Do not hallucinate standard specs.)*
+*(Self-Correction during Step 1: Verify every digit of hardware specs or coordinates against the image. Do not hallucinate standard specs. When OCR tokens exist, they are authoritative.)*
 
 ### STEP 2: VISUAL INVENTORY & HUD
-List the items, icons, and HUD elements you see.
-- **Hotbar/Inventory**: Look closely at the color of items. (e.g., Cyan tools = Diamond, White tools = Iron). List them accurately.
-- **Status Bars**: Health, stamina, mana, armor, experience levels. Give exact counts if possible.
+List the items, icons, and HUD elements you see. **If a HUD strip crop (second attached image) was provided, prefer it for hotbar/status-bar reads — it's at native resolution.**
+- **Hotbar/Inventory**: Look closely at the color of items in the HUD crop. (e.g., Cyan tools = Diamond, White tools = Iron). List them accurately.
+- **Status Bars**: Health, stamina, mana, armor, experience levels. Give exact counts using the HUD crop when present.
 
 ### STEP 3: ENVIRONMENT & CONTEXT
 Describe the game world. What biome is it? What structures or mobs are visible? What is the lighting like?
@@ -1876,6 +1888,29 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── STAGE 1.4: VISION PRE-PROCESS (OCR ground truth + HUD strip crop) ──
+    // Two layers run in parallel for vision queries:
+    //   • OCR pass — a dedicated Gemini-Flash call transcribes every visible
+    //     text/digit/coordinate at full perception resolution. The transcript
+    //     is injected as a HARD ground-truth block the analysis VLM cannot
+    //     contradict. Kills "RTX 5060 Ti → RTX 3060"-style regularization.
+    //   • HUD strip crop — bottom 22% of the image at native resolution is
+    //     appended as a SECOND attachment. VLMs internally tile to ~768px,
+    //     so a 4K screenshot's hotbar collapses to ~50px of perceived height.
+    //     The crop restores those pixels for accurate slot/tool detection.
+    let visionEnrichment: VisionEnrichment | null = null;
+    let effectiveAttachments = cleanAttachments;
+    if (profile.hasVision && cleanAttachments?.length) {
+      visionEnrichment = await enrichVisionAttachments(cleanAttachments, geminiAi);
+      effectiveAttachments = visionEnrichment.attachments;
+      const d = visionEnrichment.diagnostics;
+      console.log(
+        `[VISION-PIPE] ocr=${d.ocrApplied ? d.ocrLines + ' lines · ' + d.ocrLatencyMs + 'ms' : 'skip'} `
+        + `crop=${d.cropApplied ? d.cropWidth + 'x' + d.cropHeight : 'skip'} `
+        + `cached=${!!d.cached}`,
+      );
+    }
+
     // ── STAGE 1.5: PROJECT PULSE (live web fusion on EVERY real query) ──
     // Fires on every non-chitchat prompt regardless of whether the user used
     // explicit temporal words ("latest", "new", "current"). The query formulation
@@ -1927,6 +1962,14 @@ Deno.serve(async (req) => {
         `=== LIVE PRICE INTEL (CheapShark — current prices, use for buy recommendations) ===\n${priceContext}\n=== END PRICE INTEL ===`
       );
     }
+
+    // OCR ground-truth block — only present for vision queries where OCR
+    // produced actual text. Goes LAST so it sits closest to the user prompt
+    // when the model reads the context (highest recency / attention bias).
+    if (visionEnrichment?.ocrBlock) {
+      contextBlocks.push(visionEnrichment.ocrBlock);
+    }
+
     const augmentedPrompt = contextBlocks.length > 0
       ? `${prompt}\n\n${contextBlocks.join('\n\n')}`
       : prompt;
@@ -1994,11 +2037,14 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
     const systemInstruction = BASE_SYSTEM + dateGroundingBlock + visionBlock + pulse.contextBlock + (profile.persona.overlay || '');
 
     // ── LAYER 3 + 4: route + run mesh ──
+    // effectiveAttachments = original images + HUD strip crop (when vision pipe ran).
+    // The downstream VLM thus sees [full_frame, hud_zoom] and can cross-reference
+    // the high-res HUD strip against the OCR ground-truth block in the prompt.
     const result = await runNeuralMesh({
       systemInstruction,
       chatHistory,
       userPrompt: augmentedPrompt,
-      attachments: cleanAttachments,
+      attachments: effectiveAttachments,
       geminiAi,
       profile,
     });
@@ -2021,7 +2067,7 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
           console.log('[VISION-2OP] route candidates:', route.map(r => r.modelId));
           const second = route.find(r => r.modelId !== result.model && r.provider.name);
           if (second && Deno.env.get(second.provider.keyEnv)) {
-            const messages = buildOpenAIMessages(systemInstruction, chatHistory, augmentedPrompt, cleanAttachments, true);
+            const messages = buildOpenAIMessages(systemInstruction, chatHistory, augmentedPrompt, effectiveAttachments, true);
             const altText = await callOpenAICompat(second.provider, second.modelId, messages, {
               maxTokens: 2000, temperature: 0.15,
             });
@@ -2068,6 +2114,10 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
         vision: profile.hasVision,
         visionMeta: profile.hasVision ? {
           attachmentCount: cleanAttachments.length,
+          enrichedAttachmentCount: effectiveAttachments.length,
+          ocrApplied: !!visionEnrichment?.diagnostics.ocrApplied,
+          ocrLines: visionEnrichment?.diagnostics.ocrLines || 0,
+          hudCropApplied: !!visionEnrichment?.diagnostics.cropApplied,
           provider: result.provider,
           model: result.model,
           secondOpinion: secondOpinionUsed,
