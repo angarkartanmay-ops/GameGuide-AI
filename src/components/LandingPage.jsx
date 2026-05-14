@@ -19,30 +19,78 @@ gsap.registerPlugin(ScrollTrigger);
 
 /* ============================================================
    SECTION: device-capability hook
-   Disables WebGL on small viewports / reduced motion / low RAM
+   Gates the WebGL hero (and the pinned scroll sections that share
+   its threshold) on a real GPU probe plus environmental signals.
+   The old check (small viewport OR <4GB RAM) let integrated-graphics
+   desktops, software-rendered browsers, low-core CPUs, and data-saver
+   sessions through — all of which struggled with the R3F crystal.
    ============================================================ */
+let _gpuProbeCache = null;
+function probeGPU() {
+  if (_gpuProbeCache !== null) return _gpuProbeCache;
+  if (typeof document === 'undefined') return (_gpuProbeCache = false);
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const gl =
+      canvas.getContext('webgl2') ||
+      canvas.getContext('webgl') ||
+      canvas.getContext('experimental-webgl');
+    if (!gl) return (_gpuProbeCache = false);
+
+    // Reject CPU-rasterized renderers (SwiftShader, llvmpipe, Microsoft
+    // Basic Render). They satisfy the context test but run a physically-
+    // based material at single-digit fps.
+    let ok = true;
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    if (ext) {
+      const renderer = String(
+        gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || ''
+      ).toLowerCase();
+      if (/swiftshader|llvmpipe|software|microsoft basic|basic render/.test(renderer)) {
+        ok = false;
+      }
+    }
+
+    const lose = gl.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+    return (_gpuProbeCache = ok);
+  } catch {
+    return (_gpuProbeCache = false);
+  }
+}
+
+function readEnvCaps() {
+  if (typeof window === 'undefined') return { webgl: false, magnetic: false };
+  const small = window.matchMedia('(max-width: 767px)').matches;
+  const lowMem = (navigator.deviceMemory || 8) < 4;
+  const lowCores = (navigator.hardwareConcurrency || 8) < 4;
+  const coarse = window.matchMedia('(pointer: coarse)').matches;
+  const conn = navigator.connection || {};
+  const saveData = !!conn.saveData;
+  const slowNet = /^(slow-2g|2g)$/.test(conn.effectiveType || '');
+  const gpuOk = probeGPU();
+  return {
+    webgl: gpuOk && !small && !lowMem && !lowCores && !saveData && !slowNet,
+    magnetic: !small && !coarse,
+  };
+}
+
 function useCapability() {
   const reduce = useReducedMotion();
-  const [caps, setCaps] = useState(() => {
-    if (typeof window === 'undefined') return { webgl: false, magnetic: false };
-    const small = window.matchMedia('(max-width: 767px)').matches;
-    const lowMem = (navigator.deviceMemory || 8) < 4;
-    const coarse = window.matchMedia('(pointer: coarse)').matches;
-    return {
-      webgl: !small && !lowMem,
-      magnetic: !small && !coarse,
-    };
-  });
+  const [caps, setCaps] = useState(readEnvCaps);
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const handler = () => {
-      const small = mq.matches;
-      const lowMem = (navigator.deviceMemory || 8) < 4;
-      const coarse = window.matchMedia('(pointer: coarse)').matches;
-      setCaps({ webgl: !small && !lowMem, magnetic: !small && !coarse });
+    const onChange = () => setCaps(readEnvCaps());
+    const mqSize = window.matchMedia('(max-width: 767px)');
+    const mqPointer = window.matchMedia('(pointer: coarse)');
+    mqSize.addEventListener?.('change', onChange);
+    mqPointer.addEventListener?.('change', onChange);
+    navigator.connection?.addEventListener?.('change', onChange);
+    return () => {
+      mqSize.removeEventListener?.('change', onChange);
+      mqPointer.removeEventListener?.('change', onChange);
+      navigator.connection?.removeEventListener?.('change', onChange);
     };
-    mq.addEventListener?.('change', handler);
-    return () => mq.removeEventListener?.('change', handler);
   }, []);
   return {
     webgl: caps.webgl && !reduce,
