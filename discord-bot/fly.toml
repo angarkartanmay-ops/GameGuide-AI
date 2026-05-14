@@ -1,0 +1,53 @@
+# Fly.io machine config for GameGuide-AI Discord bot.
+# After editing app name below, run:
+#   flyctl launch --no-deploy --copy-config
+#   flyctl secrets set DISCORD_TOKEN=... DISCORD_CLIENT_ID=... \
+#                      SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=...
+#   flyctl deploy
+
+app = "gameguide-bot"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "10s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+
+# Keep at least one machine awake at all times — disables Fly's
+# auto-stop behavior so the Discord gateway stays connected 24/7.
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 200
+    soft_limit = 100
+
+  [[services.http_checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "get"
+    path = "/health"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256

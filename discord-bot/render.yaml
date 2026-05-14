@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: gameguide-bot
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: discord-bot
+    buildCommand: npm ci --omit=dev
+    startCommand: node index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_ID
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # KEEPALIVE_URL — set to your Render public URL (https://<name>.onrender.com)
+      # to keep the free instance from sleeping after 15 min idle.
+      - key: KEEPALIVE_URL
+        sync: false

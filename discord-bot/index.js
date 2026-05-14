@@ -17,7 +17,7 @@
 //  Resilience:        SIGTERM, AbortController timeouts, structured errors
 // ═══════════════════════════════════════════════════════════════════════════
 
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const {
   Client,
   GatewayIntentBits,
@@ -48,8 +48,14 @@ const TOPGG_VOTE_URL = process.env.TOPGG_VOTE_URL || '';
 const HUMBLE_AFFILIATE = process.env.HUMBLE_AFFILIATE || ''; // ?partner=YOUR_ID
 const GMG_AFFILIATE = process.env.GMG_AFFILIATE || '';       // mw_aref=YOUR_ID
 const FANATICAL_AFFILIATE = process.env.FANATICAL_AFFILIATE || ''; // ?ref=YOUR_ID
-const VOTE_WEBHOOK_PORT = parseInt(process.env.VOTE_WEBHOOK_PORT || '3000', 10);
+// HTTP port — Render/Railway/Fly/Koyeb/Heroku all inject PORT. Fall back to VOTE_WEBHOOK_PORT for compat, then 3000.
+const HTTP_PORT = parseInt(process.env.PORT || process.env.VOTE_WEBHOOK_PORT || '3000', 10);
 const TOPGG_WEBHOOK_AUTH = process.env.TOPGG_WEBHOOK_AUTH || ''; // shared secret with Top.gg
+
+// 24/7 keep-alive — set this to your deployed bot's public URL (e.g. https://gameguide-bot.onrender.com)
+// to have the bot self-ping every ~4 minutes, defeating idle-sleep on free tiers.
+const KEEPALIVE_URL = process.env.KEEPALIVE_URL || '';
+const KEEPALIVE_INTERVAL_MS = parseInt(process.env.KEEPALIVE_INTERVAL_MS || '240000', 10); // 4 min
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !DISCORD_TOKEN) {
   console.error('❌ Missing required env vars. Need SUPABASE_URL, SUPABASE_ANON_KEY, DISCORD_TOKEN.');
@@ -714,14 +720,43 @@ They did not fix it before launch.
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  TOP.GG VOTE WEBHOOK (optional — only spins up if TOPGG_WEBHOOK_AUTH set)
+//  ALWAYS-ON HTTP SERVER (health, keepalive, optional Top.gg webhook)
+//  ───────────────────────────────────────────────────────────────────────
+//  This always binds to PORT — required for 24/7 free-tier hosts
+//  (Render, Replit, Koyeb, Fly.io free machines) which kill the service
+//  if no port is exposed. The Top.gg vote handler is mounted only if
+//  TOPGG_WEBHOOK_AUTH is set.
 // ═══════════════════════════════════════════════════════════════════════════
 
-if (TOPGG_WEBHOOK_AUTH) {
-  const express = require('express');
-  const app = express();
-  app.use(express.json());
+const express = require('express');
+const app = express();
+app.use(express.json());
 
+// Process lifecycle metrics — surfaced on /health for uptime monitors.
+const PROCESS_STARTED_AT = Date.now();
+const stats = { chatRequests: 0, errors: 0, reconnects: 0, lastReadyAt: null };
+
+app.get('/', (_req, res) => res.type('text/plain').send('GameGuide-AI Discord bot — alive.'));
+
+app.get('/health', (_req, res) => {
+  const ready = client.isReady?.() ?? false;
+  res.status(ready ? 200 : 503).json({
+    ok: ready,
+    bot: client.user?.tag || 'starting',
+    uptimeSec: Math.floor((Date.now() - PROCESS_STARTED_AT) / 1000),
+    wsPing: client.ws?.ping ?? null,
+    guilds: client.guilds?.cache?.size ?? 0,
+    reconnects: stats.reconnects,
+    chatRequests: stats.chatRequests,
+    errors: stats.errors,
+    lastReadyAt: stats.lastReadyAt,
+  });
+});
+
+// Plain ping for cron-job.org / UptimeRobot / self-ping. Cheap, no JSON.
+app.get('/ping', (_req, res) => res.type('text/plain').send('pong'));
+
+if (TOPGG_WEBHOOK_AUTH) {
   app.post('/topgg-webhook', async (req, res) => {
     if (req.headers.authorization !== TOPGG_WEBHOOK_AUTH) {
       return res.status(401).json({ error: 'unauthorized' });
@@ -731,15 +766,13 @@ if (TOPGG_WEBHOOK_AUTH) {
 
     const expiresAt = new Date(Date.now() + (isWeekend ? VOTE_REWARD_HOURS * 2 : VOTE_REWARD_HOURS) * 3600_000).toISOString();
     try {
-      // Log the vote
       await supabase.from('discord_votes').insert({
         user_id: user, bot_id: bot || null, source: 'topgg', is_weekend: !!isWeekend,
       });
-      // Grant temporary Pro tier
       await supabase.from('discord_premium').upsert({
         user_id: user, tier: 'pro', source: 'topgg-vote', expires_at: expiresAt,
       });
-      premiumCacheUser.delete(user); // bust cache so the reward is immediate
+      premiumCacheUser.delete(user);
       console.log(`[topgg] vote rewarded → user=${user} expires=${expiresAt}`);
       return res.json({ ok: true });
     } catch (e) {
@@ -747,27 +780,132 @@ if (TOPGG_WEBHOOK_AUTH) {
       return res.status(500).json({ error: 'internal' });
     }
   });
+}
 
-  app.get('/health', (_req, res) => res.json({ ok: true, bot: client.user?.tag || 'starting' }));
+const httpServer = app.listen(HTTP_PORT, '0.0.0.0', () => {
+  console.log(`🌐 HTTP health server listening on :${HTTP_PORT} (/, /health, /ping${TOPGG_WEBHOOK_AUTH ? ', /topgg-webhook' : ''})`);
+});
+httpServer.on('error', (err) => console.error('[http server error]', err));
 
-  app.listen(VOTE_WEBHOOK_PORT, () => {
-    console.log(`🗳️  Top.gg vote webhook listening on :${VOTE_WEBHOOK_PORT}/topgg-webhook`);
-  });
+// ═══════════════════════════════════════════════════════════════════════════
+//  KEEP-ALIVE — self-ping for hosts that sleep idle services
+// ═══════════════════════════════════════════════════════════════════════════
+
+if (KEEPALIVE_URL) {
+  const url = KEEPALIVE_URL.replace(/\/+$/, '') + '/ping';
+  setInterval(async () => {
+    try {
+      const res = await fetch(url, { method: 'GET' });
+      if (!res.ok) console.warn(`[keepalive] ping → HTTP ${res.status}`);
+    } catch (e) {
+      console.warn(`[keepalive] ping failed: ${e.message}`);
+    }
+  }, KEEPALIVE_INTERVAL_MS);
+  console.log(`🔁 Keep-alive self-ping enabled → ${url} every ${Math.round(KEEPALIVE_INTERVAL_MS / 1000)}s`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  GRACEFUL SHUTDOWN + LOGIN
+//  DISCORD CLIENT EVENTS — observability + reconnect tracking
 // ═══════════════════════════════════════════════════════════════════════════
 
-client.on('error', (err) => console.error('[discord client error]', err));
-process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
+client.on('error', (err) => { stats.errors++; console.error('[discord client error]', err.message || err); });
+client.on('warn', (msg) => console.warn('[discord warn]', msg));
+client.on('shardError', (err, shardId) => { stats.errors++; console.error(`[shard ${shardId} error]`, err.message || err); });
+client.on('shardDisconnect', (event, shardId) => console.warn(`[shard ${shardId} disconnect] code=${event?.code} reason=${event?.reason || 'unknown'} — discord.js will auto-reconnect`));
+client.on('shardReconnecting', (shardId) => { stats.reconnects++; console.log(`[shard ${shardId}] reconnecting…`); });
+client.on('shardResume', (shardId, replayed) => console.log(`[shard ${shardId}] resumed (replayed ${replayed} events)`));
+client.on('shardReady', (shardId) => { stats.lastReadyAt = new Date().toISOString(); console.log(`[shard ${shardId}] ready`); });
+
+// Hook into handleChatRequest counter — wrap once at boot.
+const _origHandle = handleChatRequest;
+handleChatRequest = async function (...args) {
+  stats.chatRequests++;
+  try { return await _origHandle(...args); }
+  catch (e) { stats.errors++; throw e; }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  PROCESS-LEVEL RESILIENCE — never crash on transient errors
+// ═══════════════════════════════════════════════════════════════════════════
+
+process.on('unhandledRejection', (err) => {
+  stats.errors++;
+  console.error('[unhandledRejection]', err?.stack || err?.message || err);
+});
+process.on('uncaughtException', (err) => {
+  stats.errors++;
+  console.error('[uncaughtException]', err?.stack || err?.message || err);
+  // Stay alive — discord.js will reconnect on its own. Only the supervisor (Docker/systemd/PM2/Railway)
+  // should decide when to restart the whole process. Crashing the loop here breaks free-tier auto-recovery.
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  LOGIN SUPERVISOR — retry with exponential backoff forever
+// ═══════════════════════════════════════════════════════════════════════════
+
+let shuttingDown = false;
+
+async function loginWithRetry() {
+  let attempt = 0;
+  while (!shuttingDown) {
+    try {
+      await client.login(DISCORD_TOKEN);
+      console.log('🔐 Logged in to Discord gateway.');
+      return; // discord.js handles auto-reconnect internally from here on out
+    } catch (err) {
+      attempt++;
+      stats.errors++;
+      // Auth errors (4004 / "Invalid token") are unrecoverable — fail fast so the operator notices.
+      const msg = (err?.message || '').toLowerCase();
+      if (msg.includes('invalid') && msg.includes('token')) {
+        console.error('❌ DISCORD_TOKEN is invalid. Cannot recover — fix env var and restart.', err);
+        process.exit(1);
+      }
+      const delay = Math.min(60_000, 2_000 * Math.pow(2, Math.min(attempt, 5))); // cap at 60s
+      console.warn(`[login] attempt ${attempt} failed (${err?.message || err}). Retrying in ${delay / 1000}s…`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  WATCHDOG — if the client goes "not ready" for too long, force a reconnect
+// ═══════════════════════════════════════════════════════════════════════════
+
+const WATCHDOG_INTERVAL_MS = 60_000;     // check every minute
+const WATCHDOG_MAX_DOWN_MS = 5 * 60_000; // 5 min of being not-ready → force reconnect
+let lastReadySeenAt = Date.now();
+
+setInterval(async () => {
+  if (shuttingDown) return;
+  if (client.isReady()) {
+    lastReadySeenAt = Date.now();
+    return;
+  }
+  const downFor = Date.now() - lastReadySeenAt;
+  if (downFor > WATCHDOG_MAX_DOWN_MS) {
+    console.warn(`[watchdog] client not-ready for ${Math.round(downFor / 1000)}s — destroying and re-logging in.`);
+    try { await client.destroy(); } catch { /* ignore */ }
+    lastReadySeenAt = Date.now(); // reset so we don't thrash
+    stats.reconnects++;
+    loginWithRetry().catch(e => console.error('[watchdog] relogin failed:', e));
+  }
+}, WATCHDOG_INTERVAL_MS);
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  GRACEFUL SHUTDOWN
+// ═══════════════════════════════════════════════════════════════════════════
 
 const shutdown = (sig) => {
-  console.log(`\n${sig} received — shutting down gracefully...`);
-  client.destroy();
-  setTimeout(() => process.exit(0), 800);
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`\n${sig} received — shutting down gracefully…`);
+  try { httpServer.close(); } catch { /* ignore */ }
+  try { client.destroy(); } catch { /* ignore */ }
+  setTimeout(() => process.exit(0), 1500);
 };
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-client.login(DISCORD_TOKEN);
+// ─── Boot ──────────────────────────────────────────────────────────────────
+loginWithRetry();

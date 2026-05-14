@@ -2,6 +2,11 @@ node_modules
 npm-debug.log
 .env
 .env.local
+.env.*.local
 *.md
 .git
 .gitignore
+logs
+*.log
+.vscode
+.idea

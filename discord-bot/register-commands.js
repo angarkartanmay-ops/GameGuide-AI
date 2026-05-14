@@ -12,7 +12,7 @@
 //    DISCORD_CLIENT_ID  — from https://discord.com/developers/applications
 // ═══════════════════════════════════════════════════════════════════════════
 
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const { SlashCommandBuilder, REST, Routes } = require('discord.js');
 
 const TOKEN = process.env.DISCORD_TOKEN;
