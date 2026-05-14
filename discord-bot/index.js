@@ -28,6 +28,7 @@ const {
   ButtonStyle,
 } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
+const { fetchPriceDirect } = require('./cheapshark');
 
 // ─── Native fetch sanity ───────────────────────────────────────────────────
 if (typeof fetch !== 'function') {
@@ -271,6 +272,46 @@ function splitForDiscord(text, max = 1900) {
   return chunks;
 }
 
+// ─── CheapShark /price embed formatter ────────────────────────────────────
+// Mirrors the web app's PriceBadge: thumb + title + historic-low chip +
+// deal table. Returns a Discord interaction-payload (embed + components).
+function formatPriceEmbed(data) {
+  const cheapest = parseFloat(data.cheapest || 0);
+  const historicLow = data.cheapestEver ? parseFloat(data.cheapestEver.price) : null;
+  const atLow = historicLow !== null && cheapest <= historicLow;
+
+  const lines = [];
+  if (atLow) lines.push(`🔥 **AT HISTORIC LOW** — currently $${data.cheapest}`);
+  else if (historicLow !== null) lines.push(`📉 Historic low: **$${data.cheapestEver.price}** · current: **$${data.cheapest}**`);
+  else if (data.cheapest) lines.push(`💵 Current lowest: **$${data.cheapest}**`);
+
+  if (data.deals.length > 0) {
+    lines.push('');
+    lines.push('**Live deals:**');
+    for (let i = 0; i < Math.min(data.deals.length, 5); i++) {
+      const d = data.deals[i];
+      const badge = i === 0 && atLow ? '🔥' : i === 0 && d.savings >= 50 ? '✅' : i === 0 && d.savings >= 25 ? '👍' : '';
+      const savingsLabel = d.savings > 0 ? ` (**${d.savings}% off** $${d.retailPrice})` : '';
+      const storeLine = d.url
+        ? `${badge} [${d.store}](${d.url}) — **$${d.price}**${savingsLabel}`
+        : `${badge} ${d.store} — **$${d.price}**${savingsLabel}`;
+      lines.push(`• ${storeLine.trim()}`);
+    }
+  }
+
+  const description = decorateWithAffiliate(lines.join('\n')) || '*No live deals found.*';
+
+  const embed = new EmbedBuilder()
+    .setColor(atLow ? 0xFFD700 : 0x00FFD1)
+    .setTitle(`💰 Live Price — ${data.title}`)
+    .setDescription(description.slice(0, 4000))
+    .setFooter({ text: 'Powered by CheapShark · Refreshed every 15 min' });
+
+  if (data.thumb) embed.setThumbnail(data.thumb);
+
+  return { embeds: [embed], allowedMentions: { parse: [] } };
+}
+
 // ─── Affiliate link decorator for /price responses ────────────────────────
 function decorateWithAffiliate(text) {
   if (!text) return text;
@@ -373,16 +414,16 @@ function userFacingError(err) {
 //  CORE — handle a chat-style request (mention or /ask)
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function handleChatRequest({ userId, guildId, prompt, attachments, replyTarget, channel }) {
+async function handleChatRequest({ userId, guildId, prompt, attachments, replyTarget, channel, skipRateLimit }) {
   const cleaned = prompt.trim();
   if (!cleaned && (!attachments || attachments.length === 0)) {
     const msg = 'Please give me a question, or attach an image to analyse.';
     return replyTarget.editReply ? replyTarget.editReply(msg) : replyTarget.reply(msg);
   }
 
-  // Rate limit (tier-aware)
+  // Rate limit (tier-aware) — skip when caller already counted the request (e.g. /price fallback)
   const { tier, limit } = await effectiveLimit(userId, guildId);
-  const rl = checkRateLimit(userId, limit);
+  const rl = skipRateLimit ? { allowed: true, limit } : checkRateLimit(userId, limit);
   if (!rl.allowed) {
     const tierLabel = tier === 'premium-server' ? '🌟 Premium Server'
       : tier === 'pro' || tier === 'lifetime' ? '⭐ Pro'
@@ -512,11 +553,34 @@ client.on('interactionCreate', async (interaction) => {
       case 'price': {
         const game = interaction.options.getString('game', true);
         await interaction.deferReply();
+
+        // Rate-limit /price the same way chat is rate-limited.
+        const { tier, limit } = await effectiveLimit(userId, guildId);
+        const rl = checkRateLimit(userId, limit);
+        if (!rl.allowed) {
+          const tierLabel = tier === 'premium-server' ? '🌟 Premium Server'
+            : tier === 'pro' || tier === 'lifetime' ? '⭐ Pro'
+            : '🆓 Free';
+          return interaction.editReply(
+            `⏳ **Rate limit reached** (${tierLabel}: ${rl.limit}/min). Try again in **${rl.waitSec}s**.`
+          );
+        }
+
+        // Live CheapShark — mirrors the web app's /price path (no LLM hop).
+        const data = await fetchPriceDirect(game);
+        if (data && (data.cheapest || data.deals?.length)) {
+          bumpStats(userId, false).catch(() => {});
+          return interaction.editReply(formatPriceEmbed(data));
+        }
+
+        // Fallback: nothing on CheapShark — let the LLM try with web search.
+        // (Still rate-limited above, so no double-counting.)
         return handleChatRequest({
           userId, guildId,
-          prompt: `What's the current price for ${game} across PC stores? Use live CheapShark data and include all store deal URLs.`,
+          prompt: `What's the current price for "${game}" on PC? Use live data and include store URLs. If you can't find anything, say so directly.`,
           attachments: [],
           replyTarget: interaction, channel: interaction.channel,
+          skipRateLimit: true,
         });
       }
 
