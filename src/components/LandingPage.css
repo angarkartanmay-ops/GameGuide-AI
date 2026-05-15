@@ -195,7 +195,29 @@
 .hg-divider--glow .hg-divider__line{background:linear-gradient(90deg,transparent 0%,var(--hg-cyan) 20%,var(--hg-violet) 50%,var(--hg-rose) 80%,transparent 100%);opacity:.3}
 .hg-divider__glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:50%;height:40px;background:radial-gradient(ellipse at center,rgba(59,130,246,.15),transparent 70%);filter:blur(20px);pointer-events:none}
 
-.hg-footer{position:relative;z-index:3;padding:32px 28px 48px;text-align:center;font-size:12px;color:var(--hg-faint);border-top:1px solid var(--hg-line);font-family:'JetBrains Mono',monospace}
+.hg-footer{position:relative;z-index:3;padding:64px 28px 40px;border-top:1px solid var(--hg-line);background:linear-gradient(180deg,transparent 0%,color-mix(in srgb,var(--hg-bg) 92%,transparent) 100%);font-family:'Inter',system-ui,sans-serif}
+.hg-footer__inner{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:48px;align-items:flex-start}
+.hg-footer__col{display:flex;flex-direction:column;gap:10px}
+.hg-footer__col--brand{gap:16px}
+.hg-footer__logo{cursor:pointer}
+.hg-footer__tag{font-size:13.5px;line-height:1.55;color:var(--hg-mute);max-width:36ch;margin:0}
+.hg-footer__copy{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--hg-faint);margin-top:6px}
+.hg-footer__head{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.22em;color:var(--hg-cyan);text-transform:uppercase;margin-bottom:6px}
+.hg-footer__link{background:transparent;border:0;text-align:left;padding:4px 0;font-family:inherit;font-size:13.5px;color:var(--hg-mute);text-decoration:none;cursor:pointer;transition:color .2s,transform .2s;align-self:flex-start;border-radius:4px}
+.hg-footer__link:hover{color:var(--hg-fg);transform:translateX(3px)}
+@media(max-width:820px){
+.hg-footer{padding:48px 22px 32px}
+.hg-footer__inner{grid-template-columns:1fr 1fr;gap:32px}
+.hg-footer__col--brand{grid-column:1 / -1}
+}
+@media(max-width:480px){
+.hg-footer__inner{grid-template-columns:1fr}
+.hg-footer__col--brand{grid-column:auto}
+}
+
+/* Nav "About" button — visual parity with the adjacent <a> links. */
+.hg-nav__btn{background:transparent;border:0;font-family:inherit;font-size:13px;color:var(--hg-mute);padding:0;cursor:pointer;transition:color .2s}
+.hg-nav__btn:hover{color:var(--hg-fg)}
 
 @media(max-width:767px){
 .hg-root{cursor:auto}
@@ -211,6 +233,44 @@
 .hg-signal__orb{width:160px;height:160px}
 .hg-marquee__item{padding:0 16px;font-size:13px}
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LOW-POWER MODE — engaged when runtime FPS probe < 48fps.
+   Strips every per-frame-expensive effect (backdrop-filter, mask-composite
+   borders, large radial-gradient backgrounds, decorative overlays). The
+   layout, content, and core animations stay; only the GPU-heavy chrome
+   goes. End result: native-scroll-smooth on Intel UHD / AMD APU laptops.
+   ═══════════════════════════════════════════════════════════════════════ */
+.hg-root.is-lowpower .hg-nav,
+.hg-root.is-lowpower .hg-nav.is-scrolled{background:rgba(4,6,12,.88);backdrop-filter:none}
+.hg-root.is-lowpower .hg-eyebrow,
+.hg-root.is-lowpower .hg-btn--ghost{backdrop-filter:none}
+.hg-root.is-lowpower .hg-stage,
+.hg-root.is-lowpower .hg-feat,
+.hg-root.is-lowpower .hg-demo__card,
+.hg-root.is-lowpower .hg-arsenal__plate,
+.hg-root.is-lowpower .hg-arsenal__tile,
+.hg-root.is-lowpower .hg-arsenal__orbit{backdrop-filter:none;background:rgba(10,16,28,.78)}
+.hg-root.is-lowpower .hg-stage::before,
+.hg-root.is-lowpower .hg-feat::before,
+.hg-root.is-lowpower .hg-demo__card::before,
+.hg-root.is-lowpower .hg-arsenal__plate::before{display:none}
+.hg-root.is-lowpower .hg-stage__bg,
+.hg-root.is-lowpower .hg-arsenal__bg,
+.hg-root.is-lowpower .hg-hero__fallback{filter:blur(0);animation:none!important;opacity:.35}
+.hg-root.is-lowpower .hg-feat__sheen,
+.hg-root.is-lowpower .hg-feat:hover::before{display:none}
+.hg-root.is-lowpower .hg-feat:hover{transform:none}
+.hg-root.is-lowpower .hg-starfield span{animation:none!important;opacity:.35}
+.hg-root.is-lowpower .hg-stage,
+.hg-root.is-lowpower .hg-feat,
+.hg-root.is-lowpower .hg-demo__card,
+.hg-root.is-lowpower .hg-arsenal__tile{border-color:rgba(0,229,255,.22)}
+/* Static signal-path layout (no pin/scrub) — keeps the content, removes
+   the GSAP scroll-driven timeline. */
+.hg-signal--static{min-height:0;padding:80px 28px}
+.hg-signal--static .hg-signal__orb{animation:none!important}
+
 @media(prefers-reduced-motion:reduce){
 .hg-char__inner,.hg-stage::before,.hg-feat::before,.hg-demo__card::before,.hg-starfield span,.hg-hero__fallback,.hg-stage__bg{animation:none!important;transform:none!important}
 .hg-feat:hover .hg-feat__sheen{animation:none!important}

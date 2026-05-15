@@ -7,29 +7,173 @@
    ============================================================================= */
 
 :root {
-  /* Chat-app theme variables (default = Cyberpunk) */
-  --bg-color: #0d0914;
-  --panel-bg: rgba(20, 15, 30, 0.6);
-  --panel-border: rgba(0, 243, 255, 0.2);
-  --text-primary: #e0e0f0;
-  --text-secondary: #9aa0af;
-  --accent-1: #00f3ff;
-  --accent-2: #ff00ea;
-  --accent-glow: rgba(0, 243, 255, 0.4);
-  --user-bubble: rgba(0, 243, 255, 0.1);
-  --ai-bubble: rgba(255, 0, 234, 0.1);
-  --input-bg: rgba(0, 0, 0, 0.5);
-  --button-hover: #00e0eb;
+  /* Default = BLACK ICE. Cobalt blue + tactical amber on graphite. */
+  --bg-color: #06090f;
+  --panel-bg: rgba(10, 18, 30, 0.76);
+  --panel-border: rgba(14, 165, 233, 0.3);
+  --text-primary: #e0eef8;
+  --text-secondary: #7898b8;
+  --accent-1: #0ea5e9;
+  --accent-2: #fbbf24;
+  --accent-glow: rgba(14, 165, 233, 0.42);
+  --user-bubble: rgba(14, 165, 233, 0.10);
+  --ai-bubble: rgba(251, 191, 36, 0.10);
+  --input-bg: rgba(4, 8, 14, 0.88);
+  --button-hover: #0284c7;
+  color-scheme: dark;
 }
 
-[data-theme='matrix']     { --bg-color:#0a120a; --panel-bg:rgba(10,22,10,.7);  --panel-border:rgba(80,200,120,.25); --text-primary:#c8e6c9; --text-secondary:#6a9f6e; --accent-1:#4caf50; --accent-2:#2e7d32; --accent-glow:rgba(76,175,80,.35);  --user-bubble:rgba(76,175,80,.1);   --ai-bubble:rgba(46,125,50,.15);  --input-bg:rgba(8,16,8,.8);  --button-hover:#43a047; }
-[data-theme='stealth']    { --bg-color:#0f0f11; --panel-bg:rgba(20,20,24,.8); --panel-border:rgba(255,40,40,.2);   --text-primary:#f0f0f0; --text-secondary:#70757a; --accent-1:#ff2828; --accent-2:#555555; --accent-glow:rgba(255,40,40,.4); --user-bubble:rgba(70,70,75,.2);    --ai-bubble:rgba(255,40,40,.1);   --input-bg:rgba(10,10,12,.7); --button-hover:#e02020; }
-[data-theme='neon-tokyo'] { --bg-color:#120810; --panel-bg:rgba(25,12,22,.7); --panel-border:rgba(255,100,50,.25); --text-primary:#f5e0d0; --text-secondary:#b08070; --accent-1:#ff6b35; --accent-2:#ff1493; --accent-glow:rgba(255,107,53,.4); --user-bubble:rgba(255,107,53,.12); --ai-bubble:rgba(255,20,147,.1);  --input-bg:rgba(15,8,12,.8); --button-hover:#ff5722; }
-[data-theme='arctic']     { --bg-color:#0c1420; --panel-bg:rgba(15,25,45,.6); --panel-border:rgba(120,200,255,.2); --text-primary:#e0eef8; --text-secondary:#7a9ab8; --accent-1:#64b5f6; --accent-2:#e1f5fe; --accent-glow:rgba(100,181,246,.3); --user-bubble:rgba(100,181,246,.1); --ai-bubble:rgba(225,245,254,.08); --input-bg:rgba(10,18,30,.7); --button-hover:#42a5f5; }
-[data-theme='voxel']      { --bg-color:#1a1208; --panel-bg:rgba(30,22,10,.75); --panel-border:rgba(100,160,60,.3);  --text-primary:#d4c8a0; --text-secondary:#8a7a55; --accent-1:#5b8c2a; --accent-2:#8b6914; --accent-glow:rgba(91,140,42,.35);  --user-bubble:rgba(139,105,20,.15); --ai-bubble:rgba(91,140,42,.12);  --input-bg:rgba(20,15,5,.8); --button-hover:#4a7a20; }
-[data-theme='nitro-arena']{ --bg-color:#080c18; --panel-bg:rgba(10,15,30,.7);  --panel-border:rgba(30,144,255,.25); --text-primary:#e8ecf4; --text-secondary:#7a8aa8; --accent-1:#1e90ff; --accent-2:#ff8c00; --accent-glow:rgba(30,144,255,.4);  --user-bubble:rgba(255,140,0,.12);  --ai-bubble:rgba(30,144,255,.1);  --input-bg:rgba(8,10,20,.8); --button-hover:#1a80e6; }
+/* ─── 7 dark themes ───────────────────────────────────────────────────────
+   Each palette is designed around a primary + secondary accent that don't
+   appear in any other theme, so the dropdown reads as seven unmistakable
+   moods. IDs are gamer-tag style — match index.css to ThemeSelector.jsx. */
+
+/* NIGHTBLADE — synthwave: hot pink + electric purple on void purple */
+[data-theme='nightblade'] {
+  --bg-color: #0a0414;
+  --panel-bg: rgba(22, 8, 36, 0.72);
+  --panel-border: rgba(255, 45, 149, 0.3);
+  --text-primary: #ffe4f1;
+  --text-secondary: #b08aa0;
+  --accent-1: #ff2d95;
+  --accent-2: #a855f7;
+  --accent-glow: rgba(255, 45, 149, 0.45);
+  --user-bubble: rgba(255, 45, 149, 0.10);
+  --ai-bubble: rgba(168, 85, 247, 0.10);
+  --input-bg: rgba(8, 4, 18, 0.86);
+  --button-hover: #e91885;
+  color-scheme: dark;
+}
+
+/* REDLINE — F1 paddock: racing red + chrome silver on carbon black */
+[data-theme='redline'] {
+  --bg-color: #0a0a0c;
+  --panel-bg: rgba(20, 20, 24, 0.8);
+  --panel-border: rgba(220, 38, 38, 0.3);
+  --text-primary: #f4f4f6;
+  --text-secondary: #8a8a92;
+  --accent-1: #dc2626;
+  --accent-2: #cbd5e1;
+  --accent-glow: rgba(220, 38, 38, 0.45);
+  --user-bubble: rgba(220, 38, 38, 0.10);
+  --ai-bubble: rgba(203, 213, 225, 0.08);
+  --input-bg: rgba(6, 6, 8, 0.9);
+  --button-hover: #b91c1c;
+  color-scheme: dark;
+}
+
+/* BLACK ICE — tactical: cobalt blue + tactical amber on graphite */
+[data-theme='blackice'] {
+  --bg-color: #06090f;
+  --panel-bg: rgba(10, 18, 30, 0.76);
+  --panel-border: rgba(14, 165, 233, 0.3);
+  --text-primary: #e0eef8;
+  --text-secondary: #7898b8;
+  --accent-1: #0ea5e9;
+  --accent-2: #fbbf24;
+  --accent-glow: rgba(14, 165, 233, 0.42);
+  --user-bubble: rgba(14, 165, 233, 0.10);
+  --ai-bubble: rgba(251, 191, 36, 0.10);
+  --input-bg: rgba(4, 8, 14, 0.88);
+  --button-hover: #0284c7;
+  color-scheme: dark;
+}
+
+/* GHOSTLINE — cosmic pastel: soft cyan + lavender on deep void */
+[data-theme='ghostline'] {
+  --bg-color: #04050a;
+  --panel-bg: rgba(14, 16, 30, 0.72);
+  --panel-border: rgba(103, 232, 249, 0.26);
+  --text-primary: #f0f9ff;
+  --text-secondary: #94a8c4;
+  --accent-1: #67e8f9;
+  --accent-2: #c4b5fd;
+  --accent-glow: rgba(103, 232, 249, 0.4);
+  --user-bubble: rgba(103, 232, 249, 0.10);
+  --ai-bubble: rgba(196, 181, 253, 0.10);
+  --input-bg: rgba(2, 4, 10, 0.86);
+  --button-hover: #22d3ee;
+  color-scheme: dark;
+}
+
+/* BIOHAZARD — fallout glow: toxic lime + hazard yellow on dark olive */
+[data-theme='biohazard'] {
+  --bg-color: #0a100a;
+  --panel-bg: rgba(18, 28, 14, 0.76);
+  --panel-border: rgba(132, 204, 22, 0.32);
+  --text-primary: #ecf8d4;
+  --text-secondary: #8aa370;
+  --accent-1: #84cc16;
+  --accent-2: #facc15;
+  --accent-glow: rgba(132, 204, 22, 0.45);
+  --user-bubble: rgba(132, 204, 22, 0.10);
+  --ai-bubble: rgba(250, 204, 21, 0.10);
+  --input-bg: rgba(6, 10, 6, 0.88);
+  --button-hover: #65a30d;
+  color-scheme: dark;
+}
+
+/* WARSPIRE — siege keep: deep amber/saffron + royal indigo on warm dark */
+[data-theme='warspire'] {
+  --bg-color: #0a0608;
+  --panel-bg: rgba(28, 14, 6, 0.74);
+  --panel-border: rgba(245, 158, 11, 0.3);
+  --text-primary: #fef3c7;
+  --text-secondary: #b08868;
+  --accent-1: #f59e0b;
+  --accent-2: #6366f1;
+  --accent-glow: rgba(245, 158, 11, 0.42);
+  --user-bubble: rgba(245, 158, 11, 0.10);
+  --ai-bubble: rgba(99, 102, 241, 0.10);
+  --input-bg: rgba(8, 4, 6, 0.88);
+  --button-hover: #d97706;
+  color-scheme: dark;
+}
+
+/* DREADCORE — minimalist: deep violet + warm bone on pure obsidian */
+[data-theme='dreadcore'] {
+  --bg-color: #050507;
+  --panel-bg: rgba(20, 18, 26, 0.82);
+  --panel-border: rgba(139, 92, 246, 0.34);
+  --text-primary: #fef3c7;
+  --text-secondary: #8a826a;
+  --accent-1: #8b5cf6;
+  --accent-2: #fef3c7;
+  --accent-glow: rgba(139, 92, 246, 0.42);
+  --user-bubble: rgba(139, 92, 246, 0.10);
+  --ai-bubble: rgba(254, 243, 199, 0.06);
+  --input-bg: rgba(2, 2, 4, 0.92);
+  --button-hover: #7c3aed;
+  color-scheme: dark;
+}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─── Theme morph ─────────────────────────────────────────────────────────
+   When the body carries `is-theme-morphing` (toggled briefly by App.jsx
+   around each theme swap), every element smoothly interpolates the four
+   theme-variable-driven properties — bg, color, border, shadow — over
+   700ms. Outside that window elements keep their own per-component
+   transition timings (hover states, dropdown opens, etc.), so the global
+   rule never feels sluggish during normal interaction. */
+body.is-theme-morphing,
+body.is-theme-morphing *::before,
+body.is-theme-morphing *::after,
+body.is-theme-morphing * {
+  transition:
+    background 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    text-shadow 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    fill 700ms cubic-bezier(0.4, 0, 0.2, 1),
+    stroke 700ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.is-theme-morphing,
+  body.is-theme-morphing * { transition: none !important; }
+}
 
 html {
   scroll-behavior: smooth;

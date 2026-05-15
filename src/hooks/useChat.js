@@ -23,6 +23,7 @@ export default function useChat(user) {
   const [isLoading, setIsLoading] = useState(false);
   const [redditActive, setRedditActive] = useState(false);
   const [wikiActive, setWikiActive] = useState(false);
+  const [webActive, setWebActive] = useState(false);
   const [priceActive, setPriceActive] = useState(false);
   const [priceData, setPriceData] = useState([]);
 
@@ -75,6 +76,7 @@ export default function useChat(user) {
     setIsLoading(false);
     setRedditActive(false);
     setWikiActive(false);
+    setWebActive(false);
     setPriceActive(false);
   }, []);
 
@@ -729,6 +731,7 @@ export default function useChat(user) {
     setIsLoading(true);
     setRedditActive(false);
     setWikiActive(false);
+    setWebActive(false);
     setPriceActive(false);
     setPriceData([]);
 
@@ -774,6 +777,12 @@ export default function useChat(user) {
         null, text, messages, redditContext, wikiContext, attachments, priceContext,
         controller.signal  // ← pass abort signal
       );
+
+      // Light up the Web Intel badge if the edge function's omni / pulse pipeline
+      // pulled in live web-search results for this turn.
+      if (aiResponse.meta?.sources?.includes?.('web-search')) {
+        setWebActive(true);
+      }
 
       // AI response is now { text, images, meta }
       const aiMessage = {
@@ -834,6 +843,7 @@ export default function useChat(user) {
     clearChat,
     redditActive,
     wikiActive,
+    webActive,
     priceActive,
     priceData,
     SLASH_COMMANDS,

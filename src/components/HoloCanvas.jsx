@@ -61,12 +61,16 @@ function CameraRig({ dollyState, initialZ = 4 }) {
   return null;
 }
 
-export default function HoloCanvas({ tiltRef, dollyRef }) {
+export default function HoloCanvas({ tiltRef, dollyRef, active = true }) {
+  // frameloop="never" pauses R3F's internal RAF entirely — no GPU work, no
+  // CPU work, until set back to "always". Critical for low-power devices and
+  // for everyone once the hero scrolls offscreen.
   return (
     <Canvas
       dpr={[1, 1.6]}
       gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
       camera={{ position: [0, 0, 4], fov: 45 }}
+      frameloop={active ? 'always' : 'never'}
       aria-hidden="true"
     >
       {/* Voltage rim lights — electric cyan / electric blue / hot magenta */}

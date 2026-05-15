@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push *)",
+      "Bash(git check-ignore *)",
+      "Bash(findstr /i \"claude local\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "PowerShell(claude mcp *)",
+      "WebSearch",
+      "Bash(npx supabase *)",
+      "Bash(curl *)",
+      "Bash(echo \"exit: $?\")"
+    ]
+  }
+}

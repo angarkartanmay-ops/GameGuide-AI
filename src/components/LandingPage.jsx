@@ -76,9 +76,43 @@ function readEnvCaps() {
   };
 }
 
+// Runtime FPS probe — measures real-world frame cadence over ~40 frames after
+// mount. Heuristic caps (RAM/cores/GPU-string) can't tell an Intel UHD apart
+// from a dedicated GPU, but observed FPS can. If avg < ~48fps the page enters
+// "low-power" mode: WebGL hero is dropped, Lenis is disabled, backdrop-filter
+// is stripped, decorative overlays vanish. Everyone else keeps the full ride.
+function probeFps(samples = 40) {
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || !window.requestAnimationFrame) {
+      resolve(60);
+      return;
+    }
+    const deltas = [];
+    let last = performance.now();
+    let count = 0;
+    const tick = (now) => {
+      deltas.push(now - last);
+      last = now;
+      count++;
+      if (count < samples) {
+        requestAnimationFrame(tick);
+      } else {
+        // Drop the slowest 3 frames (initial jitter) and average the rest.
+        deltas.sort((a, b) => a - b);
+        const trimmed = deltas.slice(0, deltas.length - 3);
+        const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
+        resolve(1000 / avg);
+      }
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
 function useCapability() {
   const reduce = useReducedMotion();
   const [caps, setCaps] = useState(readEnvCaps);
+  const [lowPower, setLowPower] = useState(false);
+
   useEffect(() => {
     const onChange = () => setCaps(readEnvCaps());
     const mqSize = window.matchMedia('(max-width: 767px)');
@@ -92,10 +126,32 @@ function useCapability() {
       navigator.connection?.removeEventListener?.('change', onChange);
     };
   }, []);
+
+  // FPS probe runs once on mount. We probe AFTER initial paint so the user
+  // doesn't pay the probe latency for first contentful paint, but BEFORE
+  // they've interacted much, so the demotion (if any) happens early.
+  useEffect(() => {
+    let cancelled = false;
+    const id = setTimeout(() => {
+      probeFps(40).then((fps) => {
+        if (cancelled) return;
+        if (fps < 48) {
+          console.log(`[LANDING] FPS probe = ${fps.toFixed(1)}fps → engaging low-power mode`);
+          setLowPower(true);
+        } else {
+          console.log(`[LANDING] FPS probe = ${fps.toFixed(1)}fps → full mode`);
+        }
+      });
+    }, 600);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, []);
+
+  const effectiveLow = lowPower || !!reduce;
   return {
-    webgl: caps.webgl && !reduce,
-    magnetic: caps.magnetic && !reduce,
+    webgl: caps.webgl && !reduce && !lowPower,
+    magnetic: caps.magnetic && !reduce && !lowPower,
     reduce: !!reduce,
+    lowPower: effectiveLow,
   };
 }
 
@@ -204,7 +260,7 @@ function Starfield({ count = 200 }) {
 /* ============================================================
    SECTION: Nav
    ============================================================ */
-function Nav() {
+function Nav({ onNavigate }) {
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 16);
@@ -224,6 +280,16 @@ function Nav() {
           <a href="#pipeline" data-magnetic>Pipeline</a>
           <a href="#features" data-magnetic>Capabilities</a>
           <a href="#demo" data-magnetic>Demo</a>
+          {onNavigate && (
+            <button
+              type="button"
+              className="hg-nav__btn"
+              data-magnetic
+              onClick={() => onNavigate('about')}
+            >
+              About
+            </button>
+          )}
         </nav>
       </div>
     </header>
@@ -236,7 +302,12 @@ function Nav() {
 function Hero({ webgl, onEnter }) {
   const tiltRef = useRef({ x: 0, y: 0 });
   const dollyRef = useRef(false);
+  const heroRef = useRef(null);
   const [exiting, setExiting] = useState(false);
+  // canvasActive flips to false as soon as the hero scrolls fully out of view.
+  // The Canvas's frameloop prop then pauses R3F entirely — no GPU work, no
+  // per-frame CPU cost, until the user scrolls back up.
+  const [canvasActive, setCanvasActive] = useState(true);
   const reduce = useReducedMotion();
 
   useEffect(() => {
@@ -249,6 +320,16 @@ function Hero({ webgl, onEnter }) {
     };
     window.addEventListener('pointermove', onMove);
     return () => window.removeEventListener('pointermove', onMove);
+  }, [webgl]);
+
+  useEffect(() => {
+    if (!webgl || !heroRef.current) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setCanvasActive(entry.intersectionRatio > 0.01),
+      { threshold: [0, 0.01, 0.1] },
+    );
+    io.observe(heroRef.current);
+    return () => io.disconnect();
   }, [webgl]);
 
   const handleEnter = useCallback(() => {
@@ -271,11 +352,11 @@ function Hero({ webgl, onEnter }) {
   }, []);
 
   return (
-    <section className="hg-hero" id="top">
+    <section className="hg-hero" id="top" ref={heroRef}>
       <div className="hg-hero__bg" aria-hidden="true">
         {webgl ? (
           <Suspense fallback={<div className="hg-hero__fallback" />}>
-            <HoloCanvas tiltRef={tiltRef} dollyRef={dollyRef} />
+            <HoloCanvas tiltRef={tiltRef} dollyRef={dollyRef} active={canvasActive} />
           </Suspense>
         ) : (
           <div className="hg-hero__fallback" />
@@ -400,12 +481,13 @@ const SIGNAL_STEPS = [
   { label: 'DELIVER', desc: 'Streamed back in under 400ms', morph: 'circle(50% at 50% 50%)' },
 ];
 
-function SignalPath() {
+function SignalPath({ pinned = true }) {
   const containerRef = useRef(null);
   const orbRef = useRef(null);
   const [activeStep, setActiveStep] = useState(0);
 
   useLayoutEffect(() => {
+    if (!pinned) return;
     const ctx = gsap.context(() => {
       const container = containerRef.current;
       if (!container) return;
@@ -436,10 +518,10 @@ function SignalPath() {
       );
     }, containerRef);
     return () => ctx.revert();
-  }, []);
+  }, [pinned]);
 
   return (
-    <section className="hg-signal" ref={containerRef} aria-label="Signal path">
+    <section className={`hg-signal ${pinned ? '' : 'hg-signal--static'}`} ref={containerRef} aria-label="Signal path">
       <div className="hg-signal__inner">
         {/* Morphing orb */}
         <div className="hg-signal__orb-wrap">
@@ -1189,10 +1271,41 @@ function FinalCTA({ onEnter, exiting }) {
   );
 }
 
-function Footer() {
+function Footer({ onNavigate }) {
   return (
     <footer className="hg-footer">
-      <span>GameGuide-AI · © 2026 — built on a self-healing neural mesh.</span>
+      <div className="hg-footer__inner">
+        <div className="hg-footer__col hg-footer__col--brand">
+          <a className="hg-logo hg-footer__logo" href="#top">
+            <span className="hg-logo__mark" aria-hidden="true" />
+            <span>GameGuide-AI</span>
+          </a>
+          <p className="hg-footer__tag">
+            Built on a self-healing neural mesh. 4 providers. 200+ titles. Sub-400ms.
+          </p>
+          <span className="hg-footer__copy">© 2026 Tanmay Angarkar — all rights reserved.</span>
+        </div>
+
+        <div className="hg-footer__col">
+          <span className="hg-footer__head">Project</span>
+          <button type="button" className="hg-footer__link" onClick={() => onNavigate?.('about')}>About</button>
+          <button type="button" className="hg-footer__link" onClick={() => onNavigate?.('terms')}>Terms &amp; Copyright</button>
+          <button type="button" className="hg-footer__link" onClick={() => onNavigate?.('contacts')}>Contact</button>
+        </div>
+
+        <div className="hg-footer__col">
+          <span className="hg-footer__head">Connect</span>
+          <a className="hg-footer__link" href="mailto:gameguideai.support@gmail.com">Email support</a>
+          <a className="hg-footer__link" href="https://www.linkedin.com/in/tanmay-angarkar-4b8a47319/" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+          <a className="hg-footer__link" href="https://github.com/angarkartanmay-ops" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </div>
+
+        <div className="hg-footer__col">
+          <span className="hg-footer__head">Bot</span>
+          <a className="hg-footer__link" href="https://github.com/angarkartanmay-ops/GameGuide-AI/tree/main/discord-bot" target="_blank" rel="noopener noreferrer">Add Discord bot</a>
+          <button type="button" className="hg-footer__link" onClick={() => onNavigate?.('contacts')}>Server setup</button>
+        </div>
+      </div>
     </footer>
   );
 }
@@ -1200,11 +1313,13 @@ function Footer() {
 /* ============================================================
    SECTION: LandingPage main
    ============================================================ */
-export default function LandingPage({ onEnter }) {
+export default function LandingPage({ onEnter, onNavigate }) {
   const caps = useCapability();
   const [exiting, setExiting] = useState(false);
 
-  useLenis(!caps.reduce);
+  // Lenis costs JS+RAF per scroll event. On low-power devices, native scroll
+  // is meaningfully smoother — skip Lenis entirely there.
+  useLenis(!caps.reduce && !caps.lowPower);
 
   // Refresh ScrollTrigger after layout stabilizes (fonts, lazy R3F)
   useEffect(() => {
@@ -1219,17 +1334,17 @@ export default function LandingPage({ onEnter }) {
   }, [exiting, onEnter]);
 
   return (
-    <div className={`hg-root ${exiting ? 'is-exiting' : ''}`}>
-      <div className="hg-noise" aria-hidden="true" />
-      <div className="hg-scanlines" aria-hidden="true" />
-      <div className="hg-vignette" aria-hidden="true" />
-      <Starfield />
+    <div className={`hg-root ${exiting ? 'is-exiting' : ''} ${caps.lowPower ? 'is-lowpower' : ''}`}>
+      {!caps.lowPower && <div className="hg-noise" aria-hidden="true" />}
+      {!caps.lowPower && <div className="hg-scanlines" aria-hidden="true" />}
+      {!caps.lowPower && <div className="hg-vignette" aria-hidden="true" />}
+      <Starfield count={caps.lowPower ? 60 : 200} />
       <MagneticCursor enabled={caps.magnetic} />
-      <Nav />
+      <Nav onNavigate={onNavigate} />
       <main>
         <Hero webgl={caps.webgl} onEnter={handleEnter} />
         <Manifesto />
-        <SignalPath />
+        <SignalPath pinned={caps.webgl} />
         <PinnedPipeline pinned={caps.webgl /* same threshold = desktop+motion */} />
         <ArsenalDeck pinned={caps.webgl} />
         <div className="hg-post-pipeline">
@@ -1241,7 +1356,7 @@ export default function LandingPage({ onEnter }) {
           <FinalCTA onEnter={handleEnter} exiting={exiting} />
         </div>
       </main>
-      <Footer />
+      <Footer onNavigate={onNavigate} />
       <div className={`hg-exit-flash ${exiting ? 'is-active' : ''}`} aria-hidden="true" />
     </div>
   );

@@ -1,0 +1,199 @@
+/* ============================================================
+   ThemeTransition — 4 subtle ambient variants
+   All variants peak at ≤22% opacity and use mix-blend-mode so
+   the underlying (now-morphing) page stays fully legible.
+   ============================================================ */
+.tt-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+  contain: layout paint size;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   1. AURORA WASH — diagonal soft-edged sheet sweep
+   ────────────────────────────────────────────────────────────── */
+.tt-aurora { position: absolute; inset: 0; }
+.tt-aurora__sheet {
+  position: absolute;
+  inset: -20% -20%;
+  background:
+    linear-gradient(
+      125deg,
+      transparent 30%,
+      color-mix(in srgb, var(--tt-accent) 80%, transparent) 48%,
+      color-mix(in srgb, var(--tt-accent-2) 80%, transparent) 56%,
+      transparent 74%
+    );
+  background-size: 220% 220%;
+  background-position: 0% 0%;
+  filter: blur(28px);
+  opacity: 0;
+  mix-blend-mode: screen;
+  animation: tt-aurora-sheet 1200ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: opacity, background-position;
+}
+@keyframes tt-aurora-sheet {
+  0%   { opacity: 0;    background-position: 0% 0%; }
+  25%  { opacity: 0.22; }
+  75%  { opacity: 0.22; }
+  100% { opacity: 0;    background-position: 100% 100%; }
+}
+/* Faint hairline at the leading edge — reads as the wave's "front" */
+.tt-aurora__edge {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    125deg,
+    transparent 49%,
+    color-mix(in srgb, var(--tt-accent) 60%, transparent) 50%,
+    transparent 51%
+  );
+  background-size: 220% 220%;
+  background-position: 0% 0%;
+  opacity: 0;
+  mix-blend-mode: screen;
+  animation: tt-aurora-edge 1200ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes tt-aurora-edge {
+  0%   { opacity: 0;    background-position: 0% 0%; }
+  25%  { opacity: 0.5; }
+  75%  { opacity: 0.5; }
+  100% { opacity: 0;    background-position: 100% 100%; }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   2. SCANLINE DRIFT — hairline + faint trail
+   ────────────────────────────────────────────────────────────── */
+.tt-scan { position: absolute; inset: 0; }
+.tt-scan__line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--tt-accent);
+  box-shadow:
+    0 0 12px var(--tt-accent),
+    0 0 32px color-mix(in srgb, var(--tt-accent) 60%, transparent);
+  opacity: 0;
+  filter: blur(0.3px);
+  animation: tt-scan-line 1100ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform, opacity;
+}
+@keyframes tt-scan-line {
+  0%   { opacity: 0; transform: translateY(-4px); }
+  10%  { opacity: 0.55; }
+  90%  { opacity: 0.55; }
+  100% { opacity: 0; transform: translateY(100vh); }
+}
+
+/* Faint trail BELOW the line — narrow gradient that follows it down */
+.tt-scan__trail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 22vh;
+  margin-top: -22vh;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--tt-accent) 50%, transparent) 92%,
+    color-mix(in srgb, var(--tt-accent) 70%, transparent) 100%
+  );
+  opacity: 0;
+  mix-blend-mode: screen;
+  animation: tt-scan-trail 1100ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform, opacity;
+}
+@keyframes tt-scan-trail {
+  0%   { opacity: 0; transform: translateY(0); }
+  10%  { opacity: 0.18; }
+  90%  { opacity: 0.18; }
+  100% { opacity: 0; transform: translateY(100vh); }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   3. DEPTH FOCUS — radial vignette pulse from click origin
+   ────────────────────────────────────────────────────────────── */
+.tt-focus { position: absolute; inset: 0; }
+
+.tt-focus__radial {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at var(--tt-ox) var(--tt-oy),
+    color-mix(in srgb, var(--tt-accent) 22%, transparent) 0%,
+    color-mix(in srgb, var(--tt-accent) 8%, transparent) 18%,
+    transparent 38%,
+    rgba(0, 0, 0, 0.22) 95%
+  );
+  opacity: 0;
+  mix-blend-mode: overlay;
+  animation: tt-focus-radial 1000ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: opacity, transform;
+}
+@keyframes tt-focus-radial {
+  0%   { opacity: 0; transform: scale(0.85); }
+  35%  { opacity: 1; transform: scale(1); }
+  65%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+
+/* Soft point of light at the focus origin — never sharp, always glow */
+.tt-focus__core {
+  position: absolute;
+  left: var(--tt-ox);
+  top: var(--tt-oy);
+  width: 220px;
+  height: 220px;
+  margin: -110px 0 0 -110px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--tt-accent) 35%, transparent) 0%,
+    transparent 70%
+  );
+  filter: blur(20px);
+  opacity: 0;
+  mix-blend-mode: screen;
+  animation: tt-focus-core 1000ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes tt-focus-core {
+  0%   { opacity: 0; transform: scale(0.3); }
+  35%  { opacity: 0.7; transform: scale(1); }
+  65%  { opacity: 0.7; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   4. PARTICLE DRIFT — slow rising motes
+   ────────────────────────────────────────────────────────────── */
+.tt-drift { position: absolute; inset: 0; }
+.tt-drift__mote {
+  position: absolute;
+  bottom: -10px;
+  border-radius: 50%;
+  opacity: 0;
+  filter: blur(0.5px);
+  animation-name: tt-drift-rise;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0.4, 1);
+  animation-fill-mode: forwards;
+  will-change: transform, opacity;
+}
+@keyframes tt-drift-rise {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.4); }
+  18%  { opacity: 0.55; }
+  70%  { opacity: 0.45; }
+  100% { opacity: 0; transform: translate(var(--drift-x, 0px), -100vh) scale(1); }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Reduced motion — skip every overlay, the body still morphs.
+   ────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .tt-root { display: none; }
+}
