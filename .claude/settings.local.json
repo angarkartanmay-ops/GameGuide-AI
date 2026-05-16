@@ -10,7 +10,9 @@
       "WebSearch",
       "Bash(npx supabase *)",
       "Bash(curl *)",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "PowerShell(Expand-Archive *)",
+      "PowerShell(git *)"
     ]
   }
 }
