@@ -754,22 +754,21 @@ export default function useChat(user) {
       let wikiContext = '';
       const priceContext = ''; // /price command handles this exclusively now
 
-      const isLikelyGameRelated = needsGameContext(text);
+      // Always run client-side scraping — the post-generation recheck gate
+      // on the server ensures off-topic queries are refused after full context
+      // gathering, so we no longer pre-filter here.
+      const [redditResult, wikiResult] = await Promise.allSettled([
+        searchReddit(text),
+        searchWikis(text),
+      ]);
 
-      if (isLikelyGameRelated) {
-        const [redditResult, wikiResult] = await Promise.allSettled([
-          searchReddit(text),
-          searchWikis(text),
-        ]);
-
-        if (redditResult.status === 'fulfilled' && redditResult.value) {
-          redditContext = redditResult.value;
-          setRedditActive(true);
-        }
-        if (wikiResult.status === 'fulfilled' && wikiResult.value) {
-          wikiContext = wikiResult.value;
-          setWikiActive(true);
-        }
+      if (redditResult.status === 'fulfilled' && redditResult.value) {
+        redditContext = redditResult.value;
+        setRedditActive(true);
+      }
+      if (wikiResult.status === 'fulfilled' && wikiResult.value) {
+        wikiContext = wikiResult.value;
+        setWikiActive(true);
       }
 
       // Step 2: Call AI with all gathered context + attachments
