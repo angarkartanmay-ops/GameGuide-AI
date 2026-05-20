@@ -8,7 +8,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { motion, useReducedMotion, useSpring, useMotionValue } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import './LandingPage.css';
@@ -76,42 +76,16 @@ function readEnvCaps() {
   };
 }
 
-// Runtime FPS probe — measures real-world frame cadence over ~40 frames after
-// mount. Heuristic caps (RAM/cores/GPU-string) can't tell an Intel UHD apart
-// from a dedicated GPU, but observed FPS can. If avg < ~48fps the page enters
-// "low-power" mode: WebGL hero is dropped, Lenis is disabled, backdrop-filter
-// is stripped, decorative overlays vanish. Everyone else keeps the full ride.
-function probeFps(samples = 40) {
-  return new Promise((resolve) => {
-    if (typeof window === 'undefined' || !window.requestAnimationFrame) {
-      resolve(60);
-      return;
-    }
-    const deltas = [];
-    let last = performance.now();
-    let count = 0;
-    const tick = (now) => {
-      deltas.push(now - last);
-      last = now;
-      count++;
-      if (count < samples) {
-        requestAnimationFrame(tick);
-      } else {
-        // Drop the slowest 3 frames (initial jitter) and average the rest.
-        deltas.sort((a, b) => a - b);
-        const trimmed = deltas.slice(0, deltas.length - 3);
-        const avg = trimmed.reduce((a, b) => a + b, 0) / trimmed.length;
-        resolve(1000 / avg);
-      }
-    };
-    requestAnimationFrame(tick);
-  });
-}
-
 function useCapability() {
   const reduce = useReducedMotion();
   const [caps, setCaps] = useState(readEnvCaps);
-  const [lowPower, setLowPower] = useState(false);
+  // Global low-power signal lives on <html data-low-power> — set by the
+  // App-level usePerfMode hook. We mirror it here as React state so the
+  // component re-renders when the probe flips us into low-power mode.
+  const [lowPower, setLowPower] = useState(() => {
+    if (typeof document === 'undefined') return false;
+    return document.documentElement.hasAttribute('data-low-power');
+  });
 
   useEffect(() => {
     const onChange = () => setCaps(readEnvCaps());
@@ -127,23 +101,16 @@ function useCapability() {
     };
   }, []);
 
-  // FPS probe runs once on mount. We probe AFTER initial paint so the user
-  // doesn't pay the probe latency for first contentful paint, but BEFORE
-  // they've interacted much, so the demotion (if any) happens early.
+  // Subscribe to the App-level perf signal via a MutationObserver. No
+  // re-running of the FPS probe here — App already paid that cost.
   useEffect(() => {
-    let cancelled = false;
-    const id = setTimeout(() => {
-      probeFps(40).then((fps) => {
-        if (cancelled) return;
-        if (fps < 48) {
-          console.log(`[LANDING] FPS probe = ${fps.toFixed(1)}fps → engaging low-power mode`);
-          setLowPower(true);
-        } else {
-          console.log(`[LANDING] FPS probe = ${fps.toFixed(1)}fps → full mode`);
-        }
-      });
-    }, 600);
-    return () => { cancelled = true; clearTimeout(id); };
+    if (typeof document === 'undefined') return undefined;
+    const html = document.documentElement;
+    const obs = new MutationObserver(() => {
+      setLowPower(html.hasAttribute('data-low-power'));
+    });
+    obs.observe(html, { attributes: true, attributeFilter: ['data-low-power'] });
+    return () => obs.disconnect();
   }, []);
 
   const effectiveLow = lowPower || !!reduce;
@@ -181,45 +148,6 @@ function useLenis(enabled) {
       try { lenis?.destroy(); } catch {}
     };
   }, [enabled]);
-}
-
-/* ============================================================
-   SECTION: Magnetic cursor
-   ============================================================ */
-function MagneticCursor({ enabled }) {
-  const x = useMotionValue(-100);
-  const y = useMotionValue(-100);
-  const sx = useSpring(x, { stiffness: 180, damping: 22, mass: 0.4 });
-  const sy = useSpring(y, { stiffness: 180, damping: 22, mass: 0.4 });
-  const [hot, setHot] = useState(false);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const move = (e) => { x.set(e.clientX); y.set(e.clientY); };
-    const over = (e) => {
-      if (e.target?.closest?.('[data-magnetic]')) setHot(true);
-    };
-    const out = (e) => {
-      if (e.target?.closest?.('[data-magnetic]')) setHot(false);
-    };
-    window.addEventListener('pointermove', move, { passive: true });
-    window.addEventListener('pointerover', over);
-    window.addEventListener('pointerout', out);
-    return () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerover', over);
-      window.removeEventListener('pointerout', out);
-    };
-  }, [enabled, x, y]);
-
-  if (!enabled) return null;
-  return (
-    <motion.div
-      className={`hg-cursor ${hot ? 'is-hot' : ''}`}
-      style={{ x: sx, y: sy }}
-      aria-hidden="true"
-    />
-  );
 }
 
 /* ============================================================
@@ -1339,7 +1267,6 @@ export default function LandingPage({ onEnter, onNavigate }) {
       {!caps.lowPower && <div className="hg-scanlines" aria-hidden="true" />}
       {!caps.lowPower && <div className="hg-vignette" aria-hidden="true" />}
       <Starfield count={caps.lowPower ? 60 : 200} />
-      <MagneticCursor enabled={caps.magnetic} />
       <Nav onNavigate={onNavigate} />
       <main>
         <Hero webgl={caps.webgl} onEnter={handleEnter} />

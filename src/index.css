@@ -161,14 +161,11 @@ body.is-theme-morphing *::before,
 body.is-theme-morphing *::after,
 body.is-theme-morphing * {
   transition:
-    background 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    background-color 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    color 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    text-shadow 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    fill 700ms cubic-bezier(0.4, 0, 0.2, 1),
-    stroke 700ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+    background-color 480ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 480ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 480ms cubic-bezier(0.4, 0, 0.2, 1),
+    fill 480ms cubic-bezier(0.4, 0, 0.2, 1),
+    stroke 480ms cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 @media (prefers-reduced-motion: reduce) {
   body.is-theme-morphing,
@@ -375,4 +372,81 @@ body.landing-mounted ::-webkit-scrollbar-thumb:hover { background: #00E5FF; }
   .mesh-bg::before, .mesh-bg::after, .mesh-bg > .blob,
   .halo::after, .sweep-reveal { animation: none !important; }
   html { scroll-behavior: auto; }
+}
+
+/* =============================================================================
+   LOW-POWER MODE — engaged when usePerfMode finds the device can't hold 48fps.
+   Sets <html data-low-power="1">. Everything here is opt-in cost reduction:
+   strip backdrop-filters (most expensive per-frame op on weak GPUs), shrink
+   large blur radii (filter blur is O(r²) per pixel), and pause perpetual
+   decorative animations. The layout and palette never change — the page just
+   feels glassy-flat instead of frosted-glass.
+   ============================================================================= */
+html[data-low-power] {
+  scroll-behavior: auto;
+}
+
+/* Strip every backdrop-filter site-wide. backdrop-filter is the single largest
+   per-frame cost on integrated GPUs — each blurred surface forces a full pass
+   over everything behind it. We compensate with a stronger background alpha
+   so frosted-glass panels stay legible. */
+html[data-low-power] .glass-panel,
+html[data-low-power] .main-header,
+html[data-low-power] .user-dropdown,
+html[data-low-power] .theme-dropdown-menu,
+html[data-low-power] .command-palette,
+html[data-low-power] .image-badge,
+html[data-low-power] .info-nav,
+html[data-low-power] .info-card,
+html[data-low-power] .info-channel,
+html[data-low-power] .cortex-sources-dropdown,
+html[data-low-power] .loading-content {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+/* Bump panel alpha so panels still feel solid without the blur lift. */
+html[data-low-power] .glass-panel,
+html[data-low-power] .main-header,
+html[data-low-power] .info-nav {
+  background: color-mix(in srgb, var(--bg-color, #06090f) 88%, transparent);
+}
+
+/* InfoPage decorative blobs: drop the blur radius from 120→60 (4× less GPU
+   work per frame) and pause the drift animation. Visual still reads as
+   ambient glow — just static. */
+html[data-low-power] .info-bg__blob {
+  filter: blur(60px) !important;
+  opacity: 0.4 !important;
+  animation: none !important;
+}
+html[data-low-power] .info-bg__grid {
+  opacity: 0.25;
+}
+
+/* Box-shadow animations are the most expensive infinite loops in the app —
+   each tick repaints the whole bounding rect. Pause them in low-power.
+   The badges keep their static glow so they still read as "active". */
+html[data-low-power] .community-badge,
+html[data-low-power] .price-pill--low,
+html[data-low-power] .cortex-vision,
+html[data-low-power] .animate-pulse-stop {
+  animation: none !important;
+}
+
+/* Pulsing accent dots / orbit rings on the loading screen and landing. */
+html[data-low-power] .hg-starfield span,
+html[data-low-power] .hg-signal__ring,
+html[data-low-power] .hg-arsenal__bg,
+html[data-low-power] .info-bg__blob {
+  animation: none !important;
+}
+
+/* Theme-morph: the global *-selector transition is the biggest one-shot cost
+   in the app. On low-power devices we snap colors instantly instead — no
+   visible flicker, just no 750ms interpolation across every node. */
+html[data-low-power] body.is-theme-morphing,
+html[data-low-power] body.is-theme-morphing *,
+html[data-low-power] body.is-theme-morphing *::before,
+html[data-low-power] body.is-theme-morphing *::after {
+  transition: none !important;
 }

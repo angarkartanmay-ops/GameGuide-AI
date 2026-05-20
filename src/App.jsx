@@ -12,6 +12,8 @@ import LoadingScreen from './components/LoadingScreen';
 import LandingPage from './components/LandingPage';
 import InfoPage from './components/InfoPage';
 import ThemeTransition, { THEME_TRANSITION_DURATION, VARIANTS as FX_VARIANTS } from './components/ThemeTransition';
+import Crosshair from './components/Crosshair';
+import usePerfMode from './hooks/usePerfMode';
 
 // Hash-routable static views. Anything outside this set falls back to landing
 // (so a stale or unknown hash never strands the user on a blank page).
@@ -31,6 +33,16 @@ function readStoredTheme() {
   if (stored && THEME_IDS.includes(stored)) return stored;
   return DEFAULT_THEME;
 }
+// Tracks whether the user has *explicitly* picked a theme (vs the implicit
+// default applied on first load). Static pages (Info / About / Terms /
+// Contacts) read this to decide whether to mirror the active theme or
+// remain on the canonical neon-blue landing palette. Persists across
+// reloads — once the user picks, all info pages follow forever.
+const THEME_CHOSEN_KEY = 'gg_theme_chosen';
+function readThemeChosen() {
+  try { return localStorage.getItem(THEME_CHOSEN_KEY) === '1'; }
+  catch { return false; }
+}
 
 function App() {
   // Initial view: explicit hash wins, else fall back to whether the user has
@@ -41,6 +53,7 @@ function App() {
     return sessionStorage.getItem('gg_entered') === '1' ? 'chat' : 'landing';
   });
   const [theme, setTheme] = useState(readStoredTheme);
+  const [themeChosen, setThemeChosen] = useState(readThemeChosen);
   // Active theme-swap effect. `null` while idle. The `key` (timestamp) forces
   // React to fully remount the overlay on each successive swap so staggered
   // animation delays don't carry over from the previous run.
@@ -49,6 +62,9 @@ function App() {
   // because we only need it to mutate between renders, never to drive a
   // re-render itself.
   const variantCursor = useRef(0);
+  // Global perf-mode probe. Sets <html data-low-power> when the device
+  // can't keep 48fps so every page can strip heavy effects via CSS.
+  usePerfMode();
   const { user, loading: authLoading } = useAuth();
   const { messages, isLoading, sendMessage, cancelRequest, redditActive, wikiActive, webActive, priceActive, priceData, SLASH_COMMANDS } = useChat(user);
 
@@ -63,18 +79,23 @@ function App() {
   const themeFirstRunRef = useRef(true);
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    // Mirror the "explicitly chosen" flag onto <html> as a separate
+    // attribute so CSS (InfoPage etc.) can branch on it without React.
+    document.documentElement.toggleAttribute('data-theme-chosen', themeChosen);
     localStorage.setItem('theme', theme);
     if (themeFirstRunRef.current) {
       themeFirstRunRef.current = false;
       return undefined;
     }
-    // Apply the morph class for ~750ms so every themed element interpolates
+    // Apply the morph class for ~520ms so every themed element interpolates
     // colors smoothly while the new palette comes in. Slightly longer than
-    // the 700ms transition so the class never falls off mid-animation.
+    // the 480ms transition in index.css so the class never falls off
+    // mid-animation. (Shortened from the original 750ms — the trimmed
+    // transition list lets us finish faster without losing the cross-fade.)
     document.body.classList.add('is-theme-morphing');
-    const t = setTimeout(() => document.body.classList.remove('is-theme-morphing'), 750);
+    const t = setTimeout(() => document.body.classList.remove('is-theme-morphing'), 520);
     return () => clearTimeout(t);
-  }, [theme]);
+  }, [theme, themeChosen]);
 
   // Theme-swap handler. Cycles round-robin through the 4 transition variants
   // so consecutive selections never play the same animation twice. The click
@@ -91,6 +112,10 @@ function App() {
     const variant = FX_VARIANTS[variantCursor.current % FX_VARIANTS.length];
     variantCursor.current = (variantCursor.current + 1) % FX_VARIANTS.length;
     setTheme(nextId);
+    if (!themeChosen) {
+      setThemeChosen(true);
+      try { localStorage.setItem(THEME_CHOSEN_KEY, '1'); } catch { /* storage quota / private mode — non-fatal */ }
+    }
     setThemeFx({
       variant,
       accent: meta.accent,
@@ -98,7 +123,7 @@ function App() {
       origin,
       key: Date.now(),
     });
-  }, [theme]);
+  }, [theme, themeChosen]);
 
   // Auto-unmount the overlay after the cascade finishes so it never sticks
   // around eating compositor cycles.
@@ -182,42 +207,37 @@ function App() {
     />
   );
 
+  // View body is computed first, then wrapped with the long-lived Crosshair
+  // + fxOverlay siblings — so view transitions (landing → chat → info) don't
+  // remount the reticle and lose its spring/position state.
+  let viewBody;
   if (view === 'landing') {
-    return (
-      <>
-        <LandingPage
-          onEnter={goChat}
-          onNavigate={navigate}
-        />
-        {fxOverlay}
-      </>
+    viewBody = (
+      <LandingPage
+        onEnter={goChat}
+        onNavigate={navigate}
+      />
     );
-  }
-
-  if (INFO_VIEWS.has(view)) {
-    return (
-      <>
-        <InfoPage
-          kind={view}
-          onBack={() => {
-            // Prefer real history (back-from-info returns to chat or landing,
-            // whichever the user came from). Fall back to landing if history
-            // is empty (e.g. direct deep link).
-            if (window.history.length > 1) window.history.back();
-            else goLanding();
-          }}
-          onLogo={goLanding}
-          onNavigate={navigate}
-        />
-        {fxOverlay}
-      </>
+  } else if (INFO_VIEWS.has(view)) {
+    viewBody = (
+      <InfoPage
+        kind={view}
+        onBack={() => {
+          // Prefer real history (back-from-info returns to chat or landing,
+          // whichever the user came from). Fall back to landing if history
+          // is empty (e.g. direct deep link).
+          if (window.history.length > 1) window.history.back();
+          else goLanding();
+        }}
+        onLogo={goLanding}
+        onNavigate={navigate}
+      />
     );
-  }
-
-  return (
-    <div className="app-container">
-      {showLoader && <LoadingScreen isExiting={exitingLoader} />}
-      <header className="main-header">
+  } else {
+    viewBody = (
+      <div className="app-container">
+        {showLoader && <LoadingScreen isExiting={exitingLoader} />}
+        <header className="main-header">
         <button
           type="button"
           className="brand brand--button"
@@ -280,8 +300,16 @@ function App() {
         <span className="chat-footer__sep">·</span>
         <span className="chat-footer__copy">© 2026 GameGuide-AI</span>
       </footer>
-      {fxOverlay}
     </div>
+    );
+  }
+
+  return (
+    <>
+      <Crosshair />
+      {viewBody}
+      {fxOverlay}
+    </>
   );
 }
 

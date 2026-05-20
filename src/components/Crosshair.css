@@ -1,0 +1,153 @@
+/* ============================================================
+   Crosshair cursor — FPS-style reticle, theme-aware.
+   Two GPU-only properties animate per frame: transform (via
+   framer-motion spring) and opacity. Width/border/box-shadow
+   only change on state flips (hot/firing/text), so the
+   compositor never paints them during pointer movement.
+   ============================================================ */
+
+/* Resolve to the active chat theme. Landing has no [data-theme]
+   yet — falls back to the canonical neon-blue. */
+:root {
+  --gg-crosshair: #00E5FF;
+}
+html[data-theme] {
+  --gg-crosshair: var(--accent-1, #00E5FF);
+}
+
+/* Hide the OS cursor on fine pointers — the reticle takes over.
+   Inputs/textareas explicitly keep the text I-beam so editing
+   doesn't feel hostile. */
+@media (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  html, body { cursor: none; }
+  body * { cursor: inherit; }
+  input, textarea, [contenteditable="true"] { cursor: text; }
+}
+
+.gg-cursor-ring,
+.gg-cursor-reticle {
+  position: fixed;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 10000;
+  /* Promote to its own compositor layer so the parent's paint
+     never gets invalidated by pointer movement. */
+  will-change: transform;
+  transform: translate3d(-100px, -100px, 0);
+}
+
+/* ── Outer ring — trailing follower ────────────────────────── */
+.gg-cursor-ring {
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--gg-crosshair) 55%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--gg-crosshair) 28%, transparent);
+  opacity: 0.85;
+  transition:
+    width 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    margin 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.22s,
+    box-shadow 0.22s,
+    opacity 0.18s;
+}
+.gg-cursor-ring.is-hot {
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-color: var(--gg-crosshair);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--gg-crosshair) 55%, transparent);
+}
+.gg-cursor-ring.is-firing {
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-color: var(--gg-crosshair);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--gg-crosshair) 70%, transparent);
+}
+.gg-cursor-ring.is-text {
+  opacity: 0;
+}
+
+/* ── Inner reticle — tight follow ──────────────────────────── */
+.gg-cursor-reticle {
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  color: var(--gg-crosshair);
+  z-index: 10001;
+}
+.gg-cursor-reticle.is-text {
+  opacity: 0.45;
+}
+
+.gg-tick {
+  position: absolute;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+  transition:
+    width 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    right 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    bottom 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    left 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.gg-tick--n,
+.gg-tick--s {
+  left: 50%;
+  margin-left: -0.75px;
+  width: 1.5px;
+  height: 6px;
+}
+.gg-tick--n { top: 0; }
+.gg-tick--s { bottom: 0; }
+.gg-tick--e,
+.gg-tick--w {
+  top: 50%;
+  margin-top: -0.75px;
+  height: 1.5px;
+  width: 6px;
+}
+.gg-tick--w { left: 0; }
+.gg-tick--e { right: 0; }
+
+/* Hot: ticks slide outward — "target lock" framing. */
+.gg-cursor-reticle.is-hot .gg-tick--n { top: -5px; height: 9px; }
+.gg-cursor-reticle.is-hot .gg-tick--s { bottom: -5px; height: 9px; }
+.gg-cursor-reticle.is-hot .gg-tick--w { left: -5px; width: 9px; }
+.gg-cursor-reticle.is-hot .gg-tick--e { right: -5px; width: 9px; }
+
+/* Firing: ticks snap inward briefly. */
+.gg-cursor-reticle.is-firing .gg-tick--n,
+.gg-cursor-reticle.is-firing .gg-tick--s { height: 3px; }
+.gg-cursor-reticle.is-firing .gg-tick--w,
+.gg-cursor-reticle.is-firing .gg-tick--e { width: 3px; }
+
+.gg-pin {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  background: currentColor;
+  border-radius: 999px;
+  box-shadow: 0 0 8px currentColor;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s;
+}
+.gg-cursor-reticle.is-hot .gg-pin { transform: scale(1.6); }
+.gg-cursor-reticle.is-firing .gg-pin { transform: scale(2.2); opacity: 0.7; }
+
+/* ── Disabled environments ─────────────────────────────────── */
+@media (pointer: coarse) {
+  .gg-cursor-ring,
+  .gg-cursor-reticle { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gg-cursor-ring,
+  .gg-cursor-reticle { display: none; }
+}

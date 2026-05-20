@@ -270,3 +270,20 @@
   0%, 100% { opacity: 1; text-shadow: 0 0 10px var(--accent-glow); }
   50% { opacity: 0.6; text-shadow: none; }
 }
+
+/* ─── Low-power loader ──────────────────────────────────────────────────────
+   The loader screen is only on for ~1.5s but its animations spike the GPU at
+   the worst possible moment — right when the user is forming a first
+   impression. On low-power devices we strip the per-element infinite
+   animations so the loader still reads as "techy" via the static glow on
+   .loading-content but the GPU stays free for the page below it. */
+html[data-low-power] .lightning-bolt,
+html[data-low-power] .warp-particle,
+html[data-low-power] .rain-drop,
+html[data-low-power] .shield-hex,
+html[data-low-power] .vortex-particle,
+html[data-low-power] .glitch-bar,
+html[data-low-power] .cyber-vortex-container {
+  animation: none !important;
+  opacity: 0.18 !important;
+}

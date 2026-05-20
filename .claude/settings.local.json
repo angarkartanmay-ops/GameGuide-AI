@@ -12,7 +12,14 @@
       "Bash(curl *)",
       "Bash(echo \"exit: $?\")",
       "PowerShell(Expand-Archive *)",
-      "PowerShell(git *)"
+      "PowerShell(git *)",
+      "Bash(supabase --version)",
+      "Bash(where.exe supabase *)",
+      "Read(//c/Users/angar/scoop/shims/**)",
+      "PowerShell(Get-Command supabase -ErrorAction SilentlyContinue)",
+      "PowerShell(npx --no-install supabase --version 2>&1)",
+      "Bash(node _test2.cjs)",
+      "PowerShell(Get-Command *)"
     ]
   }
 }

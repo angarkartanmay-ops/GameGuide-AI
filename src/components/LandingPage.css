@@ -1,6 +1,5 @@
 @property --hg-angle{syntax:'<angle>';initial-value:0deg;inherits:false}
-.hg-root{--hg-bg:#04060C;--hg-fg:#E5F7FF;--hg-mute:rgba(229,247,255,.62);--hg-faint:rgba(229,247,255,.32);--hg-line:rgba(0,229,255,.14);--hg-glass:rgba(0,229,255,.04);--hg-glass-2:rgba(0,229,255,.08);--hg-cyan:#00E5FF;--hg-violet:#3B82F6;--hg-rose:#FF2A6D;--hg-iri:linear-gradient(120deg,#00E5FF 0%,#3B82F6 50%,#FF2A6D 100%);--hg-iri-c:conic-gradient(from var(--hg-angle,0),#00E5FF,#3B82F6,#FF2A6D,#00E5FF);position:relative;width:100%;min-height:100dvh;overflow-x:hidden;background:var(--hg-bg);color:var(--hg-fg);font-family:'Inter',system-ui,sans-serif;cursor:none}
-@media(pointer:coarse){.hg-root{cursor:auto}}
+.hg-root{--hg-bg:#04060C;--hg-fg:#E5F7FF;--hg-mute:rgba(229,247,255,.62);--hg-faint:rgba(229,247,255,.32);--hg-line:rgba(0,229,255,.14);--hg-glass:rgba(0,229,255,.04);--hg-glass-2:rgba(0,229,255,.08);--hg-cyan:#00E5FF;--hg-violet:#3B82F6;--hg-rose:#FF2A6D;--hg-iri:linear-gradient(120deg,#00E5FF 0%,#3B82F6 50%,#FF2A6D 100%);--hg-iri-c:conic-gradient(from var(--hg-angle,0),#00E5FF,#3B82F6,#FF2A6D,#00E5FF);position:relative;width:100%;min-height:100dvh;overflow-x:hidden;background:var(--hg-bg);color:var(--hg-fg);font-family:'Inter',system-ui,sans-serif}
 /* GPU-cheap: opacity-only overlays. mix-blend-mode was forcing the entire
    stacking context to re-composite on every scroll frame — replaced with
    direct alpha so each overlay is just a flat textured layer the compositor
@@ -15,9 +14,6 @@
 .hg-starfield span{background:#cdf6ff;box-shadow:0 0 4px rgba(0,229,255,.45)}
 .hg-starfield span{position:absolute;border-radius:999px;background:#fff;animation:hg-drift linear infinite}
 @keyframes hg-drift{0%,100%{transform:translateY(0) translateX(0);opacity:.6}50%{opacity:.2}100%{transform:translateY(-40px) translateX(8px)}}
-
-.hg-cursor{position:fixed;top:0;left:0;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:999px;background:var(--hg-fg);mix-blend-mode:difference;pointer-events:none;z-index:10000;transition:width .18s,height .18s,margin .18s,background .18s,box-shadow .18s;transform:translate(-100px,-100px)}
-.hg-cursor.is-hot{width:40px;height:40px;margin:-20px 0 0 -20px;background:transparent;box-shadow:0 0 0 1px var(--hg-cyan)}
 
 .hg-nav{position:fixed;top:0;left:0;right:0;z-index:50;transition:background .35s,backdrop-filter .35s,border-color .35s;border-bottom:1px solid transparent}
 .hg-nav.is-scrolled{background:rgba(4,6,12,.72);backdrop-filter:blur(10px);border-bottom-color:var(--hg-line)}
@@ -220,8 +216,6 @@
 .hg-nav__btn:hover{color:var(--hg-fg)}
 
 @media(max-width:767px){
-.hg-root{cursor:auto}
-.hg-cursor{display:none}
 .hg-hero{padding-top:100px}
 .hg-hero__stats{gap:24px}
 .hg-hero__stats b{font-size:22px}
