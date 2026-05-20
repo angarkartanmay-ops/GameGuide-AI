@@ -1230,8 +1230,8 @@ function Footer({ onNavigate }) {
 
         <div className="hg-footer__col">
           <span className="hg-footer__head">Bot</span>
-          <a className="hg-footer__link" href="https://github.com/angarkartanmay-ops/GameGuide-AI/tree/main/discord-bot" target="_blank" rel="noopener noreferrer">Add Discord bot</a>
-          <button type="button" className="hg-footer__link" onClick={() => onNavigate?.('contacts')}>Server setup</button>
+          <a className="hg-footer__link" href="https://top.gg/bot/1499622566472712202?s=0c09d3395142b" target="_blank" rel="noopener noreferrer">Add Discord bot</a>
+          <a className="hg-footer__link" href="https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=3270014976&scope=bot+applications.commands" target="_blank" rel="noopener noreferrer">Server setup</a>
         </div>
       </div>
     </footer>

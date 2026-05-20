@@ -21,9 +21,13 @@ const CONTACT_LINKS = {
   email: 'gameguideai.support@gmail.com',
   linkedin: 'https://www.linkedin.com/in/tanmay-angarkar-4b8a47319/',
   github: 'https://github.com/angarkartanmay-ops',
-  // Discord bot setup + invite instructions live in the bot's README until the
-  // hosted OAuth client ID is wired up.
-  discordBot: 'https://github.com/angarkartanmay-ops/GameGuide-AI/tree/main/discord-bot',
+  // Direct OAuth invite — drops the bot into the user's chosen server with
+  // the exact permissions index.js needs (View Channel, Send Messages,
+  // Embed Links, Read Message History, Use Application Commands).
+  discordBotInvite:
+    'https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=3270014976&scope=bot+applications.commands',
+  // top.gg listing — discovery + upvote page. `?s=` is the referrer tag.
+  discordBotTopGG: 'https://top.gg/bot/1499622566472712202?s=0c09d3395142b',
 };
 
 function AboutContent() {
@@ -219,7 +223,7 @@ function ContactsContent() {
           </div>
         </a>
 
-        <a href={CONTACT_LINKS.discordBot} target="_blank" rel="noopener noreferrer" className="info-channel info-channel--accent">
+        <a href={CONTACT_LINKS.discordBotInvite} target="_blank" rel="noopener noreferrer" className="info-channel info-channel--accent">
           <div className="info-channel__icon"><MessageSquare size={24} /></div>
           <div className="info-channel__body">
             <span className="info-channel__sub">DISCORD BOT · ADD TO SERVER</span>
@@ -296,7 +300,7 @@ export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
           <button type="button" onClick={() => onNavigate('about')}>About</button>
           <button type="button" onClick={() => onNavigate('terms')}>Terms</button>
           <button type="button" onClick={() => onNavigate('contacts')}>Contact</button>
-          <a href={CONTACT_LINKS.discordBot} target="_blank" rel="noopener noreferrer">Discord bot</a>
+          <a href={CONTACT_LINKS.discordBotTopGG} target="_blank" rel="noopener noreferrer">Discord bot</a>
         </div>
       </footer>
     </div>
