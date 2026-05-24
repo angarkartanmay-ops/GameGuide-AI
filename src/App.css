@@ -1,11 +1,16 @@
 /* App.css */
+/* App shell is locked to the viewport height so the chat behaves like a
+   native app: header pinned at top, input + footer pinned at bottom, and
+   ONLY the message list scrolls in between. Previously this was
+   min-height:100dvh with the page itself scrolling, which let the header
+   scroll out of view (and took the theme switcher with it). */
 .app-container {
   width: 100%;
-  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   background: radial-gradient(circle at center, var(--bg-color) 0%, #000 100%);
-  overflow-x: hidden;
+  overflow: hidden;
 }
 /* Chat footer: small monospaced strip with the same info-page links so users
    can reach About/Terms/Contact without going back to the landing page. */
@@ -21,6 +26,7 @@
   font-size: 11.5px;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 .chat-footer button {
   background: transparent;
@@ -49,6 +55,12 @@
   background: var(--panel-bg);
   backdrop-filter: blur(10px);
   z-index: 10;
+  /* Never shrink and never scroll away — it's the app shell's top bar.
+     position:sticky is a fallback for any context where the parent does
+     end up scrolling (e.g. some mobile browsers during keyboard show). */
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
 }
 
 .brand {
@@ -387,16 +399,24 @@
   padding: 1rem;
   position: relative;
   overflow: hidden;
+  /* Critical: without min-height:0 a flex child refuses to shrink below its
+     content size, so the message list would push the whole shell taller than
+     the viewport instead of scrolling inside .messages-area. */
+  min-height: 0;
 }
 
 .messages-area {
   flex: 1;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding: 1rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   scroll-behavior: smooth;
+  /* Same flex-shrink guard as the wrapper — this is the actual scroll port. */
+  min-height: 0;
 }
 
 .message-bubble-container {
@@ -1026,45 +1046,79 @@
 
 /* Responsive Design for Mobile Devices */
 @media (max-width: 768px) {
+  /* Single compact row: [logo + title] ........ [theme] [avatar].
+     Stays pinned at the top of the app shell so the theme switcher is
+     always one tap away — no scroll-to-top required. */
   .main-header {
-    padding: 1rem;
-    flex-direction: column;
-    gap: 0.8rem;
+    padding: 0.7rem 0.9rem;
+    /* Respect the notch / status bar when the viewport runs edge-to-edge. */
+    padding-top: calc(0.7rem + env(safe-area-inset-top));
+    padding-left: calc(0.9rem + env(safe-area-inset-left));
+    padding-right: calc(0.9rem + env(safe-area-inset-right));
+    flex-direction: row;
+    gap: 0.5rem;
     align-items: center;
   }
-  
+
   .brand {
-    justify-content: center;
-    width: 100%;
+    justify-content: flex-start;
+    width: auto;
+    gap: 0.55rem;
+    min-width: 0;          /* allow the title to truncate, not overflow */
+    flex: 1;
+  }
+
+  .brand-icon {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
   }
 
   .brand h1 {
-    font-size: 1.4rem;
-    letter-spacing: 1px;
+    font-size: 1.15rem;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;          /* flex child must allow shrink for ellipsis */
   }
 
   .header-controls {
-    width: 100%;
-    justify-content: center;
-    gap: 0.8rem;
+    width: auto;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-shrink: 0;
   }
 
   .theme-dropdown-trigger, .sign-in-btn {
-    padding: 0.5rem 0.8rem;
-    font-size: 0.8rem;
-    flex: 1;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.78rem;
     justify-content: center;
-    max-width: 180px;
+  }
+
+  /* Intel badges drop to icon-only pills on mobile so an active-source
+     burst (reddit + wiki + web + price) never wraps the header. Badges keep
+     their size; the title truncates with an ellipsis instead. */
+  .intel-badges {
+    flex-shrink: 0;
+    gap: 0.3rem;
+  }
+  .community-badge {
+    padding: 0.3rem;
+    gap: 0;
+  }
+  .community-badge span {
+    display: none;
   }
 
   .chat-wrapper {
-    padding: 0.5rem;
+    padding: 0.4rem;
   }
-  
+
   .message-bubble {
-    max-width: 96%;
-    padding: 0.8rem 1rem;
-    font-size: 0.9rem;
+    max-width: 100%;
+    padding: 0.85rem 1rem;
+    font-size: 0.92rem;
   }
 
   .message-bubble.ai {
@@ -1102,49 +1156,74 @@
   }
   
   .input-area-wrapper {
-    padding: 0.5rem 0;
+    padding: 0.5rem 0 0.4rem;
   }
-  
+
+  .input-area {
+    gap: 0.45rem;
+  }
+
   .chat-input {
     padding: 0.75rem;
-    font-size: 0.9rem;
-    min-height: 48px;
+    font-size: 0.95rem;   /* >=16px-ish avoids iOS zoom-on-focus jank */
   }
-  
-  .upload-btn, .send-btn {
-    width: 48px;
-    height: 48px;
+
+  .upload-btn, .send-btn, .stop-btn {
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
   }
-  
+
+  /* Character counter sits left of a 52px button now */
+  .char-counter {
+    right: 64px;
+  }
+
   .message-avatar {
     width: 26px;
     height: 26px;
   }
-  
+
   .message-image-wrapper {
     max-width: 100%;
   }
 
-  .intel-badges {
-    justify-content: center;
-    width: 100%;
-    margin-top: 0.25rem;
+  /* Compact footer so it doesn't eat the bottom of the shell on phones */
+  .chat-footer {
+    padding: 0.55rem 0.75rem 0.7rem;
+    padding-bottom: calc(0.7rem + env(safe-area-inset-bottom));
+    font-size: 10.5px;
+    gap: 0.25rem;
+  }
+  .chat-footer button {
+    padding: 4px 7px;
+  }
+
+  /* Welcome empty-state breathes a little less on small screens */
+  .messages-area {
+    padding: 0.75rem;
+    gap: 1.1rem;
   }
 }
 
 /* Extra small screens */
 @media (max-width: 400px) {
   .brand h1 {
-    font-size: 1.2rem;
+    font-size: 1.02rem;
   }
   .header-controls {
-    gap: 0.5rem;
+    gap: 0.4rem;
   }
-  .theme-dropdown-trigger span, .sign-in-btn span {
-    display: none; /* Icon only for very small screens if needed, but let's keep text for now unless too tight */
+  .theme-dropdown-trigger span.theme-dropdown-trigger__label,
+  .sign-in-btn span {
+    display: none; /* Icon-only triggers when space is tightest */
   }
   .theme-dropdown-trigger, .sign-in-btn {
     padding: 0.5rem;
+  }
+  /* Drop the copyright on the tightest screens — links stay */
+  .chat-footer__copy {
+    display: none;
   }
 }
 
