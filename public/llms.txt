@@ -1,0 +1,24 @@
+# GameGuide-AI
+
+> Real-time AI gaming intelligence built for ranked players. Sub-400ms responses powered by a self-healing 4-provider neural mesh.
+
+## Features
+
+- **Neural Mesh Routing** — 4 AI providers with automatic token-level fallback
+- **PULSE Web Search** — Live multi-source intel fused from Wikipedia, Steam, Reddit, and RSS
+- **Vision GODMODE** — Screenshot-grade build/comp analysis from uploaded images
+- **Slash Commands** — `/build`, `/counter`, `/price`, `/lore`, `/help` and more
+- **Live Price Intel** — Real-time game prices across 20+ storefronts via CheapShark
+- **Persona Engine** — Tactical, casual, or competitive tone — adapts to the player
+- **Discord Bot** — Same intelligence, native in your Discord server
+
+## Usage
+
+GameGuide-AI is a free-to-use web application at [gameguide-ai.vercel.app](https://gameguide-ai.vercel.app).  
+No account required for basic queries. Sign in to unlock conversation history and preferences.
+
+## Optional
+
+- [Terms of Service](https://gameguide-ai.vercel.app/#terms)
+- [About](https://gameguide-ai.vercel.app/#about)
+- [Contact](https://gameguide-ai.vercel.app/#contacts)

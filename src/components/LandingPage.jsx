@@ -1,7 +1,9 @@
 import React, {
   Suspense,
+  createContext,
   lazy,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -121,6 +123,13 @@ function useCapability() {
     lowPower: effectiveLow,
   };
 }
+
+/* ============================================================
+   SECTION: Caps context — lets sub-components read capability
+   flags without prop-drilling or stale module-level references.
+   ============================================================ */
+const CapsContext = createContext({ webgl: false, magnetic: false, reduce: false, lowPower: false });
+function useCaps() { return useContext(CapsContext); }
 
 /* ============================================================
    SECTION: Lenis smooth scroll bridge
@@ -279,6 +288,8 @@ function Hero({ webgl, onEnter }) {
     });
   }, []);
 
+  const caps = useCaps();
+
   return (
     <section className="hg-hero" id="top" ref={heroRef}>
       <div className="hg-hero__bg" aria-hidden="true">
@@ -367,6 +378,7 @@ function Hero({ webgl, onEnter }) {
    SECTION: Manifesto strip
    ============================================================ */
 function Manifesto() {
+  const caps = useCaps();
   const lines = [
     "We don't write guides.",
     'We compute them — live, every query, from six sources.',
@@ -421,6 +433,7 @@ const SIGNAL_STEPS = [
 ];
 
 function SignalPath({ pinned = true }) {
+  const caps = useCaps();
   const containerRef = useRef(null);
   const orbRef = useRef(null);
   const [activeStep, setActiveStep] = useState(0);
@@ -461,7 +474,7 @@ function SignalPath({ pinned = true }) {
         observer.unobserve(container);
       }
     };
-  }, [pinned, reduce, caps.lowPower]);
+  }, [pinned, reduce, caps.lowPower]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // GSAP animation for high-power devices
   useLayoutEffect(() => {
@@ -1358,29 +1371,31 @@ export default function LandingPage({ onEnter, onNavigate }) {
   }, [exiting, onEnter]);
 
   return (
-    <div className={`hg-root ${exiting ? 'is-exiting' : ''} ${caps.lowPower ? 'is-lowpower' : ''}`}>
-      {!caps.lowPower && <div className="hg-noise" aria-hidden="true" />}
-      {!caps.lowPower && <div className="hg-scanlines" aria-hidden="true" />}
-      {!caps.lowPower && <div className="hg-vignette" aria-hidden="true" />}
-      <Starfield count={caps.lowPower ? 60 : 200} />
-      <Nav onNavigate={onNavigate} />
-      <main>
-        <Hero webgl={caps.webgl} onEnter={handleEnter} />
-        <Manifesto />
-        <SignalPath pinned={caps.webgl} />
-        <PinnedPipeline pinned={caps.webgl /* same threshold = desktop+motion */} />
-        <ArsenalDeck pinned={caps.webgl} />
-        <div className="hg-post-pipeline">
-          <GameMarquee />
-          <FeatureGrid />
-          <SectionDivider variant="glow" />
-          <LiveDemo />
-          <SectionDivider variant="glow" />
-          <FinalCTA onEnter={handleEnter} exiting={exiting} />
-        </div>
-      </main>
-      <Footer onNavigate={onNavigate} />
-      <div className={`hg-exit-flash ${exiting ? 'is-active' : ''}`} aria-hidden="true" />
-    </div>
+    <CapsContext.Provider value={caps}>
+      <div className={`hg-root ${exiting ? 'is-exiting' : ''} ${caps.lowPower ? 'is-lowpower' : ''}`}>
+        {!caps.lowPower && <div className="hg-noise" aria-hidden="true" />}
+        {!caps.lowPower && <div className="hg-scanlines" aria-hidden="true" />}
+        {!caps.lowPower && <div className="hg-vignette" aria-hidden="true" />}
+        <Starfield count={caps.lowPower ? 60 : 200} />
+        <Nav onNavigate={onNavigate} />
+        <main>
+          <Hero webgl={caps.webgl} onEnter={handleEnter} />
+          <Manifesto />
+          <SignalPath pinned={caps.webgl} />
+          <PinnedPipeline pinned={caps.webgl} />
+          <ArsenalDeck pinned={caps.webgl} />
+          <div className="hg-post-pipeline">
+            <GameMarquee />
+            <FeatureGrid />
+            <SectionDivider variant="glow" />
+            <LiveDemo />
+            <SectionDivider variant="glow" />
+            <FinalCTA onEnter={handleEnter} exiting={exiting} />
+          </div>
+        </main>
+        <Footer onNavigate={onNavigate} />
+        <div className={`hg-exit-flash ${exiting ? 'is-active' : ''}`} aria-hidden="true" />
+      </div>
+    </CapsContext.Provider>
   );
 }

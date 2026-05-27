@@ -18,8 +18,11 @@ export async function submitFeedback({ rating, category, message, screenshotData
     share_id: generateShareId(),
   };
 
-  // Detect placeholder / unconfigured Supabase
-  const isConfigured = !supabase.supabaseUrl?.includes('placeholder.supabase.co');
+  // Detect placeholder / unconfigured Supabase — read directly from the env
+  // var that was used to construct the client. supabase.supabaseUrl is not a
+  // public API on all versions of the JS SDK.
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const isConfigured = supabaseUrl.length > 0 && !supabaseUrl.includes('placeholder.supabase.co');
 
   if (isConfigured) {
     const { data, error } = await supabase

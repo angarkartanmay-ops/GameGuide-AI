@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://gameguide-ai.vercel.app/sitemap.xml

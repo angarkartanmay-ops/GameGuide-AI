@@ -136,7 +136,12 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
           {attachments.map((attachment, index) => (
             <div key={index} className="attachment-preview">
               <img src={attachment.previewUrl} alt={`Attachment ${index + 1}`} />
-              <button className="attachment-remove" onClick={() => removeAttachment(index)}>
+              <button
+                type="button"
+                className="attachment-remove"
+                onClick={() => removeAttachment(index)}
+                aria-label={`Remove attachment ${index + 1}`}
+              >
                 <X size={14} />
               </button>
             </div>
@@ -146,10 +151,12 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
 
       <div className="input-area">
         <button
+          type="button"
           className="upload-btn glass-panel"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading || attachments.length >= 3}
-          title="Attach image (screenshot, error, etc.)"
+          title="Attach image"
+          aria-label="Attach image screenshot or file"
         >
           <Paperclip size={20} />
         </button>
@@ -161,6 +168,8 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
           multiple
           onChange={handleFileSelect}
           style={{ display: 'none' }}
+          aria-label="Upload image file"
+          tabIndex={-1}
         />
 
         <textarea
@@ -189,17 +198,22 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
         {/* Send / Stop button */}
         {isLoading ? (
           <button
+            type="button"
             className="stop-btn glass-panel animate-pulse-stop"
             onClick={handleStop}
             title="Stop generating response"
+            aria-label="Stop generating response"
           >
             <Square size={18} fill="currentColor" />
           </button>
         ) : (
           <button
+            type="button"
             className="send-btn glass-panel"
             onClick={handleSend}
             disabled={(!inputText.trim() && attachments.length === 0) || isLoading}
+            aria-label="Send message"
+            title="Send message"
           >
             <SendHorizonal size={24} />
           </button>

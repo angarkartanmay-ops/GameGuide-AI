@@ -276,6 +276,8 @@ export default function FeedbackModal({ isOpen, onClose, sessionId }) {
                     type="file"
                     accept="image/*"
                     style={{ display: 'none' }}
+                    aria-label="Upload screenshot image file"
+                    tabIndex={-1}
                     onChange={e => handleFileSelect(e.target.files?.[0])}
                   />
                 </div>
