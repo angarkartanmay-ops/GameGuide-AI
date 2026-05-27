@@ -14,6 +14,7 @@ import InfoPage from './components/InfoPage';
 import ThemeTransition, { THEME_TRANSITION_DURATION, VARIANTS as FX_VARIANTS } from './components/ThemeTransition';
 import Crosshair from './components/Crosshair';
 import usePerfMode from './hooks/usePerfMode';
+import FeedbackButton from './components/FeedbackButton';
 
 // Hash-routable static views. Anything outside this set falls back to landing
 // (so a stale or unknown hash never strands the user on a blank page).
@@ -290,6 +291,9 @@ function App() {
         {priceActive && <PriceBadge priceData={priceData} />}
         <ChatInput onSendMessage={sendMessage} onCancel={cancelRequest} isLoading={isLoading} SLASH_COMMANDS={SLASH_COMMANDS} />
       </main>
+
+      {/* Floating feedback button — fixed position, visible in the chat view */}
+      <FeedbackButton sessionId={user?.id || null} />
 
       <footer className="chat-footer">
         <button type="button" onClick={() => navigate('about')}>About</button>

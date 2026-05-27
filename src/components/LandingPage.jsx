@@ -284,7 +284,7 @@ function Hero({ webgl, onEnter }) {
       <div className="hg-hero__bg" aria-hidden="true">
         {webgl ? (
           <Suspense fallback={<div className="hg-hero__fallback" />}>
-            <HoloCanvas tiltRef={tiltRef} dollyRef={dollyRef} active={canvasActive} />
+            <HoloCanvas tiltRef={tiltRef} dollyRef={dollyRef} active={canvasActive} lowPower={caps.lowPower} reduce={caps.reduce} />
           </Suspense>
         ) : (
           <div className="hg-hero__fallback" />
@@ -372,29 +372,40 @@ function Manifesto() {
     'We compute them — live, every query, from six sources.',
     'And we hand them to you in 0.4 seconds.',
   ];
+  const useMotion = !(caps.lowPower || caps.reduce);
   return (
     <section className="hg-manifesto" id="manifesto" aria-label="Manifesto">
-      {lines.map((line, i) => (
-        <motion.div
-          key={i}
-          className="hg-manifesto__row"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.2 }}
-          transition={{ duration: 0.6, delay: i * 0.1 }}
-        >
-          <span className="hg-manifesto__num">0{i + 1}</span>
-          <motion.p
-            className="hg-manifesto__line"
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, amount: 0.2 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.15 + i * 0.12 }}
-          >
-            {line}
-          </motion.p>
-        </motion.div>
-      ))}
+      {lines.map((line, i) => {
+        if (useMotion) {
+          return (
+            <motion.div
+              key={i}
+              className="hg-manifesto__row"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.6, delay: i * 0.1 }}
+            >
+              <span className="hg-manifesto__num">0{i + 1}</span>
+              <motion.p
+                className="hg-manifesto__line"
+                initial={{ opacity: 0, x: -30 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.15 + i * 0.12 }}
+              >
+                {line}
+              </motion.p>
+            </motion.div>
+          );
+        }
+        return (
+          <div key={i} className="hg-manifesto__row" style={{ opacity: 1 }}>
+            <span className="hg-manifesto__num">0{i + 1}</span>
+            <p className="hg-manifesto__line">{line}</p>
+          </div>
+        );
+      })}
     </section>
   );
 }
@@ -413,9 +424,48 @@ function SignalPath({ pinned = true }) {
   const containerRef = useRef(null);
   const orbRef = useRef(null);
   const [activeStep, setActiveStep] = useState(0);
+  const reduce = useReducedMotion();
+  const shouldAnimate = !(reduce || caps.lowPower) && pinned;
 
+  // For low-power devices, we'll use IntersectionObserver instead of GSAP
+  useEffect(() => {
+    if (!pinned || shouldAnimate) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            // Calculate which step based on scroll position
+            const scrollTop = window.pageYOffset;
+            const sectionTop = entry.target.offsetTop;
+            const sectionHeight = entry.target.offsetHeight;
+            const scrollProgress = (scrollTop - sectionTop) / sectionHeight;
+            const step = Math.min(
+              SIGNAL_STEPS.length - 1,
+              Math.max(0, Math.floor(scrollProgress * SIGNAL_STEPS.length))
+            );
+            setActiveStep(step);
+          }
+        });
+      },
+      { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1.0] }
+    );
+
+    const container = containerRef.current;
+    if (container) {
+      observer.observe(container);
+    }
+
+    return () => {
+      if (container) {
+        observer.unobserve(container);
+      }
+    };
+  }, [pinned, reduce, caps.lowPower]);
+
+  // GSAP animation for high-power devices
   useLayoutEffect(() => {
-    if (!pinned) return;
+    if (!pinned || !shouldAnimate) return;
     const ctx = gsap.context(() => {
       const container = containerRef.current;
       if (!container) return;
@@ -446,24 +496,34 @@ function SignalPath({ pinned = true }) {
       );
     }, containerRef);
     return () => ctx.revert();
-  }, [pinned]);
+  }, [pinned, shouldAnimate]);
 
   return (
-    <section className={`hg-signal ${pinned ? '' : 'hg-signal--static'}`} ref={containerRef} aria-label="Signal path">
+    <section className={`hg-signal ${pinned ? '' : 'hg-signal--static'}${
+      reduce || caps.lowPower ? ' hg-signal--lowpower' : ''
+    }`} ref={containerRef} aria-label="Signal path">
       <div className="hg-signal__inner">
         {/* Morphing orb */}
         <div className="hg-signal__orb-wrap">
           <div
             ref={orbRef}
             className="hg-signal__orb"
-            style={{ clipPath: SIGNAL_STEPS[activeStep].morph }}
+            style={{
+              clipPath: SIGNAL_STEPS[activeStep].morph,
+              // Add fallback for low-power - show first step if animations disabled
+              opacity: shouldAnimate ? 1 : 0.8,
+              transform: shouldAnimate ? 'none' : 'scale(0.95)',
+              transition: shouldAnimate
+                ? 'none'
+                : 'opacity 0.3s ease, transform 0.3s ease'
+            }}
           >
             <div className="hg-signal__orb-glow" />
             <span className="hg-signal__orb-label">{String(activeStep + 1).padStart(2, '0')}</span>
           </div>
-          {/* Orbit rings */}
-          <div className="hg-signal__ring hg-signal__ring--1" aria-hidden="true" />
-          <div className="hg-signal__ring hg-signal__ring--2" aria-hidden="true" />
+          {/* Orbit rings - static in low-power mode */}
+          <div className={`hg-signal__ring hg-signal__ring--1${!shouldAnimate ? ' hg-signal-ring-static' : ''}`} aria-hidden="true" />
+          <div className={`hg-signal__ring hg-signal__ring--2${!shouldAnimate ? ' hg-signal-ring-static' : ''}`} aria-hidden="true" />
         </div>
 
         {/* Text reveal */}
@@ -472,7 +532,12 @@ function SignalPath({ pinned = true }) {
           {SIGNAL_STEPS.map((step, i) => (
             <div
               key={i}
-              className={`hg-signal__step ${i === activeStep ? 'is-active' : ''} ${i < activeStep ? 'is-past' : ''}`}
+              className={`
+                hg-signal__step
+                ${shouldAnimate && i === activeStep ? 'is-active' : ''}
+                ${shouldAnimate && i < activeStep ? 'is-past' : ''}
+                ${!shouldAnimate && i === 0 ? 'is-active' : ''} // Show first step as active in low-power
+              `}
             >
               <span className="hg-signal__step-label">{step.label}</span>
               <p className="hg-signal__step-desc">{step.desc}</p>
@@ -481,13 +546,21 @@ function SignalPath({ pinned = true }) {
           {/* Progress dots */}
           <div className="hg-signal__dots">
             {SIGNAL_STEPS.map((_, i) => (
-              <span key={i} className={`hg-signal__dot ${i === activeStep ? 'is-active' : ''} ${i < activeStep ? 'is-past' : ''}`} />
+              <span
+                key={i}
+                className={`
+                  hg-signal__dot
+                  ${shouldAnimate && i === activeStep ? 'is-active' : ''}
+                  ${shouldAnimate && i < activeStep ? 'is-past' : ''}
+                  ${!shouldAnimate && i === 0 ? 'is-active' : ''}
+                `}
+              />
             ))}
           </div>
         </div>
       </div>
-      {/* Connecting beam line */}
-      <div className="hg-signal__beam" aria-hidden="true" />
+      {/* Connecting beam line - static in low-power mode */}
+      <div className={`hg-signal__beam${!shouldAnimate ? ' hg-signal-beam-static' : ''}`} aria-hidden="true" />
     </section>
   );
 }
@@ -1079,18 +1152,30 @@ function LiveDemo() {
   const [revealed, setRevealed] = useState(0);
   const ref = useRef(null);
   const reduce = useReducedMotion();
+  const { lowPower } = useCapability();
+  const shouldAnimate = !(reduce || lowPower);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const io = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && phase === 'idle') setPhase('typing');
-    }, { threshold: 0.35 });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [phase]);
+
+    // For low-power devices, skip the typing animation entirely
+    if (shouldAnimate) {
+      const io = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting && phase === 'idle') setPhase('typing');
+      }, { threshold: 0.35 });
+      io.observe(el);
+      return () => io.disconnect();
+    } else {
+      // Immediately show the full query for low-power devices
+      setTyped(DEMO_QUERY);
+      setPhase('answering');
+    }
+  }, [phase, shouldAnimate]);
 
   useEffect(() => {
+    if (!shouldAnimate) return; // Skip animation effects for low-power
+
     if (reduce && phase === 'typing') {
       setTyped(DEMO_QUERY);
       setPhase('answering');
@@ -1108,17 +1193,20 @@ function LiveDemo() {
       }
     }, 28);
     return () => clearInterval(id);
-  }, [phase, reduce]);
+  }, [phase, reduce, shouldAnimate]);
 
   useEffect(() => {
     if (phase !== 'answering') return;
     if (revealed >= DEMO_RESPONSE_LINES.length) { setPhase('done'); return; }
-    const id = setTimeout(() => setRevealed(r => r + 1), reduce ? 0 : 110);
+
+    // Faster reveal for low-power devices
+    const delay = shouldAnimate ? (reduce ? 0 : 110) : 0;
+    const id = setTimeout(() => setRevealed(r => r + 1), delay);
     return () => clearTimeout(id);
-  }, [phase, revealed, reduce]);
+  }, [phase, revealed, reduce, shouldAnimate]);
 
   return (
-    <section className="hg-demo" id="demo" aria-label="Live demo" ref={ref}>
+    <section className={`hg-demo${!shouldAnimate ? ' hg-demo--lowpower' : ''}`} id="demo" aria-label="Live demo" ref={ref}>
       <div className="hg-section__head">
         <span className="hg-section__kicker">LIVE DEMO</span>
         <h2>Type. Stream. Done.</h2>
@@ -1133,13 +1221,13 @@ function LiveDemo() {
             <span className="hg-demo__label">YOU</span>
             <p>
               {typed}
-              {phase === 'typing' && <span className="hg-caret" />}
+              {!shouldAnimate && phase === 'typing' && <span className="hg-caret" style={{ animation: 'none' }} />}
             </p>
           </div>
           <div className="hg-demo__row hg-demo__row--ai">
             <span className="hg-demo__label">GAMEGUIDE</span>
             <div className="hg-demo__ai-body">
-              {phase === 'thinking' && (
+              {phase === 'thinking' && shouldAnimate && (
                 <div className="hg-demo__think">
                   <span /> <span /> <span />
                 </div>
@@ -1147,7 +1235,15 @@ function LiveDemo() {
               {(phase === 'answering' || phase === 'done') && (
                 <div className="hg-demo__answer">
                   {DEMO_RESPONSE_LINES.slice(0, revealed).map((line, i) => (
-                    <p key={i} className={line.startsWith('Sources') ? 'hg-demo__src' : ''}>
+                    <p
+                      key={i}
+                      className={line.startsWith('Sources') ? 'hg-demo__src' : ''}
+                      style={{
+                        opacity: shouldAnimate ? 1 : 0.9,
+                        transform: shouldAnimate ? 'none' : 'translateY(0)',
+                        transition: shouldAnimate ? 'opacity 0.3s ease' : 'none'
+                      }}
+                    >
                       {renderInline(line)}
                     </p>
                   ))}

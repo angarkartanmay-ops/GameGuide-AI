@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, useSpring, useMotionValue } from 'framer-motion';
+import { motion, useSpring, useMotionValue, useReducedMotion } from 'framer-motion';
 import './Crosshair.css';
 
 /* ============================================================
@@ -33,6 +33,7 @@ export default function Crosshair() {
   // Track the last hovered hot element so pointer events on a child don't
   // re-trigger setHot on every nested pointerover.
   const lastHotRef = useRef(null);
+  const reduce = useReducedMotion();
 
   const x = useMotionValue(-100);
   const y = useMotionValue(-100);
@@ -99,6 +100,19 @@ export default function Crosshair() {
 
   if (!enabled) return null;
 
+  // For low-power devices, disable framer-motion animations entirely
+  const shouldAnimate = !reduce;
+
+  // Static values for low-power mode
+  const staticX = shouldAnimate ? x : useMotionValue(-100);
+  const staticY = shouldAnimate ? y : useMotionValue(-100);
+
+  // Static springs for low-power mode (no animation)
+  const staticIx = shouldAnimate ? ix : useMotionValue(-100);
+  const staticIy = shouldAnimate ? iy : useMotionValue(-100);
+  const staticRx = shouldAnimate ? rx : useMotionValue(-100);
+  const staticRy = shouldAnimate ? ry : useMotionValue(-100);
+
   const stateClass = [
     hot && 'is-hot',
     firing && 'is-firing',
@@ -109,12 +123,12 @@ export default function Crosshair() {
     <>
       <motion.div
         className={`gg-cursor-ring ${stateClass}`}
-        style={{ x: rx, y: ry }}
+        style={{ x: shouldAnimate ? rx : staticRx, y: shouldAnimate ? ry : staticRy }}
         aria-hidden="true"
       />
       <motion.div
         className={`gg-cursor-reticle ${stateClass}`}
-        style={{ x: ix, y: iy }}
+        style={{ x: shouldAnimate ? ix : staticIx, y: shouldAnimate ? iy : staticIy }}
         aria-hidden="true"
       >
         <span className="gg-tick gg-tick--n" />

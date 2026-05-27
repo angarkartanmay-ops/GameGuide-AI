@@ -61,7 +61,20 @@ function CameraRig({ dollyState, initialZ = 4 }) {
   return null;
 }
 
-export default function HoloCanvas({ tiltRef, dollyRef, active = true }) {
+export default function HoloCanvas({ tiltRef, dollyRef, active = true, lowPower = false, reduce = false }) {
+  // For low-power devices, show a static 2D fallback instead of 3D rendering
+  const shouldRender3D = active && !lowPower && !reduce;
+
+  if (!shouldRender3D) {
+    // Return a simple static 2D representation for low-power mode
+    return (
+      <div className="hg-holo-fallback" aria-hidden="true">
+        <div className="hg-holo-glow" />
+        <div className="hg-holo-crystal-static" />
+      </div>
+    );
+  }
+
   // frameloop="never" pauses R3F's internal RAF entirely — no GPU work, no
   // CPU work, until set back to "always". Critical for low-power devices and
   // for everyone once the hero scrolls offscreen.
