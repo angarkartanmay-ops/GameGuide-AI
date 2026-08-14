@@ -67,7 +67,7 @@ function App() {
   // can't keep 48fps so every page can strip heavy effects via CSS.
   usePerfMode();
   const { user, loading: authLoading } = useAuth();
-  const { messages, isLoading, sendMessage, cancelRequest, redditActive, wikiActive, webActive, priceActive, priceData, SLASH_COMMANDS } = useChat(user);
+  const { messages, isLoading, sendMessage, cancelRequest, redditActive, wikiActive, webActive, priceActive, priceData, SLASH_COMMANDS, stealthMode, streamStage } = useChat(user);
 
   const [showLoader, setShowLoader] = useState(true);
   const [exitingLoader, setExitingLoader] = useState(false);
@@ -283,13 +283,27 @@ function App() {
 
       <main className="chat-wrapper">
         
+        {/* Persistent incognito cue. Must stay visible for the whole session —
+            the /stealth confirmation message scrolls away, and a user who
+            can't tell whether they're being recorded has no privacy guarantee. */}
+        {stealthMode && (
+          <div className="stealth-banner" role="status" aria-live="polite">
+            <span className="stealth-banner__icon" aria-hidden="true">🥷</span>
+            <span>
+              <strong>Stealth mode</strong> — this conversation isn&apos;t being saved.
+              Run <code>/stealth</code> to exit and discard it.
+            </span>
+          </div>
+        )}
+
         <ChatContainer
           messages={messages}
           isLoading={isLoading}
+          streamStage={streamStage}
           onFollowUpClick={(question) => sendMessage(question, [])}
         />
         {priceActive && <PriceBadge priceData={priceData} />}
-        <ChatInput onSendMessage={sendMessage} onCancel={cancelRequest} isLoading={isLoading} SLASH_COMMANDS={SLASH_COMMANDS} />
+        <ChatInput onSendMessage={sendMessage} onCancel={cancelRequest} isLoading={isLoading} SLASH_COMMANDS={SLASH_COMMANDS} stealthMode={stealthMode} />
       </main>
 
       {/* Floating feedback button — fixed position, visible in the chat view */}

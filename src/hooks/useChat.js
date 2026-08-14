@@ -1,22 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase, supabaseAnonKey } from '../services/supabaseClient';
-import { generateChatResponse } from '../services/aiProvider';
+import { streamChatResponse } from '../services/aiProvider';
 import { searchReddit } from '../services/redditScraper';
 import { searchWikis } from '../services/wikiScraper';
 import { fetchPriceDirect, fetchPriceSummaryDirect } from '../services/priceScraper';
-
-// Cheap client-side heuristic: does this message warrant Reddit/Wiki scraping?
-// Skip the 2-3s scrape for greetings, meta-questions ("what can you do"), and
-// generic chit-chat. The server's omniscience layer still fires when a real
-// game is detected from text or vision.
-const GAME_INFO_RX = /\b(meta|tier|patch|update|nerf|buff|build|loadout|gear|stat|talent|skill tree|ability|character|class|hero|champion|operator|legend|agent|card|deck|weapon|item|quest|dungeon|raid|boss|level|guide|walkthrough|achievement|trophy|lore|story|backstory|canon|timeline|how (to|do)|how can i|why (does|is)|fix|error|crash|bug|glitch|launch|install|optim|fps|graphics|setting|controller|keybind|mouse|sens|aim|farm|grind|exp|xp|currency|skin|cosmetic|battle pass|season|patch notes|nerfed|buffed|broken|op|underrated)\b/i;
-// Lite list of high-recall game name fragments — extend as needed
-const GAME_NAME_HINTS = /\b(minecraft|valorant|fortnite|elden ring|dark souls|sekiro|bloodborne|gta|rdr|cyberpunk|witcher|skyrim|fallout|destiny|warzone|cod|apex|overwatch|league|lol|dota|cs2|cs:?go|tarkov|rust|terraria|stardew|hollow knight|silksong|hades|baldur|bg3|diablo|poe|wow|ffxiv|ff14|ff7|ff16|persona|metaphor|zelda|botw|totk|pokemon|monster hunter|mh wilds|mh rise|genshin|honkai|wuthering|clash royale|clash of clans|brawl stars|pubg|free fire|mobile legends|wild rift|marvel rivals|black myth|wukong|helldivers|palworld|lethal company|phasmophobia|forza|fifa|fc 25|nba 2k|sea of thieves|dead by daylight|dbd|rainbow six|siege|r6|smite|hearthstone|marvel snap|the finals|delta force|arc raiders)\b/i;
-
-function needsGameContext(text) {
-  if (!text || text.length < 4) return false;
-  return GAME_INFO_RX.test(text) || GAME_NAME_HINTS.test(text);
-}
 
 export default function useChat(user) {
   const [messages, setMessages] = useState([]);
@@ -25,6 +12,17 @@ export default function useChat(user) {
   const [wikiActive, setWikiActive] = useState(false);
   const [webActive, setWebActive] = useState(false);
   const [priceActive, setPriceActive] = useState(false);
+  // Retrieval progress for the current turn ('searching', 'scanning-sources',
+  // 'reading-image', 'generating'...). null when idle or once tokens flow.
+  const [streamStage, setStreamStage] = useState(null);
+
+  // ─── Stealth (incognito) mode ──────────────────────────────────────────────
+  // A throwaway conversation that leaves no trace: nothing is written to
+  // chat_messages, the server skips player-memory writes and request tracing,
+  // and the transcript is destroyed on exit. The persistent conversation is
+  // held aside untouched and restored when stealth ends.
+  const [stealthMode, setStealthMode] = useState(false);
+  const [stealthMessages, setStealthMessages] = useState([]);
   const [priceData, setPriceData] = useState([]);
 
   // ─── Credit-saving refs ────────────────────────────────────────────────────
@@ -78,6 +76,7 @@ export default function useChat(user) {
     setWikiActive(false);
     setWebActive(false);
     setPriceActive(false);
+    setStreamStage(null);
   }, []);
 
   const clearChat = useCallback(async () => {
@@ -121,11 +120,36 @@ export default function useChat(user) {
       },
     },
     {
+      trigger: '/stealth',
+      description: 'Toggle incognito mode — nothing is saved',
+      emoji: '🥷',
+      action: async () => {
+        if (stealthMode) {
+          // Leaving: destroy the throwaway transcript. The persistent
+          // conversation was never touched, so it simply becomes visible again.
+          setStealthMessages([]);
+          setStealthMode(false);
+          return {
+            text: `## 🥷 Stealth mode OFF\n\nThat conversation is gone — it was never written anywhere. Your normal chat is back.`,
+            images: [],
+            isCommand: true,
+          };
+        }
+        setStealthMessages([]);
+        setStealthMode(true);
+        return {
+          text: `## 🥷 Stealth mode ON\n\nThis is a throwaway conversation. While it's active:\n\n- **Nothing is saved** — no chat history, not even for signed-in accounts\n- **Nothing is learned** — your player profile won't be read or updated\n- **Nothing is logged** — no request tracing\n- **Your normal chat is untouched** and waiting when you're done\n\nClosing stealth destroys this transcript permanently. Run \`/stealth\` again to exit.\n\n*Note: rate limits still apply — that's abuse protection, not tracking.*`,
+          images: [],
+          isCommand: true,
+        };
+      },
+    },
+    {
       trigger: '/help',
       description: 'List all available commands',
       emoji: '📖',
       action: async () => ({
-        text: `## 📖 GameGuide-AI Command Reference\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | 🗑️ Wipe your entire chat history |\n| \`/help\` | 📖 Show this command list |\n| \`/tip\` | 💡 Get a random pro gaming tip (live + curated) |\n| \`/redpill\` | 🔴 Unlock a spicy hidden gaming fact (live + curated) |\n| \`/lore\` | 📜 Lore drop on a random iconic game (live + curated) |\n| \`/price <game>\` | 💰 Get live multi-store prices via CheapShark |\n| \`/noclip\` | 👻 Secret glitch mode activated |\n| \`/konami\` | 🎮 Unlock the legendary Konami Easter Egg |\n| \`/loading\` | ⏳ The eternal gamer struggle |`,
+        text: `## 📖 GameGuide-AI Command Reference\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | 🗑️ Wipe your entire chat history |\n| \`/stealth\` | 🥷 Incognito mode — nothing saved, nothing learned |\n| \`/help\` | 📖 Show this command list |\n| \`/tip\` | 💡 Get a random pro gaming tip (live + curated) |\n| \`/redpill\` | 🔴 Unlock a spicy hidden gaming fact (live + curated) |\n| \`/lore\` | 📜 Lore drop on a random iconic game (live + curated) |\n| \`/price <game>\` | 💰 Get live multi-store prices via CheapShark |\n| \`/noclip\` | 👻 Secret glitch mode activated |\n| \`/konami\` | 🎮 Unlock the legendary Konami Easter Egg |\n| \`/loading\` | ⏳ The eternal gamer struggle |`,
         images: [],
         isCommand: true,
       }),
@@ -660,7 +684,13 @@ export default function useChat(user) {
         };
       },
     },
-  ], [clearChat]);
+  ], [clearChat, stealthMode]);
+
+  // Routes reads and writes to whichever transcript is active. Deriving these
+  // once (rather than branching at each call site) keeps every path correct as
+  // new commands are added.
+  const activeMessages = stealthMode ? stealthMessages : messages;
+  const setActiveMessages = stealthMode ? setStealthMessages : setMessages;
 
   const processCommand = async (text) => {
     const trimmed = text.trim().toLowerCase();
@@ -677,7 +707,17 @@ export default function useChat(user) {
       images: result.images || [],
       isCommand: true,
     };
-    setMessages(prev => [...prev, cmdMessage]);
+    // /stealth itself flips the mode, so re-read it rather than using the
+    // value captured when this render started — otherwise the confirmation
+    // lands in the transcript we just switched away from.
+    const target = cmd.trigger === '/stealth' ? setStealthMessages : setActiveMessages;
+    if (cmd.trigger === '/stealth') {
+      // Entering: show the banner in the stealth transcript. Leaving: the
+      // stealth transcript is already discarded, so it belongs in the normal one.
+      (stealthMode ? setMessages : setStealthMessages)(prev => [...prev, cmdMessage]);
+    } else {
+      target(prev => [...prev, cmdMessage]);
+    }
     return true;
   };
 
@@ -714,9 +754,9 @@ export default function useChat(user) {
 
     lastMessageRef.current = text.trim(); // record for duplicate guard
 
-    setMessages((prev) => [...prev, userMessage]);
+    setActiveMessages((prev) => [...prev, userMessage]);
     
-    if (user) {
+    if (user && !stealthMode) {
       // Background sync, no await needed here for UX speed
       supabase.from('chat_messages').insert({
         user_id: user.id,
@@ -733,6 +773,7 @@ export default function useChat(user) {
     setWikiActive(false);
     setWebActive(false);
     setPriceActive(false);
+    setStreamStage(null);
     setPriceData([]);
 
     // Create a new AbortController for this request
@@ -754,9 +795,9 @@ export default function useChat(user) {
       let wikiContext = '';
       const priceContext = ''; // /price command handles this exclusively now
 
-      // Always run client-side scraping — the post-generation recheck gate
-      // on the server ensures off-topic queries are refused after full context
-      // gathering, so we no longer pre-filter here.
+      // Always run client-side scraping. Scope is handled conversationally by
+      // the model itself now — there is no pre-filter here and no refusal gate
+      // on the server, so every message gets full context gathering.
       const [redditResult, wikiResult] = await Promise.allSettled([
         searchReddit(text),
         searchWikis(text),
@@ -771,11 +812,53 @@ export default function useChat(user) {
         setWikiActive(true);
       }
 
-      // Step 2: Call AI with all gathered context + attachments
-      const aiResponse = await generateChatResponse(
-        null, text, messages, redditContext, wikiContext, attachments, priceContext,
-        controller.signal  // ← pass abort signal
-      );
+      // Step 2: Call AI with all gathered context + attachments.
+      // Streamed so the retrieval phase (live search, scraping, OCR) shows
+      // real progress instead of a blank spinner, and tokens render as they
+      // generate rather than after the whole answer completes.
+      const aiMessageId = (Date.now() + 1).toString();
+      let placeholderAdded = false;
+
+      const upsertAiMessage = (patch) => {
+        setActiveMessages((prev) => {
+          const idx = prev.findIndex((m) => m.id === aiMessageId);
+          if (idx === -1) return prev;
+          const next = [...prev];
+          next[idx] = { ...next[idx], ...patch };
+          return next;
+        });
+      };
+
+      const aiResponse = await streamChatResponse(text, activeMessages, {
+        redditContext,
+        wikiContext,
+        priceContext,
+        attachments,
+        signal: controller.signal,
+        ephemeral: stealthMode,
+        onStage: (stageName, detail) => {
+          setStreamStage(detail ? `${stageName}:${detail}` : stageName);
+        },
+        onDelta: (chunk) => {
+          if (!placeholderAdded) {
+            placeholderAdded = true;
+            setStreamStage(null);
+            setActiveMessages((prev) => [...prev, {
+              id: aiMessageId, text: chunk, sender: 'ai', images: [], meta: null, streaming: true,
+            }]);
+            return;
+          }
+          setActiveMessages((prev) => {
+            const idx = prev.findIndex((m) => m.id === aiMessageId);
+            if (idx === -1) return prev;
+            const next = [...prev];
+            next[idx] = { ...next[idx], text: next[idx].text + chunk };
+            return next;
+          });
+        },
+      });
+
+      setStreamStage(null);
 
       // Light up the Web Intel badge if the edge function's omni / pulse pipeline
       // pulled in live web-search results for this turn.
@@ -783,21 +866,29 @@ export default function useChat(user) {
         setWebActive(true);
       }
 
-      // AI response is now { text, images, meta }
+      const aiImages = (aiResponse.images || []).map(img => ({
+        previewUrl: `data:${img.mimeType};base64,${img.data}`,
+        mimeType: img.mimeType,
+      }));
+
       const aiMessage = {
-        id: (Date.now() + 1).toString(),
+        id: aiMessageId,
         text: aiResponse.text,
         sender: 'ai',
-        images: (aiResponse.images || []).map(img => ({
-          previewUrl: `data:${img.mimeType};base64,${img.data}`,
-          mimeType: img.mimeType,
-        })),
+        images: aiImages,
         meta: aiResponse.meta || null,
       };
 
-      setMessages((prev) => [...prev, aiMessage]);
+      // The server post-processes the full response (follow-up chips,
+      // uncertainty scrubbing), so the final text supersedes the streamed
+      // deltas. Replace in place when we streamed; append when we didn't.
+      if (placeholderAdded) {
+        upsertAiMessage({ ...aiMessage, streaming: false });
+      } else {
+        setActiveMessages((prev) => [...prev, aiMessage]);
+      }
 
-      if (user) {
+      if (user && !stealthMode) {
         supabase.from('chat_messages').insert({
           user_id: user.id,
           text: aiMessage.text,
@@ -818,9 +909,9 @@ export default function useChat(user) {
         sender: 'ai',
         images: [],
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      setActiveMessages((prev) => [...prev, errorMessage]);
 
-      if (user) {
+      if (user && !stealthMode) {
         supabase.from('chat_messages').insert({
           user_id: user.id,
           text: errorMessage.text,
@@ -835,8 +926,10 @@ export default function useChat(user) {
   };
 
   return {
-    messages,
+    messages: activeMessages,
+    stealthMode,
     isLoading,
+    streamStage,
     sendMessage,
     cancelRequest,
     clearChat,

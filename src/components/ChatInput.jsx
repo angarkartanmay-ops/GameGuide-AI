@@ -4,7 +4,7 @@ import { preprocessImage } from '../utils/imagePreprocess';
 
 const MAX_CHARS = 1500; // warn above this threshold
 
-export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_COMMANDS = [] }) {
+export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_COMMANDS = [], stealthMode = false }) {
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState([]);
   const [showCommands, setShowCommands] = useState(false);
@@ -180,7 +180,11 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
               ? 'Generating response... (press Stop to cancel)'
               : attachments.length > 0
                 ? 'Describe what you need help with, or just send the image...'
-                : 'Ask anything about games, lore, or technical issues... (try /help)'
+                : stealthMode
+                  // Reinforce the incognito cue at the point of typing — the
+                  // banner can scroll out of view, this never does.
+                  ? '🥷 Stealth mode — nothing here is saved...'
+                  : 'Ask anything about games, lore, or technical issues... (try /help)'
           }
           value={inputText}
           onChange={handleInputChange}

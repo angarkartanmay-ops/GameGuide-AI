@@ -782,6 +782,48 @@
   animation: bounce 1.4s infinite ease-in-out both;
 }
 
+/* Names the retrieval stage while the pipeline searches, scrapes and OCRs —
+   several seconds that would otherwise read as a dead spinner. */
+.loading-stage {
+  display: inline-block;
+  padding: 0 1rem 1rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Persistent incognito cue. Deliberately loud: a user who can't tell whether
+   the conversation is being recorded has no privacy guarantee. */
+.stealth-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border: 1px dashed rgba(var(--accent-rgb), 0.55);
+  border-radius: 10px;
+  background: rgba(var(--accent-rgb), 0.07);
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.stealth-banner strong {
+  color: var(--text-primary);
+}
+
+.stealth-banner code {
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: rgba(var(--accent-rgb), 0.14);
+  font-size: 0.85em;
+}
+
+.stealth-banner__icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
 .loading-dot:nth-child(1) {
   animation-delay: -0.32s;
 }
