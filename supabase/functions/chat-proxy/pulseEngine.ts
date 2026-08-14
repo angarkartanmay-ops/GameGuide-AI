@@ -115,8 +115,10 @@ export async function runPulse(
   console.log(`[PULSE] Firing ${uniqueQueries.length} web searches: ${uniqueQueries.map(q => `"${q.slice(0, 60)}"`).join(', ')}`);
 
   // Fire all searches in parallel
+  // Recency clamping only for temporal queries. Evergreen questions need the
+  // full index — the best lore/build/boss guides are often years old.
   const searchResults = await Promise.allSettled(
-    uniqueQueries.slice(0, 4).map(q => multiWebSearch(q, 6))
+    uniqueQueries.slice(0, 4).map(q => multiWebSearch(q, 6, isTemporal))
   );
 
   // Collect all hits, dedup by URL

@@ -35,13 +35,17 @@ async function fetchTimeout(url: string, init: RequestInit, ms: number): Promise
 }
 
 // ── Google Custom Search Engine (most reliable, 100 free queries/day) ────
-export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000): Promise<SearchHit[]> {
+export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000, recent = false): Promise<SearchHit[]> {
   const apiKey = Deno.env.get('GOOGLE_CSE_API_KEY') || Deno.env.get('GOOGLE_API_KEY');
   const cseId = Deno.env.get('GOOGLE_CSE_ID');
   if (!apiKey || !cseId) return [];
 
   try {
-    const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cseId}&q=${encodeURIComponent(query)}&num=${Math.min(limit, 10)}&dateRestrict=m3`;
+    // Only clamp to a recency window for genuinely temporal queries. Evergreen
+    // gaming questions (lore, boss guides, builds for older titles) have their
+    // best sources well outside a 3-month window — clamping them returns nothing.
+    const dateParam = recent ? '&dateRestrict=m6' : '';
+    const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cseId}&q=${encodeURIComponent(query)}&num=${Math.min(limit, 10)}${dateParam}`;
     const res = await fetchTimeout(url, {
       headers: { 'Accept': 'application/json' },
     }, timeoutMs);
@@ -61,7 +65,7 @@ export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000
 }
 
 // ── Serper.dev (Google SERP API, 2500 free/month) ────────────────────────
-export async function serperSearch(query: string, limit = 6, timeoutMs = 5000): Promise<SearchHit[]> {
+export async function serperSearch(query: string, limit = 6, timeoutMs = 5000, recent = false): Promise<SearchHit[]> {
   const key = Deno.env.get('SERPER_API_KEY');
   if (!key) return [];
 
@@ -75,7 +79,8 @@ export async function serperSearch(query: string, limit = 6, timeoutMs = 5000): 
       body: JSON.stringify({
         q: query,
         num: limit,
-        tbs: 'qdr:m3', // last 3 months
+        // Recency window only for temporal queries — see googleCSESearch note.
+        ...(recent ? { tbs: 'qdr:m6' } : {}),
       }),
     }, timeoutMs);
     if (!res.ok) return [];
@@ -125,11 +130,12 @@ export async function serperSearch(query: string, limit = 6, timeoutMs = 5000): 
   }
 }
 
-export async function searxngSearch(query: string, limit = 6, timeoutMs = 4500): Promise<SearchHit[]> {
+export async function searxngSearch(query: string, limit = 6, timeoutMs = 4500, recent = false): Promise<SearchHit[]> {
   const instances = [...SEARXNG_INSTANCES].sort(() => Math.random() - 0.5);
   for (const base of instances) {
     try {
-      const url = `${base}/search?q=${encodeURIComponent(query)}&format=json&language=en&safesearch=0&time_range=month`;
+      const timeParam = recent ? '&time_range=year' : '';
+      const url = `${base}/search?q=${encodeURIComponent(query)}&format=json&language=en&safesearch=0${timeParam}`;
       const res = await fetchTimeout(url, {
         headers: { 'User-Agent': 'GameGuide-AI/1.0 (free-tier search)' },
       }, timeoutMs);
@@ -151,10 +157,11 @@ export async function searxngSearch(query: string, limit = 6, timeoutMs = 4500):
   return [];
 }
 
-export async function duckduckgoSearch(query: string, limit = 6, timeoutMs = 4500): Promise<SearchHit[]> {
+export async function duckduckgoSearch(query: string, limit = 6, timeoutMs = 4500, recent = false): Promise<SearchHit[]> {
+  const dfParam = recent ? '&df=y' : '';
   try {
     // Use DuckDuckGo Lite which is more stable for parsing
-    const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}&kl=us-en&df=m`;
+    const url = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}&kl=us-en${dfParam}`;
     const res = await fetchTimeout(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
     }, timeoutMs);
@@ -190,7 +197,7 @@ export async function duckduckgoSearch(query: string, limit = 6, timeoutMs = 450
 
     // Fallback: try the standard HTML version if Lite returned nothing
     if (hits.length === 0) {
-      const url2 = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=us-en&df=m`;
+      const url2 = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}&kl=us-en${dfParam}`;
       const res2 = await fetchTimeout(url2, {
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; GameGuide-AI/1.0)' },
       }, timeoutMs);
@@ -215,11 +222,12 @@ export async function duckduckgoSearch(query: string, limit = 6, timeoutMs = 450
   }
 }
 
-export async function braveSearch(query: string, limit = 6, timeoutMs = 4500): Promise<SearchHit[]> {
+export async function braveSearch(query: string, limit = 6, timeoutMs = 4500, recent = false): Promise<SearchHit[]> {
   const key = Deno.env.get('BRAVE_SEARCH_API_KEY');
   if (!key) return [];
   try {
-    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${limit}&freshness=pm`;
+    const freshParam = recent ? '&freshness=py' : '';
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${limit}${freshParam}`;
     const res = await fetchTimeout(url, {
       headers: { 'X-Subscription-Token': key, 'Accept': 'application/json' },
     }, timeoutMs);
@@ -244,14 +252,16 @@ export async function braveSearch(query: string, limit = 6, timeoutMs = 4500): P
  *
  * Returns deduplicated results prioritizing paid/reliable sources.
  */
-export async function multiWebSearch(query: string, limit = 8): Promise<SearchHit[]> {
-  // Fire ALL sources in parallel — take the best results from whichever responds
+export async function multiWebSearch(query: string, limit = 8, recent = false): Promise<SearchHit[]> {
+  // Fire ALL sources in parallel — take the best results from whichever responds.
+  // `recent` narrows each backend to a recency window; leave it false for
+  // evergreen queries so older-but-authoritative guides stay reachable.
   const [gcse, serp, brv, sx, ddg] = await Promise.allSettled([
-    googleCSESearch(query, limit),
-    serperSearch(query, limit),
-    braveSearch(query, limit),
-    searxngSearch(query, limit),
-    duckduckgoSearch(query, limit),
+    googleCSESearch(query, limit, undefined, recent),
+    serperSearch(query, limit, undefined, recent),
+    braveSearch(query, limit, undefined, recent),
+    searxngSearch(query, limit, undefined, recent),
+    duckduckgoSearch(query, limit, undefined, recent),
   ]);
 
   // Priority order: Google CSE > Serper > Brave > SearXNG > DDG
