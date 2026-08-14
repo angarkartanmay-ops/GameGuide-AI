@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { buildFandomUrl } from './api/_wikiTarget.js'
 
 // Custom Vite plugin to proxy Fandom wiki API requests dynamically
 // Each game has its own subdomain (e.g., zelda.fandom.com), so we
@@ -21,9 +22,19 @@ function fandomProxyPlugin() {
             return;
           }
 
-          const fandomUrl = `https://${game}.fandom.com/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=5&format=json`;
+          // `game` lands in the URL hostname — validate before assembling (SSRF).
+          const fandomUrl = buildFandomUrl(game, {
+            action: 'opensearch', search: query, limit: 5, format: 'json',
+          });
+          if (!fandomUrl) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Invalid game parameter' }));
+            return;
+          }
           const response = await fetch(fandomUrl, {
-            headers: { 'User-Agent': 'GameGuide-AI/1.0 (educational project)' }
+            headers: { 'User-Agent': 'GameGuide-AI/1.0 (educational project)' },
+            redirect: 'error',
+            signal: AbortSignal.timeout(8000),
           });
           const data = await response.text();
 
@@ -49,9 +60,20 @@ function fandomProxyPlugin() {
             return;
           }
 
-          const fandomUrl = `https://${game}.fandom.com/api.php?action=query&titles=${encodeURIComponent(title)}&prop=extracts&exintro=false&explaintext=true&exsectionformat=plain&format=json`;
+          // `game` lands in the URL hostname — validate before assembling (SSRF).
+          const fandomUrl = buildFandomUrl(game, {
+            action: 'query', titles: title, prop: 'extracts', exintro: false,
+            explaintext: true, exsectionformat: 'plain', format: 'json',
+          });
+          if (!fandomUrl) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'Invalid game parameter' }));
+            return;
+          }
           const response = await fetch(fandomUrl, {
-            headers: { 'User-Agent': 'GameGuide-AI/1.0 (educational project)' }
+            headers: { 'User-Agent': 'GameGuide-AI/1.0 (educational project)' },
+            redirect: 'error',
+            signal: AbortSignal.timeout(8000),
           });
           const data = await response.text();
 
