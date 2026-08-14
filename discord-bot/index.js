@@ -40,6 +40,10 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY; // for bot-side writes
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
+// Shared secret proving requests come from this bot, so chat-proxy rate-limits
+// per Discord user instead of lumping the whole bot into one IP bucket.
+// Must match BOT_SERVICE_TOKEN in the edge function's secrets.
+const BOT_SERVICE_TOKEN = process.env.BOT_SERVICE_TOKEN || '';
 const PREMIUM_USER_IDS = (process.env.PREMIUM_USER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
 const PREMIUM_GUILD_IDS = (process.env.PREMIUM_GUILD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
 const PATREON_URL = process.env.PATREON_URL || '';
@@ -334,37 +338,83 @@ function decorateWithAffiliate(text) {
   return out;
 }
 
+// Must mirror the server's allowlist in chat-proxy/index.ts. A type the server
+// rejects is dropped SILENTLY there, and the model then answers "Analyze this
+// image." with no image attached — a confidently wrong reply and no error. Fail
+// here instead, where we can tell the user why.
+const PROXY_ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const PROXY_MAX_BASE64 = 8_000_000;
+
+/**
+ * @returns {{mimeType,data}|{error:string}|null}
+ * An `error` result is surfaced to the user; null means "not an image, ignore".
+ */
 async function fetchAttachmentAsBase64(att) {
-  if (!att.contentType || !att.contentType.startsWith('image/')) return null;
-  if (att.size > 8 * 1024 * 1024) return null;
+  if (!att.contentType) return null;
+  const mime = att.contentType.split(';')[0].trim().toLowerCase();
+  if (!mime.startsWith('image/')) return null;
+  if (!PROXY_ALLOWED_MIME.has(mime)) {
+    return { error: `\`${att.name || 'image'}\` is ${mime}, which isn't supported. Re-upload as PNG or JPEG.` };
+  }
   try {
     const res = await fetch(att.url);
-    if (!res.ok) return null;
+    if (!res.ok) return { error: `Couldn't download \`${att.name || 'image'}\`.` };
     const buf = Buffer.from(await res.arrayBuffer());
-    return { mimeType: att.contentType, data: buf.toString('base64') };
+    const data = buf.toString('base64');
+    // Check the ENCODED length: base64 inflates by ~1.37x, so an 8MB raw file
+    // becomes ~11MB and is rejected server-side after passing a raw-size check.
+    if (data.length >= PROXY_MAX_BASE64) {
+      return { error: `\`${att.name || 'image'}\` is too large (max ~5.8MB). Try a smaller screenshot.` };
+    }
+    return { mimeType: mime, data };
   } catch {
-    return null;
+    return { error: `Couldn't read \`${att.name || 'image'}\`.` };
   }
 }
 
-async function callChatProxy({ prompt, history, attachments }) {
+async function callChatProxy({ prompt, history, attachments, discordUserId }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PROXY_TIMEOUT_MS);
   try {
+    const headers = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      'apikey': SUPABASE_ANON_KEY,
+    };
+    // Identifies this caller as the trusted bot so the server rate-limits per
+    // Discord user. Without it every user shares one IP bucket (40/hour for
+    // the entire bot across all guilds).
+    if (BOT_SERVICE_TOKEN && discordUserId) {
+      headers['X-GG-Bot-Token'] = BOT_SERVICE_TOKEN;
+      headers['X-GG-Bot-User'] = String(discordUserId);
+    }
+
     const res = await fetch(CHAT_PROXY_URL, {
       method: 'POST',
       signal: ctrl.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'apikey': SUPABASE_ANON_KEY,
-      },
+      headers,
       body: JSON.stringify({
         prompt,
         chatHistory: history,
         attachments: attachments || [],
       }),
     });
+
+    // Rate limited — the server tells us the real wait; honour it instead of
+    // guessing. The scopes are 60s, 900s and 3600s, so the old blanket
+    // "wait 15-30 seconds" sent users retrying into a wall for an hour.
+    if (res.status === 429) {
+      const body = await res.json().catch(() => ({}));
+      const retryAfter = Number(res.headers.get('Retry-After'))
+        || body?._meta?.retryAfter
+        || 60;
+      const err = new Error(`RATE_LIMITED:${retryAfter}`);
+      err.rateLimited = true;
+      err.retryAfter = retryAfter;
+      err.scope = body?._meta?.scope || null;
+      throw err;
+    }
+
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
       throw new Error(`HTTP ${res.status} ${res.statusText}: ${errText.slice(0, 200)}`);
@@ -380,20 +430,37 @@ async function callChatProxy({ prompt, history, attachments }) {
   }
 }
 
-async function sendLongResponse(replyTarget, text, footer = '') {
+/** Human-readable wait, e.g. 3600 -> "about an hour". */
+function formatWait(seconds) {
+  if (seconds >= 3600) {
+    const h = Math.round(seconds / 3600);
+    return h === 1 ? 'about an hour' : `about ${h} hours`;
+  }
+  if (seconds >= 60) {
+    const m = Math.round(seconds / 60);
+    return m === 1 ? 'about a minute' : `about ${m} minutes`;
+  }
+  return `${Math.max(5, Math.round(seconds))} seconds`;
+}
+
+async function sendLongResponse(replyTarget, text, footer = '', files = []) {
   const finalText = footer ? `${text}\n\n${footer}` : text;
   const chunks = splitForDiscord(finalText);
   if (chunks.length === 0) {
-    if (replyTarget.editReply) return replyTarget.editReply('*(empty response)*');
-    if (replyTarget.reply) return replyTarget.reply('*(empty response)*');
-    return replyTarget.send('*(empty response)*');
+    // An image-only reply has no text but is not empty — send the pictures.
+    const empty = files.length ? { content: '', files } : { content: '*(empty response)*' };
+    if (replyTarget.editReply) return replyTarget.editReply(empty);
+    if (replyTarget.reply) return replyTarget.reply(empty);
+    return replyTarget.send(empty);
   }
+  // Attach files to the first message so they appear alongside the answer.
+  const first = files.length ? { content: chunks[0], files } : { content: chunks[0] };
   if (replyTarget.editReply) {
-    await replyTarget.editReply({ content: chunks[0] });
+    await replyTarget.editReply(first);
   } else if (replyTarget.reply) {
-    await replyTarget.reply({ content: chunks[0], allowedMentions: { repliedUser: false } });
+    await replyTarget.reply({ ...first, allowedMentions: { repliedUser: false } });
   } else {
-    await replyTarget.send(chunks[0]);
+    await replyTarget.send(first);
   }
   for (let i = 1; i < chunks.length; i++) {
     if (replyTarget.followUp) await replyTarget.followUp({ content: chunks[i] });
@@ -402,6 +469,12 @@ async function sendLongResponse(replyTarget, text, footer = '') {
 }
 
 function userFacingError(err) {
+  // Server-driven rate limit — quote the real wait rather than a guess.
+  if (err?.rateLimited) {
+    const wait = formatWait(err.retryAfter || 60);
+    const scope = err.scope ? ` (${err.scope} limit)` : '';
+    return `⏳ **Slow down a sec${scope}.** Try again in ${wait}.`;
+  }
   const msg = (err.message || String(err)).toLowerCase();
   if (msg.includes('timeout')) return '⏱️ **The Neural Net is taking longer than expected.** Try again in a few seconds.';
   if (msg.includes('429') || msg.includes('rate')) return '⚠️ **API rate limit reached.** Please wait 15–30 seconds.';
@@ -444,7 +517,7 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
 
   try {
     const history = await getHistory(userId);
-    const data = await callChatProxy({ prompt: cleaned, history, attachments });
+    const data = await callChatProxy({ prompt: cleaned, history, attachments, discordUserId: userId });
 
     // Persist history + bump stats (fire-and-forget)
     pushHistory(userId, guildId, 'user', cleaned).catch(() => {});
@@ -461,7 +534,18 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
 
     // Apply affiliate decoration when CheapShark / store URLs appear
     const decorated = decorateWithAffiliate(data.text);
-    await sendLongResponse(replyTarget, decorated, sourceLine);
+
+    // The image-generation path returns pictures in `images[]`. Dropping them
+    // left users with a bare "🎨 Done!" and nothing to look at.
+    const files = (data.images || [])
+      .filter(img => img?.data && img?.mimeType)
+      .slice(0, 4)
+      .map((img, i) => ({
+        attachment: Buffer.from(img.data, 'base64'),
+        name: `gameguide-${Date.now()}-${i}.${(img.mimeType.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '')}`,
+      }));
+
+    await sendLongResponse(replyTarget, decorated, sourceLine, files);
   } catch (err) {
     console.error(`[chat-proxy] user=${userId}:`, err.message);
     const friendly = userFacingError(err);
@@ -505,12 +589,24 @@ client.on('messageCreate', async (message) => {
   if (!prompt && !hasAttachments) return;
 
   const attachments = [];
+  const attachmentErrors = [];
   if (hasAttachments) {
     for (const att of message.attachments.values()) {
       const enc = await fetchAttachmentAsBase64(att);
-      if (enc) attachments.push(enc);
+      if (!enc) continue;                       // not an image — ignore silently
+      if (enc.error) { attachmentErrors.push(enc.error); continue; }
+      attachments.push(enc);
       if (attachments.length >= 3) break;
     }
+  }
+  // Say why an image was dropped instead of answering blind about a picture
+  // the model never received.
+  if (attachmentErrors.length && attachments.length === 0) {
+    await message.reply({
+      content: `⚠️ ${attachmentErrors[0]}`,
+      allowedMentions: { repliedUser: false },
+    }).catch(() => {});
+    return;
   }
 
   await handleChatRequest({
@@ -542,6 +638,10 @@ client.on('interactionCreate', async (interaction) => {
         const attachments = [];
         if (imageOpt) {
           const enc = await fetchAttachmentAsBase64(imageOpt);
+          if (enc?.error) {
+            // Don't answer blind about an image the model never received.
+            return interaction.editReply(`⚠️ ${enc.error}`);
+          }
           if (enc) attachments.push(enc);
         }
         return handleChatRequest({
