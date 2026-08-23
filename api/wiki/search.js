@@ -1,4 +1,4 @@
-import { buildFandomUrl } from '../_wikiTarget.js';
+import { buildFandomUrl, isAllowedOrigin } from '../_wikiTarget.js';
 
 export default async function handler(req, res) {
   // Scoped to the app's own origins. This route proxies outbound fetches, so a
@@ -45,18 +45,5 @@ export default async function handler(req, res) {
     // Don't echo internal error detail back to the caller.
     console.error('[wiki/search]', err);
     res.status(502).json({ error: 'Upstream wiki lookup failed' });
-  }
-}
-
-function isAllowedOrigin(origin) {
-  try {
-    const { hostname, protocol } = new URL(origin);
-    if (protocol !== 'https:' && hostname !== 'localhost' && hostname !== '127.0.0.1') return false;
-    return hostname === 'localhost'
-      || hostname === '127.0.0.1'
-      || hostname === 'gameguide-ai.vercel.app'
-      || hostname.endsWith('.vercel.app');
-  } catch {
-    return false;
   }
 }

@@ -58,3 +58,41 @@ export function buildFandomUrl(game, params) {
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   return url.toString();
 }
+
+// ── CORS ───────────────────────────────────────────────────────────────────
+//  These routes make outbound fetches on the caller's behalf, so the origin
+//  allowlist is a real control, not a formality.
+//
+//  `hostname.endsWith('.vercel.app')` is NOT an allowlist: vercel.app is a
+//  public suffix, so anyone can deploy `evil.vercel.app` for free and would be
+//  trusted by that check. Match exact hosts instead, and let additional
+//  origins (preview deployments, a custom domain) be added deliberately via
+//  the ALLOWED_ORIGINS env var as a comma-separated list of hostnames.
+const DEFAULT_ALLOWED_HOSTS = new Set([
+  'gameguide-ai.vercel.app',
+  'localhost',
+  '127.0.0.1',
+]);
+
+function allowedHosts() {
+  const extra = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+  return new Set([...DEFAULT_ALLOWED_HOSTS, ...extra]);
+}
+
+/** @returns {boolean} whether `origin` may receive CORS headers. */
+export function isAllowedOrigin(origin) {
+  if (typeof origin !== 'string' || !origin) return false;
+  try {
+    const { hostname, protocol } = new URL(origin);
+    const host = hostname.toLowerCase();
+    const isLocal = host === 'localhost' || host === '127.0.0.1';
+    // Everything but local dev must be HTTPS.
+    if (protocol !== 'https:' && !(isLocal && protocol === 'http:')) return false;
+    return allowedHosts().has(host);
+  } catch {
+    return false;
+  }
+}
