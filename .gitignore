@@ -31,3 +31,6 @@ supabase/.env
 
 # generated test fixtures
 tests/.generated/
+
+# graphify knowledge graph (regenerate with: graphify .)
+graphify-out/
