@@ -1,0 +1,151 @@
+{
+  "_comment": "Golden set for the retrieval/routing layer. These assert on PIPELINE behaviour that is deterministic and checkable offline (did we detect the game? will we scrape? does the answer trip a hallucination guard?), NOT on LLM prose, which is not reproducible. Live answer quality is measured separately by tests/eval/live.mjs against a deployed endpoint.",
+  "cases": [
+    {
+      "id": "recent-2026-release",
+      "prompt": "What are the recent reviews about 007 First Light? How long ago did it release?",
+      "expectGame": "007 first light",
+      "mustScrape": true,
+      "note": "The reported failure: released 2026-05-27, bot claimed it did not exist."
+    },
+    {
+      "id": "followup-clarify",
+      "prompt": "Yeah I meant James Bond's game, First Light",
+      "mustScrape": true,
+      "note": "Terse clarification must still retrieve, not reset context."
+    },
+    {
+      "id": "digit-title",
+      "prompt": "is 7 Days to Die still worth playing in 2026",
+      "expectGame": "7 days to die",
+      "mustScrape": true
+    },
+    {
+      "id": "colon-title",
+      "prompt": "tell me about \"Clair Obscur: Expedition 33\"",
+      "expectGame": "clair obscur: expedition 33",
+      "mustScrape": true
+    },
+    {
+      "id": "installment-number",
+      "prompt": "But This is from forza horizon 6.",
+      "expectGame": "forza horizon 6",
+      "mustScrape": true,
+      "note": "Installment must survive; searching 'forza horizon' returns the wrong game."
+    },
+    {
+      "id": "known-allowlist",
+      "prompt": "whats the best strength build in elden ring",
+      "expectGame": "elden ring",
+      "mustScrape": true
+    },
+    {
+      "id": "meta-current-patch",
+      "prompt": "what is the current valorant meta this patch",
+      "expectGame": "valorant",
+      "mustScrape": true
+    },
+    {
+      "id": "lore-deep",
+      "prompt": "explain the ending of Hollow Knight Silksong",
+      "expectGame": "hollow knight silksong",
+      "mustScrape": true
+    },
+    {
+      "id": "troubleshoot-crash",
+      "prompt": "cyberpunk 2077 keeps crashing on launch after the latest driver update",
+      "expectGame": "cyberpunk 2077",
+      "mustScrape": true
+    },
+    {
+      "id": "hardware-advice",
+      "prompt": "will a 3060 handle 1440p in Baldur's Gate 3",
+      "expectGame": "baldur's gate 3",
+      "mustScrape": true
+    },
+    {
+      "id": "comparison",
+      "prompt": "is Helldivers 2 better than Deep Rock Galactic",
+      "expectGame": "helldivers 2",
+      "mustScrape": true
+    },
+    {
+      "id": "unknown-niche-title",
+      "prompt": "how do I beat the second boss in Nine Sols",
+      "expectGame": "nine sols",
+      "mustScrape": true,
+      "note": "Not in the allowlist; extractor must recover it."
+    },
+    {
+      "id": "emotional-burnout",
+      "prompt": "I'm completely burnt out on ranked and I don't enjoy playing anymore",
+      "expectGame": null,
+      "mustScrape": false,
+      "skipFollowUps": true
+    },
+    {
+      "id": "emotional-postgame",
+      "prompt": "I just finished Outer Wilds and I feel really weird about it",
+      "expectGame": null,
+      "skipFollowUps": true
+    },
+    {
+      "id": "chitchat",
+      "prompt": "thanks!",
+      "expectGame": null,
+      "mustScrape": false
+    },
+    {
+      "id": "greeting",
+      "prompt": "hey",
+      "expectGame": null,
+      "mustScrape": false
+    },
+    {
+      "id": "correction-flat",
+      "prompt": "no that's wrong",
+      "expectGame": null,
+      "isCorrection": true
+    },
+    {
+      "id": "correction-with-title",
+      "prompt": "actually it's Silksong not Hollow Knight",
+      "isCorrection": true
+    },
+    {
+      "id": "vague-tech",
+      "prompt": "how do I fix my fps",
+      "expectGame": null
+    },
+    {
+      "id": "price-check",
+      "prompt": "is Elden Ring on sale anywhere right now",
+      "expectGame": "elden ring",
+      "mustScrape": true
+    },
+    {
+      "id": "speedrun",
+      "prompt": "what's the current any% world record route for Celeste",
+      "expectGame": "celeste",
+      "mustScrape": true
+    },
+    {
+      "id": "mobile-gacha",
+      "prompt": "should I pull for the new banner in Wuthering Waves",
+      "expectGame": "wuthering waves",
+      "mustScrape": true
+    },
+    {
+      "id": "esports",
+      "prompt": "who won the last CS2 major",
+      "expectGame": "cs2",
+      "mustScrape": true
+    },
+    {
+      "id": "unreleased-upcoming",
+      "prompt": "when is GTA 6 coming out",
+      "expectGame": "gta 6",
+      "mustScrape": true
+    }
+  ]
+}

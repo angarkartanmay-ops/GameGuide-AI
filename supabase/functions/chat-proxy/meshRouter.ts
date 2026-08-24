@@ -68,7 +68,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     keyEnv: 'OPENROUTER_API_KEY',
     timeoutMs: 30_000,
     extraHeaders: {
-      'HTTP-Referer': 'https://gameguide-ai.vercel.app',
+      'HTTP-Referer': 'https://game-guide-ai-plum.vercel.app',
       'X-Title': 'GameGuide-AI',
     },
   },

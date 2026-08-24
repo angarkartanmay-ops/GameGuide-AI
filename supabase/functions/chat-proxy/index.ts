@@ -85,6 +85,28 @@ If something is genuinely unrelated to games, don't perform a refusal. Give a br
 - Hardware, drivers, monitors, peripherals, networking, storage — gaming-adjacent, answer them.
 - If someone's having a hard time and it surfaced through games, that IS your lane. See the human-side section below.
 
+## NEVER CLAIM A GAME DOESN'T EXIST
+You have a training cutoff. The games industry ships constantly. **Your not knowing a title is evidence about YOU, not about the game.**
+
+This is the single most damaging thing you can do, because it sounds authoritative while being flatly wrong. A real, released, well-reviewed game gets told it isn't real, and the user is pushed to Google — the exact thing this product exists to prevent.
+
+**Forbidden phrasings — never write these about any game title:**
+- "I'm unable to find any information about a game titled X"
+- "no direct match for X" / "X isn't a known title"
+- "it could be a fan-made concept" / "possibly a mix-up with another game"
+- "my records and live data show no official game titled X"
+- Correcting the user's title to a different game you DO know ("did you mean Infamous: First Light?")
+
+**What to do instead**, when a title is unfamiliar and the live blocks are quiet:
+
+> I don't have reliable data on **X** yet — it's likely past my training cutoff and my live sources came back thin just now. Here's what I can tell you: [anything genuinely relevant]. What platform are you on / what do you want to know specifically? I'd rather get you the right answer than guess.
+
+Then be useful with what you do have. Never pad the gap with an essay about *older* games in the franchise as though that answers the question — the user asked about a specific title, and a history lesson about its predecessors is a non-answer dressed up as helpfulness.
+
+**If ANY live block mentions the title — even once, even in passing — the game exists. Full stop.** Report what the block says and attribute it. Do not weigh it against your training; your training is the stale side of that comparison.
+
+**A user asserting a game exists is strong evidence.** They are looking at a store page, a trailer, or their own library. If they name a title you don't recognise, believe them and work from there. Never argue with a user about whether their game is real.
+
 ## WHEN THE USER CORRECTS YOU
 If the user says you got something wrong — especially identifying a game, item, character, or number — **start from the assumption that they are right**. They're looking at the actual thing. You're looking at compressed pixels and training data that's months or years stale.
 
@@ -631,7 +653,11 @@ function extendWithInstallment(text: string, base: string): string {
 const TITLE_TOKEN = String.raw`[A-Z0-9][\w'’&:.\-]*`;
 const TITLE_RUN = String.raw`${TITLE_TOKEN}(?:\s+(?:${TITLE_TOKEN}|of|the|and|to|de|la|no|ni|wa|&|:|-)){0,6}`;
 
-const QUOTED_RX = /["“']([^"”']{3,60})["”']/;
+// Only real quotation marks delimit a title. The straight apostrophe is
+// excluded on purpose: in English it is overwhelmingly a contraction, and
+// treating it as a delimiter made "I'm burnt out ... I don't enjoy" capture
+// everything between the two apostrophes as a game title.
+const QUOTED_RX = /["“”]([^"“”]{3,60})["“”]|[‘]([^’]{3,60})[’]/;
 const GAME_FRAME_RX = new RegExp(
   String.raw`\b(?:in|for|on|about|from|of|playing|play|played|beat|finish|buy|review(?:s)?\s+(?:of|for|about)?)\s+(${TITLE_RUN})`,
 );
@@ -664,7 +690,7 @@ function cleanTitle(raw: string): string | null {
 function guessUnknownTitle(rawText: string): string | null {
   const quoted = QUOTED_RX.exec(rawText);
   if (quoted) {
-    const t = cleanTitle(quoted[1]);
+    const t = cleanTitle(quoted[1] ?? quoted[2] ?? '');
     if (t) return t;
   }
   const framed = GAME_FRAME_RX.exec(rawText);
@@ -683,6 +709,14 @@ function guessUnknownTitle(rawText: string): string | null {
 }
 
 function detectGame(text: string): string | null {
+  // A title the user put in quotes is unambiguous intent — trust it over the
+  // allowlist, which would otherwise match a shorter substring of it
+  // ("Clair Obscur: Expedition 33" -> the entry "expedition 33").
+  const quoted = QUOTED_RX.exec(text);
+  if (quoted) {
+    const q = cleanTitle(quoted[1] ?? quoted[2] ?? '');
+    if (q) return q;
+  }
   const lower = text.toLowerCase();
   // Longest-match first (so "elden ring" beats "ring", "gta vi" beats "gta").
   // Use word-boundary regex to avoid false positives like "wow" matching "wowed",
@@ -691,7 +725,15 @@ function detectGame(text: string): string | null {
   for (const g of sorted) {
     const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const rx = new RegExp(`\\b${escaped}\\b`, 'i');
-    if (rx.test(lower)) return extendWithInstallment(lower, g);
+    if (rx.test(lower)) {
+      const base = extendWithInstallment(lower, g);
+      // Prefer a longer, more specific title that CONTAINS this match —
+      // "Hollow Knight Silksong" is a different game from "Hollow Knight",
+      // and searching the shorter name returns the wrong one.
+      const guessed = guessUnknownTitle(text);
+      if (guessed && guessed.length > base.length && guessed.includes(g)) return guessed;
+      return base;
+    }
   }
   // Nothing in the allowlist — try to recover an unlisted / brand-new title so
   // live scraping still fires instead of silently returning zero sources.
@@ -1521,9 +1563,29 @@ async function fetchWebSearchForGame(game: string, prompt: string, timeoutMs = 3
 }
 
 // ─── ORCHESTRATOR ──────────────────────────────────────────────────────────
+
+// Reduces a question to a searchable subject when no game name was detected.
+// Deliberately conservative: strips interrogatives and filler, and bails on
+// anything too short to be a meaningful query.
+function promptSubject(prompt: string): string | null {
+  if (!prompt) return null;
+  const cleaned = prompt
+    .replace(/[?!.]+/g, " ")
+    .replace(/(what|whats|what's|when|where|why|how|who|which|is|are|was|were|do|does|did|can|could|should|would|will|tell|me|about|the|a|an|of|for|in|on|to|please|thanks|recent|latest|newest|now|currently|good|bad|worth|it|long|ago|release[d]?|review[s]?)/gi, " ")
+    .replace(/s+/g, " ")
+    .trim();
+  return cleaned.length >= 4 && cleaned.length <= 80 ? cleaned : null;
+}
+
 async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 3000): Promise<ScrapeBlock[]> {
-  if (!game) return [];
-  console.log(`[OMNI] Starting omni-scrape for game="${game}" budget=${totalBudgetMs}ms`);
+  // Previously this returned [] whenever detection failed, which meant a title
+  // the allowlist and extractor both missed got NO live context at all — the
+  // exact case where training data is least trustworthy. Fall back to querying
+  // the user's own words so a brand-new game is still researched.
+  const subject = game || promptSubject(_prompt);
+  if (!subject) return [];
+  const named = !!game;
+  console.log(`[OMNI] Starting omni-scrape subject="${subject}" (${named ? 'detected' : 'from prompt'}) budget=${totalBudgetMs}ms`);
 
   const overallTimeout = new Promise<ScrapeBlock[]>(resolve =>
     setTimeout(() => {
@@ -1532,16 +1594,24 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
     }, totalBudgetMs)
   );
 
-  // Added fetchWebSearchForGame as a 6th source for comprehensive coverage
-  const allFetches = Promise.allSettled([
-    fetchSupercellAPI(game),
-    fetchWikipedia(game),
-    fetchSteamNews(game),
-    fetchInvidious(game),
-    fetchGamingRSS(game),
-    fetchWebSearchForGame(game, _prompt),
-  ]);
-
+  // Sources keyed on an exact game name (Supercell, Steam, YouTube channel
+  // lookups) only make sense for a confirmed title; web search and Wikipedia
+  // work fine on a raw phrase, so they still run when detection failed.
+  const allFetches = Promise.allSettled(
+    named
+      ? [
+          fetchSupercellAPI(subject),
+          fetchWikipedia(subject),
+          fetchSteamNews(subject),
+          fetchInvidious(subject),
+          fetchGamingRSS(subject),
+          fetchWebSearchForGame(subject, _prompt),
+        ]
+      : [
+          fetchWikipedia(subject),
+          fetchWebSearchForGame(subject, _prompt),
+        ]
+  );
   const results = await Promise.race([
     allFetches.then(r => r.filter(x => x.status === 'fulfilled' && x.value).map((x: any) => x.value as ScrapeBlock)),
     overallTimeout,
@@ -1945,7 +2015,7 @@ async function runNeuralMesh(opts: {
 // the single most robotic thing this service can do, so when the model
 // deliberately omitted chips on such a turn, we respect that instead of
 // backfilling them.
-const EMOTIONAL_RX = /\b(burn(ed|t)?\s*out|burnout|depress\w*|anxiet\w*|anxious|lonely|feel\w*\s+alone|grief|griev\w*|quit(ting)?\s+gaming|no\s+longer\s+enjoy|don'?t\s+enjoy|lost\s+interest|hardstuck|tilted|tilting|hopeless|worthless|addict\w*|ruining\s+my|hate\s+myself|kill\s+myself|end\s+it\s+all|self\s*harm|feel(ing)?\s+(weird|empty|hollow|numb|awful|terrible|like\s+shit))\b/i;
+const EMOTIONAL_RX = /\b(burn(ed|t)?\s*out|burnout|depress\w*|anxiet\w*|anxious|lonely|feel\w*\s+alone|grief|griev\w*|quit(ting)?\s+gaming|no\s+longer\s+enjoy|don'?t\s+enjoy|lost\s+interest|hardstuck|tilted|tilting|hopeless|worthless|addict\w*|ruining\s+my|hate\s+myself|kill\s+myself|end\s+it\s+all|self\s*harm|feel(s|ing)?\s+(?:\w+\s+){0,2}(weird|empty|hollow|numb|awful|terrible|deflated|lost|down|like\s+shit))\b/i;
 
 function shouldSkipAutoFollowUps(prompt: string, replyText: string, isCorrectionTurn: boolean): boolean {
   if (isCorrectionTurn) return true;
@@ -2313,7 +2383,13 @@ async function runChatPipeline(
     // The user's screenshot comparison proves that simple questions like
     // "which is the newest hero" need live data. Complexity doesn't matter;
     // what matters is whether a game is involved.
-    const shouldScrape = !!resolvedGame;
+    // Never gate live retrieval on successful game detection. A brand-new or
+    // niche title is exactly the case where training data is worst AND where
+    // detection is most likely to miss — gating here is how "007 First Light"
+    // got answered from stale memory instead of the web. Scrape whenever the
+    // prompt is a real question; runPulse already skips pure chitchat.
+    const emotionalTurn = EMOTIONAL_RX.test(prompt);
+    const shouldScrape = (!!resolvedGame || prompt.trim().length >= 12) && !emotionalTurn;
     if (shouldScrape) stage('scanning-sources', resolvedGame || undefined);
     const omniBlocks = shouldScrape ? await omniScrape(resolvedGame, prompt, 3000) : [];
     const rankedOmni = rankAndCapContext(omniBlocks, 6000);

@@ -69,6 +69,10 @@ export function buildFandomUrl(game, params) {
 //  origins (preview deployments, a custom domain) be added deliberately via
 //  the ALLOWED_ORIGINS env var as a comma-separated list of hostnames.
 const DEFAULT_ALLOWED_HOSTS = new Set([
+  // The live deployment. Verified: gameguide-ai.vercel.app returns 404,
+  // game-guide-ai-plum.vercel.app returns 200. Add any custom domain here or
+  // via ALLOWED_ORIGINS rather than widening this to a suffix match.
+  'game-guide-ai-plum.vercel.app',
   'gameguide-ai.vercel.app',
   'localhost',
   '127.0.0.1',
