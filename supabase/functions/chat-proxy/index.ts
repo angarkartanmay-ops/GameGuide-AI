@@ -616,18 +616,68 @@ function extendWithInstallment(text: string, base: string): string {
   return `${base} ${suffix[1].trim()}`.replace(/\s+/g, ' ').trim();
 }
 
-// Fallback for titles absent from the allowlist entirely (new releases, niche
-// games, non-English titles). Looks for an explicit "in/for/playing <Title>"
-// frame, or a capitalised multi-word phrase in the raw (uncased) text.
-const GAME_FRAME_RX = /\b(?:in|for|on|playing|play|about|from|of)\s+([A-Z][\w''&:.-]*(?:\s+(?:[A-Z0-9][\w''&:.-]*|of|the|and|:)){0,4})/;
+// Fallback for titles absent from the allowlist entirely — new releases, niche
+// games, non-English titles. The allowlist can never contain a game released
+// after the last deploy, and a missed title means `shouldScrape` stays false
+// and the model answers a brand-new game from stale training. That is exactly
+// how "007 First Light" (released 2026-05-27) got reported as not existing.
+//
+// Three strategies, most explicit first:
+//   1. A quoted title            — "007 First Light"
+//   2. A frame word + Title Case — "reviews about 007 First Light"
+//   3. A bare Title Case run     — "Is Silksong worth it"
+// Crucially the leading token may start with a DIGIT: 007, 2K25, 7 Days to
+// Die, 11 Bit. Requiring [A-Z] silently excluded that whole class of titles.
+const TITLE_TOKEN = String.raw`[A-Z0-9][\w'’&:.\-]*`;
+const TITLE_RUN = String.raw`${TITLE_TOKEN}(?:\s+(?:${TITLE_TOKEN}|of|the|and|to|de|la|no|ni|wa|&|:|-)){0,6}`;
+
+const QUOTED_RX = /["“']([^"”']{3,60})["”']/;
+const GAME_FRAME_RX = new RegExp(
+  String.raw`\b(?:in|for|on|about|from|of|playing|play|played|beat|finish|buy|review(?:s)?\s+(?:of|for|about)?)\s+(${TITLE_RUN})`,
+);
+const BARE_TITLE_RX = new RegExp(String.raw`\b(${TITLE_RUN})`);
+
+// Words that are capitalised in normal prose but are never a game title on
+// their own. Without this, "Is The Game Good" yields "The Game".
+const STOP_FIRST = /^(I|I'?m|The|My|A|An|It|Its|This|That|These|Those|You|Your|We|They|He|She|What|When|Where|Why|How|Who|Which|Is|Are|Was|Were|Do|Does|Did|Can|Could|Should|Would|Will|Yeah|Yes|No|Ok|Okay|Thanks|Hey|Hi|Hello|PC|PS4|PS5|PS6|Xbox|Steam|Windows|Linux|Mac|Reddit|Discord|YouTube|Google|Twitch|Nvidia|AMD|Intel|GPU|CPU|RAM|FPS|DLC|AI)$/i;
+
+function cleanTitle(raw: string): string | null {
+  let cand = raw.trim()
+    .replace(/[.,!?;:]+$/, '')
+    // Drop trailing filler that gets swept up by the token run.
+    .replace(/\s+(?:game|games|please|thanks|now|yet|too)$/i, '')
+    .trim();
+  if (cand.length < 3 || cand.length > 60) return null;
+
+  const tokens = cand.split(/\s+/);
+  if (STOP_FIRST.test(tokens[0])) {
+    // Retry from the second token: "Is Silksong worth it" -> "Silksong".
+    if (tokens.length < 2) return null;
+    cand = tokens.slice(1).join(' ');
+    if (cand.length < 3 || STOP_FIRST.test(cand.split(/\s+/)[0])) return null;
+  }
+  // A single very short token is more likely a stray acronym than a title.
+  if (!cand.includes(' ') && cand.length < 3) return null;
+  return cand.toLowerCase();
+}
 
 function guessUnknownTitle(rawText: string): string | null {
-  const STOP = /^(I|The|My|A|An|It|This|That|You|We|They|He|She|PC|PS5|PS4|Xbox|Steam|Windows|Reddit|Discord|YouTube|Google|Nvidia|AMD|Intel)$/i;
-  const m = GAME_FRAME_RX.exec(rawText);
-  if (m) {
-    const cand = m[1].trim().replace(/[.,!?;:]+$/, '');
-    const first = cand.split(/\s+/)[0];
-    if (cand.length >= 3 && cand.length <= 60 && !STOP.test(first)) return cand.toLowerCase();
+  const quoted = QUOTED_RX.exec(rawText);
+  if (quoted) {
+    const t = cleanTitle(quoted[1]);
+    if (t) return t;
+  }
+  const framed = GAME_FRAME_RX.exec(rawText);
+  if (framed) {
+    const t = cleanTitle(framed[1]);
+    if (t) return t;
+  }
+  // Bare run: only trust it when it is multi-word or digit-led, since a single
+  // capitalised word mid-sentence is usually not a title.
+  const bare = BARE_TITLE_RX.exec(rawText);
+  if (bare) {
+    const t = cleanTitle(bare[1]);
+    if (t && (t.includes(' ') || /^\d/.test(t))) return t;
   }
   return null;
 }
