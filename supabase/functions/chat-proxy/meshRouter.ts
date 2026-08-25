@@ -150,16 +150,84 @@ export function wantsAgentic(need: RouteNeed & { temporal?: boolean }): 'fast' |
 }
 
 // Gemini is called through its own SDK rather than the OpenAI-compatible path,
-// so it is routed separately. Ordered newest-capable first with an older
-// stable id as the safety net.
-export const GEMINI_TEXT_MODELS = [
-  'gemini-3.5-flash-lite',
-  'gemini-2.5-flash',
-];
-export const GEMINI_VISION_MODELS = [
-  'gemini-3.5-flash-lite',
-  'gemini-2.5-flash',
-];
+// so it needs its own routing rather than reusing planRoute() directly.
+//
+// ── Why cycling across Gemini model ids actually multiplies capacity ───────
+// Verified 2026-08-25 (Google no longer publishes a static rate-limit table;
+// cross-checked ai.google.dev's rate-limits page against third-party trackers
+// mirroring it): free-tier REQUEST quota is tracked PER MODEL, not pooled
+// across models on one key — flash-lite and flash have different daily
+// budgets (documented ballpark: flash-lite ≈1000 RPD, flash ≈250 RPD; these
+// are different numbers, which is only possible if they're separate pools).
+// Only TOKENS-per-minute is shared at the project level, and that ceiling
+// (≈250k TPM) is far above what a low-traffic app like this hits.
+//
+// So routing across N distinct flash/flash-lite ids gives roughly N× the
+// daily request budget from the SAME GOOGLE_API_KEY — no new key, no new
+// project, no card. That's the mechanism this file exploits below.
+//
+// Pro-tier models are deliberately excluded: their free-tier availability has
+// been reported as pulled/inconsistent, and nothing here needs Pro-grade
+// reasoning. Model ids verified live against ai.google.dev/gemini-api/docs/models
+// on 2026-08-25 — re-verify there if quality drops for no obvious reason.
+
+export interface GeminiCandidate {
+  id: string;
+  /** Conservative free-tier requests/day, comfortably under the documented ceiling. */
+  dailyCap: number;
+}
+
+/**
+ * All current-generation Gemini flash-tier models are natively multimodal, so
+ * the same candidate pool serves text and vision — there is no separate,
+ * weaker "vision model" to fall back to.
+ */
+export function geminiCandidates(): GeminiCandidate[] {
+  const liteCap = envInt('GEMINI_FLASH_LITE_DAILY_CAP', 850);   // docs ballpark ~1000
+  const flashCap = envInt('GEMINI_FLASH_DAILY_CAP', 200);        // docs ballpark ~250
+  const previewCap = envInt('GEMINI_PREVIEW_DAILY_CAP', 120);    // preview channels: extra margin
+  return [
+    { id: 'gemini-3.6-flash',        dailyCap: flashCap },
+    { id: 'gemini-3.5-flash-lite',   dailyCap: liteCap },
+    { id: 'gemini-3.1-flash-lite',   dailyCap: liteCap },
+    { id: 'gemini-3.5-flash',        dailyCap: flashCap },
+    { id: 'gemini-2.5-flash-lite',   dailyCap: liteCap },
+    { id: 'gemini-2.5-flash',        dailyCap: flashCap },
+    { id: 'gemini-3-flash-preview',  dailyCap: previewCap },
+  ];
+}
+
+/**
+ * Order Gemini candidates for one request.
+ *
+ * Mirrors planRoute()'s tie-break exactly: models over their hard daily cap
+ * are removed outright (retrying just wastes a call that will fail again);
+ * models in cooldown drop to the back but aren't excluded, since a cooldown
+ * is a temporary backoff, not proof the quota is spent; everything else sorts
+ * by used-fraction ascending, so whichever model has the most headroom LEFT
+ * today goes first. That single rule is what makes the rotation self-balancing
+ * — no complexity/tier logic needed, it naturally spreads load across all
+ * seven pools as the day goes on instead of hammering one until it caps out.
+ */
+export function planGeminiRoute(state: MeshState, candidates = geminiCandidates()): GeminiCandidate[] {
+  return candidates
+    .map(c => {
+      const key = `Gemini|${c.id}`;
+      return {
+        c,
+        cooldown: state.cooldowns[key] || 0,
+        used: state.usage[key] || 0,
+        overCap: (state.usage[key] || 0) >= c.dailyCap,
+      };
+    })
+    .filter(x => !x.overCap)
+    .sort((a, b) => {
+      if ((a.cooldown > 0) !== (b.cooldown > 0)) return a.cooldown > 0 ? 1 : -1;
+      return (a.used / a.c.dailyCap) - (b.used / b.c.dailyCap);
+    })
+    .map(x => x.c);
+}
+
 export const GEMINI_OCR_MODEL = 'gemini-3.5-flash-lite';
 export const GEMINI_IMAGE_MODELS = [
   'gemini-3.1-flash-image',
@@ -266,8 +334,13 @@ export function planRoute(
  */
 export function geminiFirst(need: RouteNeed, state: MeshState, route?: RouteCandidate[]): boolean {
   if (!Deno.env.get('GOOGLE_API_KEY')) return false;
-  const cd = state.cooldowns['Gemini|vision'] || 0;
-  if (cd > 0) return false;
+
+  // Previously checked one hardcoded 'Gemini|vision' cooldown key for every
+  // decision — a single rate-limited model would silently block Gemini
+  // entirely, including for TEXT queries, and per-model exhaustion was
+  // invisible. Ask the real router instead: is there at least one Gemini
+  // candidate that isn't past its daily cap right now?
+  if (planGeminiRoute(state).length === 0) return false;
 
   // Vision: Gemini is the strongest free option and it preserves the 50/day
   // OpenRouter vision allowance.

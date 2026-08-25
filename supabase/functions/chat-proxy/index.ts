@@ -3,7 +3,7 @@ import { runPulse } from './pulseEngine.ts';
 import { enrichVisionAttachments, VisionEnrichment } from './visionPipeline.ts';
 import {
   PROVIDERS, ProviderConfig, MeshModel, planRoute, geminiFirst, buildRegistry,
-  GEMINI_TEXT_MODELS, GEMINI_VISION_MODELS, GEMINI_IMAGE_MODELS,
+  GEMINI_IMAGE_MODELS, planGeminiRoute, geminiCandidates, GeminiCandidate,
   GROQ_AGENTIC, wantsAgentic,
 } from './meshRouter.ts';
 import { getDiscoveredModels } from './modelCatalog.ts';
@@ -877,30 +877,12 @@ async function callOpenAICompat(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  GEMINI CALL (legacy fallback + image generation)
+//  GEMINI IMAGE GENERATION
 // ═══════════════════════════════════════════════════════════════════════════
-
 // Model ids live in meshRouter.ts so there is exactly one place to update
-// when Google retires a generation. The 2.0-* ids previously listed here were
-// already retired upstream.
-const GEMINI_MODELS = GEMINI_TEXT_MODELS;
-
-async function callGemini(ai: any, contents: any, systemInstruction: string): Promise<string> {
-  let lastErr: any = null;
-  for (const model of GEMINI_MODELS) {
-    try {
-      const result = await ai.models.generateContent({
-        model,
-        contents,
-        config: { systemInstruction }
-      });
-      if (result?.text) return result.text;
-    } catch (e: any) {
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error('All Gemini models exhausted');
-}
+// when Google retires a generation. (The chat/vision path used to have a
+// second, unused copy of this pattern here — callGemini() was dead code that
+// iterated a flat list and was never invoked; removed rather than fixed.)
 
 const IMAGE_MODELS = GEMINI_IMAGE_MODELS;
 
@@ -1537,7 +1519,7 @@ function rankAndCapContext(blocks: ScrapeBlock[], maxChars: number): ScrapeBlock
 
 // ─── Vision Pass-1 game resolver ───────────────────────────────────────────
 // Used ONLY when vision is active AND text didn't surface a known game.
-async function resolveGameFromImage(geminiAi: any, attachments: any[]): Promise<string | null> {
+async function resolveGameFromImage(geminiAi: any, attachments: any[], meshState: MeshStateT): Promise<string | null> {
   if (!attachments?.length) return null;
   const tinyPrompt = `Identify the video game from this screenshot. Reply ONLY with: "GAME: <name> | CONFIDENCE: high|medium|low". If unsure, GAME: unknown.`;
 
@@ -1561,23 +1543,37 @@ async function resolveGameFromImage(geminiAi: any, attachments: any[]): Promise<
     }
   }
 
-  // Fallback: native Gemini Flash
+  // Fallback: native Gemini Flash.
+  // Previously hardcoded to 'gemini-2.0-flash', a model already confirmed
+  // retired upstream (see meshRouter.ts) — every call here was a guaranteed
+  // 404, and it failed silently into `return null` with only a console.warn.
+  // Route through the same state-aware candidate list as the main answer
+  // path instead of a second, independently-rotting hardcoded id.
   if (geminiAi) {
-    try {
-      const contents = buildGeminiContents([], tinyPrompt, attachments);
-      const result = await geminiAi.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents,
-        config: { temperature: 0.1, maxOutputTokens: 60 },
-      });
-      const txt = result?.text || '';
-      const m = txt.match(/GAME:\s*([^|\n]+?)\s*\|\s*CONFIDENCE:\s*(high|medium|low)/i);
-      if (m && m[1].trim().toLowerCase() !== 'unknown' && m[2].toLowerCase() !== 'low') {
-        console.log(`[GAME-RESOLVER] Gemini → "${m[1].trim()}" (${m[2]})`);
-        return m[1].trim().toLowerCase();
+    const candidates = planGeminiRoute(meshState);
+    for (const { id: model } of candidates.slice(0, 2)) {   // quick pass — don't exhaust every candidate on a pre-check
+      try {
+        const contents = buildGeminiContents([], tinyPrompt, attachments);
+        const result = await geminiAi.models.generateContent({
+          model,
+          contents,
+          config: { temperature: 0.1, maxOutputTokens: 60 },
+        });
+        const txt = result?.text || '';
+        const m = txt.match(/GAME:\s*([^|\n]+?)\s*\|\s*CONFIDENCE:\s*(high|medium|low)/i);
+        recordUsage('Gemini', model);
+        if (m && m[1].trim().toLowerCase() !== 'unknown' && m[2].toLowerCase() !== 'low') {
+          console.log(`[GAME-RESOLVER] Gemini/${model} → "${m[1].trim()}" (${m[2]})`);
+          return m[1].trim().toLowerCase();
+        }
+        return null;   // model answered, just didn't recognise the game — no point trying another id
+      } catch (e: any) {
+        const msg = (e.message || String(e)).toLowerCase();
+        console.warn(`[GAME-RESOLVER] Gemini/${model} pass-1 failed: ${e.message}`);
+        recordUsage('Gemini', model, 0, 0, true);
+        if (msg.includes('429') || msg.includes('quota')) noteLocalFailure('Gemini', model);
+        // else: try the next candidate (e.g. a retired/unknown id)
       }
-    } catch (e: any) {
-      console.warn(`[GAME-RESOLVER] Gemini pass-1 failed: ${e.message}`);
     }
   }
   return null;
@@ -1631,10 +1627,19 @@ async function runGeminiAttempt(opts: {
   attachments: any[];
   hasVision: boolean;
   errors: string[];
+  meshState: MeshStateT;
 }): Promise<MeshResult | null> {
   if (!opts.geminiAi) return null;
 
-  const models = opts.hasVision ? GEMINI_VISION_MODELS : GEMINI_TEXT_MODELS;
+  // State-aware order: skips any model already past its daily cap instead of
+  // paying a guaranteed-fail round trip to find out, and puts whichever model
+  // has the most headroom LEFT today first — see meshRouter.ts for why
+  // cycling across ids actually multiplies the free daily budget here.
+  const models = planGeminiRoute(opts.meshState).map((c: GeminiCandidate) => c.id);
+  if (models.length === 0) {
+    console.warn('[MESH] All Gemini candidates are past today\'s cap — skipping Gemini entirely');
+    return null;
+  }
   let contents = buildGeminiContents(opts.chatHistory, opts.userPrompt, opts.attachments);
   let mimeRetryUsed = false;
 
@@ -1685,8 +1690,10 @@ async function runGeminiAttempt(opts: {
         if (msg.includes('400') || msg.includes('invalid')) break;
 
         if (msg.includes('429') || msg.includes('quota') || msg.includes('rate')) {
-          // Quota is spent; another isolate should not pay this timeout again.
-          noteLocalFailure('Gemini', 'vision');
+          // Quota is spent on THIS model specifically — cool down that exact
+          // id, not a hardcoded 'vision' bucket that silently blocked every
+          // other Gemini model (text and vision alike) after any one 429.
+          noteLocalFailure('Gemini', model);
           break;
         }
         if (attempt < 2) await new Promise(r => setTimeout(r, 900));
@@ -1871,7 +1878,14 @@ async function runNeuralMeshStreaming(opts: {
 
   const tryGemini = async (): Promise<MeshResult | null> => {
     if (!opts.geminiAi) return null;
-    const models = need.vision ? GEMINI_VISION_MODELS : GEMINI_TEXT_MODELS;
+    // Same state-aware ordering as the non-streaming path: skip models
+    // already past today's cap, try whichever has the most headroom left
+    // first. Vision and text draw from the same pool — see meshRouter.ts.
+    const models = planGeminiRoute(opts.meshState).map((c: GeminiCandidate) => c.id);
+    if (models.length === 0) {
+      console.warn('[MESH-STREAM] All Gemini candidates are past today\'s cap — skipping Gemini entirely');
+      return null;
+    }
     const contents = buildGeminiContents(opts.chatHistory, opts.userPrompt, opts.attachments);
     for (const model of models) {
       try {
@@ -1892,6 +1906,11 @@ async function runNeuralMeshStreaming(opts: {
         const status = /\b(429|503|500|404|400)\b/.exec(raw)?.[1];
         reportProvider('Gemini', model, false, status ? parseInt(status, 10) : undefined, raw);
         recordUsage('Gemini', model, 0, 0, true);
+        if (raw.toLowerCase().includes('429') || raw.toLowerCase().includes('quota')) {
+          // Fast local echo so a follow-up request in the same burst does not
+          // re-pay a guaranteed-fail round trip before the DB write lands.
+          noteLocalFailure('Gemini', model);
+        }
       }
     }
     return null;
@@ -2123,6 +2142,19 @@ Deno.serve(async (req) => {
         note: 'Self-searching models used for recency questions.',
       },
       gemini: !!Deno.env.get('GOOGLE_API_KEY'),
+      // Per-model rotation state for the Gemini candidate pool — see
+      // meshRouter.ts for why cycling across these ids multiplies the free
+      // daily budget from ONE GOOGLE_API_KEY. "available" is what
+      // planGeminiRoute() would actually offer for the next request right now.
+      geminiRotation: !!Deno.env.get('GOOGLE_API_KEY') ? geminiCandidates().map(c => {
+        const key = `Gemini|${c.id}`;
+        return {
+          model: c.id,
+          usedToday: liveState.usage[key] || 0,
+          dailyCap: c.dailyCap,
+          cooldownSec: liveState.cooldowns[key] || 0,
+        };
+      }) : [],
       omniscience: {
         wikipedia: 'unauth (always on)',
         steamNews: 'unauth (always on)',
@@ -2354,7 +2386,7 @@ async function runChatPipeline(
     let resolvedGame: string | null = profile.game;
     if (profile.hasVision && !resolvedGame) {
       stage('identifying-game');
-      resolvedGame = await resolveGameFromImage(geminiAi, cleanAttachments);
+      resolvedGame = await resolveGameFromImage(geminiAi, cleanAttachments, meshState);
       if (resolvedGame) {
         console.log(`[CORTEX] Game resolved from image: ${resolvedGame}`);
         // Update profile so downstream HUD knowledge picks the right game

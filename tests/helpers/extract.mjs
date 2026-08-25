@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = join(HERE, '..', '..');
 const SOURCE = join(REPO_ROOT, 'supabase', 'functions', 'chat-proxy', 'index.ts');
+const ROUTER_SOURCE = join(REPO_ROOT, 'supabase', 'functions', 'chat-proxy', 'meshRouter.ts');
 // Sits beside the test files (tests/.generated), not beside this helper —
 // the suites import it as './.generated/...' relative to tests/.
 const OUT_DIR = join(HERE, '..', '.generated');
@@ -55,7 +56,33 @@ export function generateModules() {
   const behaviourPath = join(OUT_DIR, 'behaviour.ts');
   writeFileSync(detectionPath, detection);
   writeFileSync(behaviourPath, behaviour);
-  return { detectionPath, behaviourPath };
+
+  // meshRouter.ts imports `MeshState` (a type-only interface) from meshDb.ts,
+  // and meshDb.ts calls Deno.env.get() at module TOP LEVEL — so a real ESM
+  // import of meshRouter.ts crashes under plain Node before any test even
+  // runs. planGeminiRoute() itself is pure (its `state` param is only ever
+  // used as a plain object, and its `candidates` param is optional+overridable
+  // specifically so tests never need real env access), so slice it out the
+  // same way as the index.ts functions above.
+  //
+  // geminiCandidates() is intentionally NOT re-exported here: its body calls
+  // envInt(), which is defined above this slice's boundary and calls
+  // Deno.env.get(). Defining-but-never-calling it is harmless (JS doesn't
+  // resolve identifiers inside an unexecuted function body), but exporting it
+  // would invite a future test to call it and hit a ReferenceError. Tests that
+  // need the real candidate LIST read meshRouter.ts as text instead — see
+  // tests/gemini.test.ts.
+  // Both `GeminiCandidate` and `planGeminiRoute` already carry their own
+  // `export` keyword at the declaration in meshRouter.ts (unlike the index.ts
+  // slices above, whose functions are declared un-exported and need an
+  // appended `export {}` to become importable) — so no trailing export
+  // statement here; adding one would double-export and throw a SyntaxError.
+  const routerSrc = readFileSync(ROUTER_SOURCE, 'utf8');
+  const gemini = slice(routerSrc, 'export interface GeminiCandidate', 'export const GEMINI_OCR_MODEL');
+  const geminiPath = join(OUT_DIR, 'gemini.ts');
+  writeFileSync(geminiPath, gemini);
+
+  return { detectionPath, behaviourPath, geminiPath };
 }
 
 // ── Tiny assertion helper (no test framework dependency) ───────────────────
