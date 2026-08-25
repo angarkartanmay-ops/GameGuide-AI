@@ -6,6 +6,27 @@
 // Google CSE and Serper are the most reliable for current gaming data.
 // SearXNG is a free fallback. DuckDuckGo Lite is last resort.
 
+/**
+ * Reads an API key defensively.
+ *
+ * Values pasted into a .env commonly carry a trailing inline comment or
+ * surrounding quotes, and Deno's env-file parser keeps them. That produced a
+ * 403 indistinguishable from an invalid key, so strip the usual damage rather
+ * than making the next person debug it.
+ */
+function envKey(...names: string[]): string {
+  for (const n of names) {
+    const raw = Deno.env.get(n);
+    if (!raw) continue;
+    const cleaned = raw
+      .replace(/s+#.*$/, '')        // trailing inline comment
+      .replace(/^["']|["']$/g, '')   // wrapping quotes
+      .trim();
+    if (cleaned) return cleaned;
+  }
+  return '';
+}
+
 export interface SearchHit {
   title: string;
   url: string;
@@ -36,8 +57,8 @@ async function fetchTimeout(url: string, init: RequestInit, ms: number): Promise
 
 // ── Google Custom Search Engine (most reliable, 100 free queries/day) ────
 export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000, recent = false): Promise<SearchHit[]> {
-  const apiKey = Deno.env.get('GOOGLE_CSE_API_KEY') || Deno.env.get('GOOGLE_API_KEY');
-  const cseId = Deno.env.get('GOOGLE_CSE_ID');
+  const apiKey = envKey('GOOGLE_CSE_API_KEY', 'GOOGLE_API_KEY');
+  const cseId = envKey('GOOGLE_CSE_ID');
   if (!apiKey || !cseId) return [];
 
   try {
@@ -66,7 +87,7 @@ export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000
 
 // ── Serper.dev (Google SERP API, 2500 free/month) ────────────────────────
 export async function serperSearch(query: string, limit = 6, timeoutMs = 5000, recent = false): Promise<SearchHit[]> {
-  const key = Deno.env.get('SERPER_API_KEY');
+  const key = envKey('SERPER_API_KEY');
   if (!key) return [];
 
   try {
@@ -130,8 +151,18 @@ export async function serperSearch(query: string, limit = 6, timeoutMs = 5000, r
   }
 }
 
-export async function searxngSearch(query: string, limit = 6, timeoutMs = 4500, recent = false): Promise<SearchHit[]> {
-  const instances = [...SEARXNG_INSTANCES].sort(() => Math.random() - 0.5);
+// Instances that recently returned 429 or a challenge page. Public SearXNG
+// nodes rate-limit aggressively; retrying them inside the same minute just
+// burns the latency budget for a guaranteed failure.
+const searxCooldown = new Map<string, number>();
+const SEARX_COOLDOWN_MS = 10 * 60 * 1000;
+
+export async function searxngSearch(query: string, limit = 6, timeoutMs = 2500, recent = false): Promise<SearchHit[]> {
+  const now = Date.now();
+  const instances = [...SEARXNG_INSTANCES]
+    .filter(i => (searxCooldown.get(i) || 0) < now)
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 3);   // 3 attempts is plenty; the rest only add latency
   for (const base of instances) {
     try {
       const timeParam = recent ? '&time_range=year' : '';
@@ -139,8 +170,18 @@ export async function searxngSearch(query: string, limit = 6, timeoutMs = 4500, 
       const res = await fetchTimeout(url, {
         headers: { 'User-Agent': 'GameGuide-AI/1.0 (free-tier search)' },
       }, timeoutMs);
-      if (!res.ok) continue;
-      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        if (res.status === 429) searxCooldown.set(base, Date.now() + SEARX_COOLDOWN_MS);
+        continue;
+      }
+      // A 200 carrying HTML is a browser-verification challenge, not results.
+      const body = await res.text();
+      if (!body.trimStart().startsWith('{')) {
+        searxCooldown.set(base, Date.now() + SEARX_COOLDOWN_MS);
+        continue;
+      }
+      let data: any = null;
+      try { data = JSON.parse(body); } catch { continue; }
       const results = data?.results || [];
       if (!results.length) continue;
       return results.slice(0, limit).map((r: any) => ({
@@ -157,7 +198,7 @@ export async function searxngSearch(query: string, limit = 6, timeoutMs = 4500, 
   return [];
 }
 
-export async function duckduckgoSearch(query: string, limit = 6, timeoutMs = 4500, recent = false): Promise<SearchHit[]> {
+export async function duckduckgoSearch(query: string, limit = 6, timeoutMs = 2500, recent = false): Promise<SearchHit[]> {
   const dfParam = recent ? '&df=y' : '';
   try {
     // Use DuckDuckGo Lite which is more stable for parsing
@@ -223,7 +264,7 @@ export async function duckduckgoSearch(query: string, limit = 6, timeoutMs = 450
 }
 
 export async function braveSearch(query: string, limit = 6, timeoutMs = 4500, recent = false): Promise<SearchHit[]> {
-  const key = Deno.env.get('BRAVE_SEARCH_API_KEY');
+  const key = envKey('BRAVE_SEARCH_API_KEY');
   if (!key) return [];
   try {
     const freshParam = recent ? '&freshness=py' : '';

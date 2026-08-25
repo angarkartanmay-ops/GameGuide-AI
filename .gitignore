@@ -34,3 +34,6 @@ tests/.generated/
 
 # graphify knowledge graph (regenerate with: graphify .)
 graphify-out/
+
+# edge function secrets for local serving
+supabase/functions/.env

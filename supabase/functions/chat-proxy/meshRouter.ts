@@ -100,18 +100,53 @@ export function buildRegistry(): MeshModel[] {
 
     // ── Cerebras: also very fast, separate quota pool. ────────────────────
     { provider: 'Cerebras', id: 'gpt-oss-120b', vision: false, tier: 'flagship', dailyCap: cerebrasCap, cost: 0, ctx: 65000 },
-    { provider: 'Cerebras', id: 'zai-glm-4.7',  vision: false, tier: 'flagship', dailyCap: cerebrasCap, cost: 0, ctx: 64000 },
+    // NOTE: zai-glm-4.7 was retired upstream (verified 2026-08-25); Cerebras
+    // now publishes only gpt-oss-120b and gemma-4-31b.
     { provider: 'Cerebras', id: 'gemma-4-31b',  vision: false, tier: 'balanced', dailyCap: cerebrasCap, cost: 0, ctx: 65000 },
 
     // ── OpenRouter free tier: smallest daily allowance, so it sits last. ──
     // These are the only free VISION models available anywhere in the mesh
     // besides Gemini, which is why the vision chain leans on Gemini first.
     { provider: 'OpenRouter', id: 'google/gemma-4-31b-it:free',            vision: true,  tier: 'balanced', dailyCap: orCap, cost: 1, ctx: 262144 },
-    { provider: 'OpenRouter', id: 'nvidia/nemotron-nano-12b-v2-vl:free',   vision: true,  tier: 'fast',     dailyCap: orCap, cost: 1, ctx: 128000 },
     { provider: 'OpenRouter', id: 'nvidia/nemotron-3-ultra-550b-a55b:free', vision: false, tier: 'flagship', dailyCap: orCap, cost: 1, ctx: 1000000 },
     { provider: 'OpenRouter', id: 'nvidia/nemotron-3-super-120b-a12b:free', vision: false, tier: 'flagship', dailyCap: orCap, cost: 1, ctx: 262144 },
-    { provider: 'OpenRouter', id: 'nvidia/nemotron-nano-9b-v2:free',        vision: false, tier: 'fast',     dailyCap: orCap, cost: 1, ctx: 128000 },
   ];
+}
+
+// ── Agentic systems ────────────────────────────────────────────────────────
+//  Groq's compound systems run their own web search, page visits, code
+//  execution and Wolfram lookups server-side before answering, using the same
+//  chat-completions API. That matters here more than a benchmark score:
+//  the failure this project keeps hitting is recency, and a model that can
+//  search for itself closes that gap even when our own retrieval comes back
+//  thin. They are billed as normal Groq free-tier traffic (rate-limited, not
+//  credit-metered), so using them costs nothing extra.
+//
+//  compound-mini makes a single tool call at ~3x lower latency; compound
+//  makes several. Reserve the slower one for genuinely deep questions.
+export const GROQ_AGENTIC = {
+  // Verified 2026-08-25: groq/compound returns HTTP 413 for our request size
+  // even with a minimal system prompt, while compound-mini succeeds. Mini is
+  // also ~3x lower latency, which matters because its tool calls run before
+  // the first token. Both entries point at mini until that changes.
+  fast: 'groq/compound-mini',
+  deep: 'groq/compound-mini',
+};
+
+/**
+ * Should this query go to an agentic (self-searching) model?
+ *
+ * Only when recency is actually load-bearing. Routing everything here would
+ * add tool-call latency to questions that a plain model answers correctly
+ * from the context we already injected.
+ */
+export function wantsAgentic(need: RouteNeed & { temporal?: boolean }): 'fast' | 'deep' | null {
+  if (!Deno.env.get('GROQ_API_KEY')) return null;
+  if (Deno.env.get('DISABLE_AGENTIC') === '1') return null;
+  // Vision is not supported by the compound systems.
+  if (need.vision) return null;
+  if (!need.temporal) return null;
+  return need.complexity === 'deep' ? 'deep' : 'fast';
 }
 
 // Gemini is called through its own SDK rather than the OpenAI-compatible path,
@@ -137,6 +172,8 @@ export interface RouteNeed {
   vision: boolean;
   complexity: 'simple' | 'medium' | 'deep';
   intent: string;
+  /** True when the question is about current/latest state; drives agentic routing. */
+  temporal?: boolean;
 }
 
 export interface RouteCandidate {
@@ -159,7 +196,18 @@ const SOFT_BUDGET = 0.85;
  *   4. Cost         — free-and-unmetered before free-but-capped.
  *   5. Fit          — tier matched to query complexity.
  */
-export function planRoute(need: RouteNeed, state: MeshState, registry = buildRegistry()): RouteCandidate[] {
+export function planRoute(
+  need: RouteNeed,
+  state: MeshState,
+  registry = buildRegistry(),
+  discovered?: MeshModel[],
+): RouteCandidate[] {
+  // Live discovery supersedes the static OpenRouter entries entirely. Those
+  // ids are frozen at deploy time and measurably rot within days; a live
+  // catalog is always the better source of truth when we have one.
+  if (discovered && discovered.length) {
+    registry = registry.filter(m => m.provider !== 'OpenRouter').concat(discovered);
+  }
   const wantTier: Tier =
     need.complexity === 'simple' ? 'fast'
     : need.complexity === 'deep' || need.intent === 'lore' || need.intent === 'build' || need.intent === 'comparison'
@@ -216,9 +264,20 @@ export function planRoute(need: RouteNeed, state: MeshState, registry = buildReg
  * For text, no — Groq is faster and effectively unmetered, so Gemini is held
  * in reserve as a fallback.
  */
-export function geminiFirst(need: RouteNeed, state: MeshState): boolean {
+export function geminiFirst(need: RouteNeed, state: MeshState, route?: RouteCandidate[]): boolean {
   if (!Deno.env.get('GOOGLE_API_KEY')) return false;
-  if (!need.vision) return false;
   const cd = state.cooldowns['Gemini|vision'] || 0;
-  return cd <= 0;
+  if (cd > 0) return false;
+
+  // Vision: Gemini is the strongest free option and it preserves the 50/day
+  // OpenRouter vision allowance.
+  if (need.vision) return true;
+
+  // Text: Groq and Cerebras are far faster, so Gemini normally waits. But when
+  // both are rate-limited the route falls through to OpenRouter's free tier,
+  // which QUEUES — measured at 80s for a single answer. Gemini Flash is
+  // seconds. If nothing unmetered survives, go to Gemini before the queue.
+  if (route && route.length > 0 && route[0].model.cost > 0) return true;
+
+  return false;
 }
