@@ -49,7 +49,7 @@ export function generateModules() {
     slice(src, 'const CORRECTION_LEAD_RX', 'function scoreComplexity') +
     '\n' +
     slice(src, 'const EMOTIONAL_RX', 'function ensureFollowUps') +
-    '\nexport { isCorrection, shouldSkipAutoFollowUps };\n';
+    '\nexport { isCorrection, shouldSkipAutoFollowUps, EMOTIONAL_RX };\n';
 
   const detectionPath = join(OUT_DIR, 'detection.ts');
   const behaviourPath = join(OUT_DIR, 'behaviour.ts');

@@ -18,6 +18,7 @@ const SUITES = [
   ['behaviour',     'behaviour.test.ts'],      // correction detection + follow-up suppression
   ['corroboration', 'corroboration.test.ts'],  // source-agreement scoring
   ['ssrf',          'ssrf.test.mjs'],          // wiki-proxy subdomain validation
+  ['eval',          'eval/pipeline.test.mjs'], // golden-set retrieval + routing accuracy
 ];
 
 try {

@@ -79,7 +79,11 @@ const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_FREE = 5;
 const RATE_LIMIT_PRO = 30;
 const RATE_LIMIT_PREMIUM_SERVER = 60;
-const PROXY_TIMEOUT_MS = 60_000;
+// Raised from 60s: the proxy now always gathers live data (multi-source web
+// search + wiki + Steam/RSS) before generating, because gating retrieval on
+// successful game detection was how brand-new titles got answered from stale
+// training. Discord does not stream, so the whole pipeline must fit here.
+const PROXY_TIMEOUT_MS = 90_000;
 const TYPING_PULSE_MS = 8_000;
 const VOTE_REWARD_HOURS = 12; // free PRO tier for 12h after voting
 

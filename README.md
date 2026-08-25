@@ -2,7 +2,7 @@
 
 **A multimodal, real-time gaming intelligence platform.** GameGuide-AI is a production-grade AI assistant built for competitive players, esports coaches, speedrunners, and the broader gaming community. It combines a self-healing multi-provider neural mesh, sub-400ms streaming responses, live web fusion across six sources, vision-grade screenshot understanding, and a parallel Discord deployment — all backed by a transparent, citation-linked reasoning pipeline.
 
-> **Live Web App:** [gameguide-ai.vercel.app](https://gameguide-ai.vercel.app)
+> **Live Web App:** [game-guide-ai-plum.vercel.app](https://game-guide-ai-plum.vercel.app)
 > **Discord Bot:** [Setup & invite instructions](discord-bot/README.md)
 > **Author:** Tanmay Angarkar
 > **License:** Proprietary — © 2026 Tanmay Angarkar. All rights reserved. See `Terms` page in-app.
