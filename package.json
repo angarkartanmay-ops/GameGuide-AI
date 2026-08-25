@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node tests/run.mjs"
+    "test": "node tests/run.mjs",
+    "dev:api": "deno run --allow-net --allow-env --allow-read --env-file=supabase/functions/.env supabase/functions/chat-proxy/index.ts"
   },
   "dependencies": {
     "@google/genai": "^1.48.0",

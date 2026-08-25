@@ -37,7 +37,17 @@ const CASES = [
     mustMention: [/io interactive|first light/i],
     mustHaveSources: true,
   },
-  { id: 'followup', prompt: "Yeah I meant James Bond's game, First Light", mustHaveSources: true },
+  {
+    id: 'followup',
+    prompt: "Yeah I meant James Bond's game, First Light",
+    // A follow-up needs the turn it follows. Without this the model is being
+    // asked to resolve a pronoun with no antecedent.
+    history: [
+      { sender: 'user', text: 'What are the recent reviews about 007 First Light?' },
+      { sender: 'ai', text: 'I found details on 007 First Light, the IO Interactive game.' },
+    ],
+    mustNotMatch: [/unable to find any information/i],
+  },
   { id: 'evergreen-lore', prompt: 'What is the lore behind the Erdtree in Elden Ring?', mustMention: [/erdtree/i] },
   { id: 'current-meta', prompt: 'What is the current Valorant meta this patch?', mustHaveSources: true },
   { id: 'troubleshoot', prompt: 'Cyberpunk 2077 crashes on launch after a driver update', mustMention: [/driver|verif|reinstall|rollback/i] },
@@ -48,7 +58,16 @@ const CASES = [
 let pass = 0;
 const failures = [];
 
+// The anonymous rate limit is 6/min, and firing 7 cases back-to-back trips it
+// — the run then measures the limiter instead of answer quality. Pace to stay
+// under it. Override with EVAL_DELAY_MS=0 when testing against a bucket with a
+// higher allowance.
+const DELAY_MS = Number(process.env.EVAL_DELAY_MS ?? 11000);
+let first = true;
+
 for (const c of CASES) {
+  if (!first && DELAY_MS > 0) await new Promise(r => setTimeout(r, DELAY_MS));
+  first = false;
   const started = Date.now();
   let body;
   try {
@@ -59,7 +78,7 @@ for (const c of CASES) {
         'Authorization': `Bearer ${ANON_KEY}`,
         'apikey': ANON_KEY,
       },
-      body: JSON.stringify({ prompt: c.prompt, chatHistory: [] }),
+      body: JSON.stringify({ prompt: c.prompt, chatHistory: c.history || [] }),
     });
     body = await res.json();
   } catch (err) {
@@ -92,4 +111,4 @@ for (const c of CASES) {
 
 console.log(failures.length ? `\nFAILURES:\n  ${failures.join('\n  ')}` : '\nNo failures.');
 console.log(`live eval: ${pass} checks passed, ${failures.length} failed`);
-process.exit(failures.length ? 1 : 0);
+process.exitCode = failures.length ? 1 : 0;
