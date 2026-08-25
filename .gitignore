@@ -1,5 +1,14 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production build output
+dist/
+dist-ssr/
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,33 +16,43 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
 *.local
+supabase/.env
+supabase/functions/.env
+supabase/functions/.env.local
 
-# Editor directories and files
+# Supabase CLI Local State
+supabase/.temp/
+.temp/
+
+# IDE & Editor files
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+.claude/
+.gemini/
 
-# Environment Variables
-.env
-.env.*
-!.env.example
-supabase/.env
+# OS metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# generated test fixtures
+# Test fixtures & cache
 tests/.generated/
+coverage/
 
-# graphify knowledge graph (regenerate with: graphify .)
+# Knowledge graph output
 graphify-out/
-
-# edge function secrets for local serving
-supabase/functions/.env

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Security Vulnerability
+    url: mailto:gameguideai.support@gmail.com
+    about: Please report security vulnerabilities privately via email rather than opening a public issue.
+  - name: 💬 General Support & Inquiries
+    url: mailto:gameguideai.support@gmail.com
+    about: For support inquiries, partnership requests, or general questions.

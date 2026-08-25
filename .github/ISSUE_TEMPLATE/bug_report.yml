@@ -1,0 +1,48 @@
+name: Bug Report
+description: Create a report to help us improve GameGuide-AI
+title: '[BUG]: '
+labels: ['bug', 'triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: input
+    id: component
+    attributes:
+      label: Affected Component
+      description: Which part of GameGuide-AI is experiencing the issue?
+      placeholder: 'e.g. Web UI, chat-proxy Edge Function, Discord bot, Live Scraping, Vision'
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Query '...'
+        2. Attach image '...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser version, OS, or Discord environment.
+      placeholder: 'Chrome 128 / Windows 11 / Node 20'

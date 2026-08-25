@@ -1,579 +1,393 @@
 # GameGuide-AI
 
-**A multimodal, real-time gaming intelligence platform.** GameGuide-AI is a production-grade AI assistant built for competitive players, esports coaches, speedrunners, and the broader gaming community. It combines a self-healing multi-provider neural mesh, sub-400ms streaming responses, live web fusion across six sources, vision-grade screenshot understanding, and a parallel Discord deployment — all backed by a transparent, citation-linked reasoning pipeline.
+<div align="center">
 
-> **Live Web App:** [game-guide-ai-plum.vercel.app](https://game-guide-ai-plum.vercel.app)
-> **Discord Bot:** [Setup & invite instructions](discord-bot/README.md)
-> **Author:** Tanmay Angarkar
-> **License:** Proprietary — © 2026 Tanmay Angarkar. All rights reserved. See `Terms` page in-app.
+<img src="public/favicon.svg" alt="GameGuide-AI Logo" width="84" height="84" />
 
----
+### Real-Time Multimodal Gaming Intelligence Platform
 
-## Table of Contents
+*Sub-400ms streaming responses, self-healing multi-provider neural mesh, multi-model free-tier quota rotation, live web fusion across six sources, and vision-grade HUD/screenshot analysis.*
 
-1. [Project Overview](#1-project-overview)
-2. [Core Principles](#2-core-principles)
-3. [Feature Matrix](#3-feature-matrix)
-4. [System Architecture](#4-system-architecture)
-5. [Cortex Reasoning Pipeline](#5-cortex-reasoning-pipeline)
-6. [Live Data Sources](#6-live-data-sources)
-7. [Vision GODMODE](#7-vision-godmode)
-8. [Persona Engine](#8-persona-engine)
-9. [Slash Commands](#9-slash-commands)
-10. [Theme System](#10-theme-system)
-11. [Discord Bot](#11-discord-bot)
-12. [Technology Stack](#12-technology-stack)
-13. [Repository Structure](#13-repository-structure)
-14. [Getting Started](#14-getting-started)
-15. [Environment Configuration](#15-environment-configuration)
-16. [Deployment](#16-deployment)
-17. [Supported Games](#17-supported-games)
-18. [Performance Targets](#18-performance-targets)
-19. [Roadmap](#19-roadmap)
-20. [Copyright, License & Acceptable Use](#20-copyright-license--acceptable-use)
-21. [Contact](#21-contact)
+[![CI Pipeline](https://github.com/angarkartanmay-ops/GameGuide-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/angarkartanmay-ops/GameGuide-AI/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Proprietary-blue.svg)](LICENSE)
+[![React](https://img.shields.io/badge/React-19.2-61dafb.svg?logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-8-646cff.svg?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Supabase](https://img.shields.io/badge/Supabase-Edge%20Functions-3ecf8e.svg?logo=supabase&logoColor=white)](https://supabase.com)
+[![Discord](https://img.shields.io/badge/Discord-Bot%20v2.0-5865F2.svg?logo=discord&logoColor=white)](discord-bot/README.md)
+
+[🌐 Live Web Application](https://game-guide-ai-plum.vercel.app) • [🤖 Discord Bot Setup](discord-bot/README.md) • [🧪 Local Testing Guide](LOCAL_TESTING.md) • [🔒 Security Policy](SECURITY.md)
+
+</div>
 
 ---
 
-## 1. Project Overview
+## 📖 Table of Contents
 
-GameGuide-AI is a single-page React application paired with a Supabase Edge Functions backend and an optional standalone Discord bot. It serves three audiences:
-
-- **Competitive players** who need tournament-grade accuracy with patch-current data.
-- **Casual players** who want guidance on builds, lore, and meta without wading through wikis.
-- **Server communities** that want a unified support bot for game-related questions on Discord.
-
-The system distinguishes itself from generic chatbots in three dimensions:
-
-1. **Recency.** Every substantive query triggers parallel scraping from up to six live sources, and the model is contractually instructed to favor live intelligence over its training data on any topic the live blocks cover.
-2. **Vision.** Up to three screenshots per turn pass through an OCR-first, four-step "GODMODE" pipeline with eighteen game-specific HUD decoders before the language model ever sees them.
-3. **Resilience.** A four-provider neural mesh (Gemini, Groq, OpenRouter, Cerebras) routes requests based on complexity and falls over at the token level — there is no single point of failure.
-
----
-
-## 2. Core Principles
-
-| Principle | Implementation |
-|---|---|
-| **Live data primacy** | Every answer marks live-sourced facts versus training-derived analysis. Patch versions are tagged when available. |
-| **Anti-confabulation** | Strict prompt contracts forbid inventing item, character, or ability names. "I don't know" is an accepted answer. |
-| **Latency budget** | P50 < 400ms first-token streaming; provider race for the fastest valid response. |
-| **Citation-by-default** | Reddit, Wikipedia, Steam, official APIs, and web search results are attached as a sources chip on every fused response. |
-| **Multi-platform parity** | Stat differences across Java/Bedrock, PC/console, mobile/PC are surfaced explicitly. |
+1. [Platform Overview](#-platform-overview)
+2. [Core Architecture & Neural Mesh](#-core-architecture--neural-mesh)
+3. [Reasoning Pipeline (Cortex v4.2)](#-reasoning-pipeline-cortex-v42)
+4. [Live Intelligence (Project PULSE & Omni-Scrape)](#-live-intelligence-project-pulse--omni-scrape)
+5. [Multimodal Vision (GODMODE Protocol)](#-multimodal-vision-godmode-protocol)
+6. [Feature Matrix](#-feature-matrix)
+7. [Expert Persona Engine](#-expert-persona-engine)
+8. [Interactive Slash Commands](#-interactive-slash-commands)
+9. [Dark Theme & Atmospheric Transition Engine](#-dark-theme--atmospheric-transition-engine)
+10. [Discord Bot Deployment](#-discord-bot-deployment)
+11. [Repository Structure](#-repository-structure)
+12. [Quickstart & Local Development](#-quickstart--local-development)
+13. [Environment Configuration](#-environment-configuration)
+14. [Deployment Guide](#-deployment-guide)
+15. [Automated Test & Regression Suite](#-automated-test--regression-suite)
+16. [Security & Responsible Disclosure](#-security--responsible-disclosure)
+17. [License & Intellectual Property](#-license--intellectual-property)
+18. [Contact & Support](#-contact--support)
 
 ---
 
-## 3. Feature Matrix
+## 🌟 Platform Overview
 
-| Capability | Details |
-|---|---|
-| **Cortex Neural Mesh** | Four-provider self-healing AI waterfall — Google Gemini, Groq, OpenRouter, Cerebras. Token-level fallback. |
-| **Project PULSE** | Multi-engine live web search — Google CSE, Serper, Brave, SearXNG, DuckDuckGo — fused, deduplicated, recency-ranked. |
-| **Vision GODMODE** | Multi-image upload (up to 3), OCR-first pipeline, 18 game-specific HUD decoders, second-opinion verification on disagreement. |
-| **Omni-Scrape** | Parallel client + edge fan-out across Reddit, Wikipedia, Steam News, YouTube (via Invidious), gaming RSS, and official game APIs. |
-| **Persona Engine** | Seven auto-selected experts (Coach, Loremaster, TechWizard, Speedrunner, MetaAnalyst, GameCritic, GameGuide). |
-| **Slash Commands** | Power-user verbs (`/price`, `/tip`, `/lore`, `/redpill`, `/clear`, `/help`, plus Easter eggs). |
-| **Multimodal Chat** | Markdown rendering with GFM tables, code fences, syntax-aware bullet lists, and inline citation chips. |
-| **Follow-up Chips** | Every response surfaces three to five contextual `[?]` follow-ups from the user's perspective. |
-| **Authentication** | Optional Supabase Auth (email + Google OAuth). Conversations persist per user. |
-| **Theme System** | Seven custom dark themes with subtle round-robin transition effects. |
-| **Discord Bot** | Production-ready 24/7 deployment with tiered rate-limiting, persistent history, and affiliate-decorated price lookups. |
-| **Landing Page** | GPU-probed WebGL hero, scroll-pinned pipeline visualization, magnetic cursor, low-power graceful fallback. |
-| **Info Pages** | Hash-routed About / Terms / Contacts pages with full DMCA and IP-protection terms. |
+**GameGuide-AI** is a production-ready, multimodal AI assistant engineered specifically for competitive players, esports coaches, theorycrafters, speedrunners, and gaming communities. It solves the three fundamental flaws of generic LLMs in gaming:
+
+1. **Training Data Staleness** — Real-time game patches, balance adjustments, and new releases (e.g. 2026 titles) are actively fused via multi-angle live search and official publisher APIs before the model answers.
+2. **Hallucination & Vagueness** — A strict anti-confabulation contract enforces exact numbers, build routes, frame data, and patch-version tags rather than vague generic advice.
+3. **Provider Outages & Quotas** — A self-healing neural mesh rotates between Google Gemini (multi-model quota rotation), Groq, OpenRouter, and Cerebras with token-level fallback and zero single points of failure.
 
 ---
 
-## 4. System Architecture
+## 🏛️ Core Architecture & Neural Mesh
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         CLIENT (Browser SPA)                         │
-│   React 19 + Vite 8 · Framer Motion · GSAP ScrollTrigger · R3F      │
-├─────────────────────────────────────────────────────────────────────┤
-│  Landing Page  ──▶  Chat Interface  ──▶  Info Pages (About/Terms)   │
-│                            │                                         │
-│                            ▼                                         │
-│                       useChat.js                                     │
-│                            │                                         │
-│        ┌───────────────────┼───────────────────┐                     │
-│        ▼                   ▼                   ▼                     │
-│  Reddit scraper      Wiki scraper       Price scraper                │
-│  (client)            (client)           (client, CheapShark)         │
-│                            │                                         │
-│                            ▼                                         │
-│            Supabase Edge Function (Deno runtime)                     │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              SUPABASE EDGE :: chat-proxy/index.ts                    │
-├─────────────────────────────────────────────────────────────────────┤
-│  1. Query Cortex      → classify intent, detect game, score depth   │
-│  2. Temporal Detector → "is this a recency-bound query?"            │
-│  3. PULSE Engine      → fan-out 5 search providers if temporal      │
-│  4. Vision Pipeline   → OCR + HUD decoders for any attachments      │
-│  5. Persona Engine    → select Coach / Loremaster / TechWizard / …  │
-│  6. Route Optimizer   → pick Gemini / Groq / OpenRouter / Cerebras   │
-│  7. Neural Mesh       → self-healing waterfall with token fallback  │
-│  8. Recency Ranker    → re-order results by freshness               │
-│  9. Quality Gate      → cache, format-repair, citation attach       │
-└────────────────────────────┬────────────────────────────────────────┘
-                             ▼
-                  Streamed response → UI
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                             CLIENT PLATFORMS                                     │
+│   Web Application (React 19, Vite 8, Framer Motion)   │   Discord Bot (24/7)     │
+└─────────────────────────────────────────┬────────────────────────────────────────┘
+                                          │
+                                          ▼ HTTPS / SSE Stream
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│              SUPABASE EDGE FUNCTION (Deno Runtime :: chat-proxy)                 │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│  1. Query Cortex      → Intent classification (lore/build/meta/tech/speedrun)    │
+│  2. Temporal Detector → Recency evaluation & implicit temporal boosting          │
+│  3. PULSE Engine      → 5-provider parallel live search + authority ranking      │
+│  4. Vision GODMODE    → Preprocessed OCR + 18 game-specific HUD decoders         │
+│  5. Route Optimizer   → Self-balancing provider selection (latency vs depth)     │
+│  6. Neural Mesh v3    → Multi-provider waterfall with per-model quota rotation   │
+│  7. Corroboration     → Multi-source cross-verification & confidence scoring     │
+│  8. Quality Gate      → Response caching (SHA-256), stream packaging, citations  │
+└─────────────────────────────────────────┬────────────────────────────────────────┘
+                                          │
+                  ┌───────────────────────┼───────────────────────┐
+                  ▼                       ▼                       ▼
+          [ Google Gemini ]            [ Groq ]          [ OpenRouter / Cerebras ]
+       Multi-Model Quota Pool      Fast-Path / Compound     Flagship Fallbacks
 ```
 
-**Network boundaries.** The browser never holds an AI provider key. All model calls are proxied through the Supabase Edge Function, which holds keys server-side. The Discord bot calls the same edge function with its own service-role auth.
-
-**Why Edge Functions.** Deno on Supabase Edge runs near the user, supports streaming responses, and allows secrets to remain server-side without a separate Node service. This keeps cold starts under 100ms in most regions.
+### Self-Balancing Multi-Model Quota Pool
+Free-tier request quotas on Google Gemini are tracked **per model ID**, not pooled across the entire API key. GameGuide-AI dynamically rotates across 7 Gemini model tiers (`gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.5-flash`, `gemini-3-flash-preview`), automatically prioritizing whichever model has the most remaining daily headroom.
 
 ---
 
-## 5. Cortex Reasoning Pipeline
+## 🧠 Reasoning Pipeline (Cortex v4.2)
 
-The edge function is structured as a sequential pipeline. Each stage is independently observable and falls back gracefully:
+Every query processed by the backend passes through an 8-stage observable pipeline:
 
-| Stage | Module | Purpose | Failure mode |
+| Stage | Module | Functionality | Resilience & Fallback |
 |---|---|---|---|
-| 1. Query Cortex | `index.ts` | Classifies intent (factual/opinion/build/lore/troubleshoot), detects game from text and vision, scores complexity 0–10. | Defaults to general intent on parse failure. |
-| 2. Temporal Detector | `temporalDetector.ts` | Decides whether the query needs live web fusion. Triggers PULSE. | Conservatively triggers PULSE when uncertain. |
-| 3. PULSE Engine | `pulseEngine.ts` | Fans out to up to five search providers in parallel; dedupes by URL canonical form. | Falls through to next provider on quota/error. |
-| 4. Vision Pipeline | `visionPipeline.ts` | OCR-first attachment processing with HUD decoders. | Bypasses to text-only mode if no vision provider available. |
-| 5. Persona Engine | `index.ts` | Selects the most appropriate expert persona based on intent + game. | Defaults to general GameGuide voice. |
-| 6. Route Optimizer | `index.ts` | Picks provider/model based on complexity, latency, and modality. | Cascades through provider list. |
-| 7. Neural Mesh | `index.ts` | Multi-provider race with token-level retry. | Each provider is independently bypassed on error. |
-| 8. Recency Ranker | `recencyRanker.ts` | Sorts merged results by publish date when present. | No-op if no dated results. |
-| 9. Quality Gate | `index.ts` | Caches successful responses; validates markdown structure; auto-repairs malformed tables. | Returns raw model output if repair fails. |
-
-The pipeline is contract-bound at every stage by an extensive base system prompt — see the `BASE_SYSTEM` constant in `supabase/functions/chat-proxy/index.ts`. The contract enforces specific numbers over vague claims, patch-version tagging, fact-versus-opinion separation, and an explicit "I don't know is allowed" clause.
+| **1. Query Cortex** | `index.ts` | Intent classification, game recognition (200+ titles), complexity scoring (0–10). | Defaults to general gamer intent on ambiguity. |
+| **2. Temporal Detector** | `temporalDetector.ts` | Evaluates if the query is recency-bound ("latest patch", "current meta", new releases). | Conservatively triggers PULSE when recency is implied. |
+| **3. PULSE Engine** | `pulseEngine.ts` | Parallel fan-out to Google CSE, Serper, Brave, SearXNG, and DuckDuckGo. | Deduplicates URLs, falls back to Groq compound search if starved. |
+| **4. Vision Pipeline** | `visionPipeline.ts` | OCR-first image processing, inventory detection, HUD signature matching. | Automatically skips to text if no attachments present. |
+| **5. Route Optimizer** | `meshRouter.ts` | Dynamically selects model tier based on task complexity and quota health. | Auto-balances across all configured API pools. |
+| **6. Neural Mesh** | `index.ts` | Executes inference with exponential backoff on 429/503/500 errors. | Cascades seamlessly to next provider in waterfall. |
+| **7. Corroboration** | `corroboration.ts` | Evaluates source agreement and computes confidence scores. | Flags uncorroborated claims to the model. |
+| **8. Quality Gate** | `index.ts` | Manages SHA-256 response caching, formats markdown tables, attaches citations. | Returns clean stream payload with follow-up chips. |
 
 ---
 
-## 6. Live Data Sources
+## 🌐 Live Intelligence (Project PULSE & Omni-Scrape)
 
-The Omniscience Layer fires live data fetches in parallel. Sources include:
+To guarantee that answers reflect current patches and releases, GameGuide-AI deploys two complementary retrieval engines:
 
-| Source | Coverage | Provider | Rate Limit |
+### 1. Project PULSE (Recency-Bound Queries)
+- **Multi-Angle Formulation**: Expands queries into up to 4 search permutations in parallel (e.g., `{game} new {subject} 2026`, `{game} patch notes`).
+- **Publisher Domain Boosting**: Recognizes 26 official gaming domains (Riot, Valve, Blizzard, Supercell, Bungie, etc.) and elevates their authority score to 9/10.
+- **Recency Half-Life Decay**: Freshness multiplier weights results under 7 days at 1.6× and demotes content older than 1 year to 0.3×.
+
+### 2. Omni-Scrape (General Game Inquiries)
+- **Supercell Official APIs**: Live brawler/card rosters and stats from `api.clashroyale.com` and `api.brawlstars.com`.
+- **Wikipedia & MediaWiki APIs**: Clean wiki extraction with automatic title disambiguation.
+- **Steam News API**: Recent patch notes and developer announcements mapped via a 90+ Steam AppID registry.
+- **CheapShark API**: Live PC game price comparison across 20+ digital storefronts (Steam, Epic, GOG, Humble, Fanatical).
+
+---
+
+## 👁️ Multimodal Vision (GODMODE Protocol)
+
+Users can attach up to 3 screenshots or UI captures per message. Attachment processing follows a strict 4-step pipeline:
+
+```
+[ Image Upload ] ──▶ [ Client Preprocess (1568px, JPEG 88%) ] ──▶ [ Step 1: OCR Text Extraction ]
+                                                                             │
+[ Step 4: Grounded Output ] ◀── [ Step 3: HUD Signature Match ] ◀── [ Step 2: Visual Inventory ]
+```
+
+- **Step 1 (OCR Extraction)**: Verbatim text reading of item names, ability titles, error codes, and coordinates.
+- **Step 2 (Visual Inventory)**: Detection of HUD elements, inventory slots, skill bars, and health indicators.
+- **Step 3 (HUD Signature Matching)**: 18 specialized game decoders (Minecraft, Valorant, League of Legends, Apex Legends, Elden Ring, Genshin Impact, Cyberpunk 2077, etc.).
+- **Step 4 (Grounded Response)**: Restricts the reasoning model to explicitly reference verified elements from Steps 1–3.
+
+---
+
+## ⚡ Feature Matrix
+
+| Capability | Web Application | Discord Bot |
+|---|:---:|:---:|
+| **Sub-400ms Streaming Inference** | ✅ | ✅ (Chunked / Edit) |
+| **Self-Healing Neural Mesh** | ✅ | ✅ |
+| **Project PULSE Live Web Fusion** | ✅ | ✅ |
+| **Vision Screenshot Analysis** | ✅ (Up to 3 images) | ✅ (Attachments) |
+| **Contextual Follow-up Chips** | ✅ (Interactive pills) | ✅ (Inline suggestions) |
+| **Live Multi-Store Price Intel (`/price`)** | ✅ | ✅ (Affiliate decorated) |
+| **Dark Theme Switcher (7 Themes)** | ✅ (Smooth morph) | — |
+| **Player Authentication & History** | ✅ (Supabase Auth) | ✅ (Discord User ID) |
+| **Stealth / Incognito Mode (`/stealth`)** | ✅ | — |
+| **Tiered Rate Limiting** | ✅ (IP/User Token Bucket) | ✅ (Tiered Quotas) |
+
+---
+
+## 🎭 Expert Persona Engine
+
+GameGuide-AI dynamically adapts its tone and formatting structure depending on player intent:
+
+```
+├── 🎯 The Coach        ── Strategy breakdowns, rotation drills, practice routines
+├── 📜 The Loremaster   ── Canonical lore, timeline tables, narrative context
+├── 🧙 The TechWizard   ── Crash diagnostics, error resolution, FPS optimization ladders
+├── ⚡ The Speedrunner  ── Route maps, frame data, glitch execution steps
+├── 📊 The MetaAnalyst  ── Tier lists, patch delta analysis, rising/falling picks
+├── 🎮 The GameCritic   ── Balanced verdicts, strengths, weaknesses, purchasing advice
+└── 🛡️ The GameGuide    ── Structured, scannable answers with bullet points and comparison tables
+```
+
+---
+
+## ⌨️ Interactive Slash Commands
+
+Type `/` in the chat input or Discord to trigger power-user actions:
+
+| Command | Action |
+|---|---|
+| `/price <game>` | Fetches live multi-store price comparisons and historic lows via CheapShark. |
+| `/tip` | Surfaces a pro-tier gameplay tip (blended from live community data and curated knowledge). |
+| `/lore` | Deep lore summary on iconic gaming franchises and character backstories. |
+| `/redpill` | Intriguing, little-known game development secrets and Easter eggs. |
+| `/stealth` | Activates incognito mode — conversations are never stored or logged. |
+| `/clear` | Wipes the active conversation viewport. |
+| `/help` | Displays the complete command reference palette. |
+
+---
+
+## 🎨 Dark Theme & Atmospheric Transition Engine
+
+GameGuide-AI features seven custom-engineered dark themes with synchronized palette transitions:
+
+| Theme | Accent 1 | Accent 2 | Aesthetic |
 |---|---|---|---|
-| **Google Custom Search** | General web | Google CSE | 100/day free |
-| **Serper** | Google SERP | serper.dev | 2,500/month free |
-| **Brave Search** | Independent index | Brave | 2,000/month free |
-| **SearXNG** | Federated meta-search | Self-hosted/public | None |
-| **DuckDuckGo** | Lightweight HTML | Direct fetch | None |
-| **Wikipedia REST API** | Encyclopedic | Wikimedia | Generous |
-| **Fandom MediaWiki API** | Game-specific wikis | Per-game subdomains | Generous |
-| **Reddit JSON** | Community sentiment | Per-subreddit JSON | Soft cap |
-| **Steam News** | Patch notes, releases | Steam Web API | None for news endpoint |
-| **YouTube (Invidious)** | Recent uploads | Public Invidious instance | Variable |
-| **Gaming RSS** | IGN, Polygon, Eurogamer, PC Gamer, GameSpot | Direct feed parse | None |
-| **Supercell, Riot, Steam APIs** | Live game data | Official | API-key based |
-| **CheapShark API** | Live PC game prices, 20+ stores | CheapShark | None (CORS-enabled) |
+| **Black Ice** *(Default)* | `#0ea5e9` | `#fbbf24` | Tactical Oceanic Cyan & Gold |
+| **Nightblade** | `#ff2d95` | `#a855f7` | Cyberpunk Neon Synthwave |
+| **Redline** | `#dc2626` | `#cbd5e1` | High-RPM Apex Racing |
+| **Ghostline** | `#67e8f9` | `#c4b5fd` | Ethereal Cosmic Violet |
+| **Biohazard** | `#84cc16` | `#facc15` | Post-Apocalyptic Wasteland Green |
+| **Warspire** | `#f59e0b` | `#6366f1` | Medieval War Banner Amber |
+| **Dreadcore** | `#8b5cf6` | `#fef3c7` | Obsidian Dark Fantasy |
 
-Client-side scrapers (Reddit, Wiki, CheapShark) run in parallel with the edge function call to minimize total latency. Server-side scrapers fan out from inside the Edge Function. Results are merged into a single context block before being handed to the model.
+**Atmospheric Transitions**: Switching themes engages a 700ms full-interface cubic-bezier color morph accompanied by one of four deterministic ambient visual overlays (*Aurora Wash*, *Scanline Drift*, *Depth Focus*, or *Particle Drift*).
 
 ---
 
-## 7. Vision GODMODE
+## 🤖 Discord Bot Deployment
 
-Vision support is implemented in `supabase/functions/chat-proxy/visionPipeline.ts` and uses a strict OCR-first four-step protocol:
+The repository includes a standalone 24/7 Discord bot located in `discord-bot/`.
 
-1. **Text extraction.** Every image is run through OCR before any visual reasoning. Game-relevant strings (item names, ability names, error codes, coordinates) are extracted verbatim.
-2. **Visual inventory.** A structured "what is on the screen" pass — list of detected entities, HUD elements, environmental clues.
-3. **Environment context.** Game identification, UI/HUD signature matching against the 18 supported game decoders.
-4. **Grounded answer.** The text response is constrained to reference only items that appeared in steps 1–3.
+### Key Features:
+- Mention `@GameGuide <query>` or `/ask <query>` in any channel.
+- Attach up to 3 screenshots directly in Discord for instant vision analysis.
+- Tiered per-user rate limits with automatic 429 retry handling.
+- Persistent conversation memory across sessions backed by Supabase.
+- Ready-to-deploy configurations for **Render**, **Fly.io**, **Railway**, **Docker**, and **PM2**.
 
-**HUD Decoders.** Eighteen game-specific decoders provide schema-aware parsing of common HUD elements (Minecraft hearts/hunger, Valorant agent kits, League champion abilities, Clash Royale elixir/cards, Apex Legends squad indicators, etc.). When confidence is low, a second-opinion pass is run with a different provider before the final answer is composed.
-
-**Client-side preprocessing.** `src/utils/imagePreprocess.js` re-encodes attachments to JPEG at a sensible quality and dimension cap before upload to keep edge-function payloads manageable and to standardize MIME types.
-
----
-
-## 8. Persona Engine
-
-The persona selector auto-detects the most relevant expert based on query intent and detected game:
-
-| Persona | Trigger Keywords | Voice |
-|---|---|---|
-| **Coach** | "build", "loadout", "rotation", "drill" | Decisive strategy with explicit drill exercises. |
-| **Loremaster** | "lore", "story", "canon", "backstory" | Atmospheric narrative with timeline tables. |
-| **TechWizard** | "crash", "fps", "error", "freeze", "won't launch" | Quick Fix → Diagnostic Ladder → Nuclear Option. |
-| **Speedrunner** | "speedrun", "WR", "skip", "glitch", "frame" | Frame-data tables and route diagrams. |
-| **MetaAnalyst** | "tier list", "meta", "nerf", "buff", "patch" | Rising / Falling / Trap picks with patch tags. |
-| **GameCritic** | "review", "worth it", "opinion", "rating" | Verdict + Nails / Bungles + recommendations. |
-| **GameGuide (default)** | Anything else | Clean structured format with sectioned headers. |
-
-Persona selection is a soft layer — the underlying contract (anti-confabulation, citation requirements, recency primacy) is identical across all personas. Only tone, formatting, and emphasis differ.
+*For complete setup and deployment instructions, see [`discord-bot/README.md`](discord-bot/README.md).*
 
 ---
 
-## 9. Slash Commands
-
-Type `/` in the chat input to open the command palette:
-
-| Command | Effect |
-|---|---|
-| `/price <game>` | Live multi-store price intel across 20+ storefronts via CheapShark. Returns best deal + historical low. |
-| `/tip` | Random pro gaming tip (mixes live Reddit pulls with 85 curated tips). |
-| `/lore` | Deep-cut lore drop (live Reddit + 30 curated entries). |
-| `/redpill` | Hidden gaming industry secret (live Reddit + 55 curated facts). |
-| `/clear` | Wipes chat history (client-side only; server history preserved unless explicitly deleted). |
-| `/help` | Command reference. |
-| `/konami`, `/noclip`, `/loading` | Easter eggs. |
-
----
-
-## 10. Theme System
-
-Seven dark themes ship by default, each built around a unique primary + secondary accent pair so no two themes share palette territory:
-
-| ID | Label | Tag | Primary | Secondary |
-|---|---|---|---|---|
-| `nightblade` | NIGHTBLADE | Synthwave | `#ff2d95` | `#a855f7` |
-| `redline` | REDLINE | Apex Racing | `#dc2626` | `#cbd5e1` |
-| `blackice` *(default)* | BLACK ICE | Tactical | `#0ea5e9` | `#fbbf24` |
-| `ghostline` | GHOSTLINE | Cosmic | `#67e8f9` | `#c4b5fd` |
-| `biohazard` | BIOHAZARD | Fallout | `#84cc16` | `#facc15` |
-| `warspire` | WARSPIRE | War Banner | `#f59e0b` | `#6366f1` |
-| `dreadcore` | DREADCORE | Obsidian | `#8b5cf6` | `#fef3c7` |
-
-**Theme persistence.** Selection is stored in `localStorage['theme']` and applied to `<html data-theme="...">` on mount.
-
-**UI morph.** When the user picks a new theme, App.jsx briefly applies a `body.is-theme-morphing` class. This class enables a 700ms cubic-bezier transition on `background`, `color`, `border-color`, `box-shadow`, `text-shadow`, `fill`, and `stroke` across every element so the entire interface — header, message bubbles, inputs, badges, footer — smoothly bleeds from the old palette into the new one. The class is removed after 750ms so per-component transitions (hovers, dropdowns) return to their normal timings.
-
-**Background effects.** Four subtle ambient overlays cycle round-robin on every selection:
-
-| # | Variant | Effect |
-|---|---|---|
-| 1 | AURORA WASH | Blurred diagonal soft-edged accent sheet sweeps across at 22% peak opacity, `mix-blend-mode: screen`. |
-| 2 | SCANLINE DRIFT | A 1px hairline in the new accent drifts top-to-bottom with a 22vh fading gradient trail. |
-| 3 | DEPTH FOCUS | Radial 22%-tint glow at the click origin fading to a 22% dark vignette at the edges, `mix-blend-mode: overlay`. |
-| 4 | PARTICLE DRIFT | 16 deterministic soft motes (2–5px) in alternating accent / accent2 rise slowly with subtle horizontal drift. |
-
-All overlays use translucent compositing and respect `prefers-reduced-motion` (when set, the overlay is hidden but the UI still morphs).
-
----
-
-## 11. Discord Bot
-
-The repository ships a standalone production Discord bot at `discord-bot/`. The bot achieves full feature parity with the web app:
-
-| Capability | Implementation |
-|---|---|
-| **Chat** | `@GameGuide <question>` mention chat OR `/ask` slash command. |
-| **Vision** | Up to 3 image attachments per message, same GODMODE pipeline. |
-| **Slash commands** | `/ask`, `/price`, `/tip`, `/lore`, `/redpill`, `/noclip`, `/konami`, `/loading`, `/clear`, `/history`, `/stats`, `/premium`, `/help`. |
-| **History** | Persistent per-user, stored in Supabase table `discord_chat_messages`. |
-| **Tiered rate-limiting** | FREE: 5/min · PRO: 30/min · PREMIUM_SERVER: 60/min. Tier resolved from Supabase or env override. |
-| **Affiliate links** | CheapShark deal URLs decorated with affiliate tags (Humble, GreenManGaming, Fanatical) when keys are present. |
-| **Monetization** | `/premium` command, Top.gg vote-rewards webhook integration. |
-| **Analytics** | Per-user call counters logged to Supabase `discord_usage_stats`. |
-| **Resilience** | SIGTERM-clean shutdown, AbortController-bound timeouts, structured error envelopes, login supervisor + watchdog. |
-| **24/7 deployment** | Render, Koyeb, Fly.io, Railway, Docker, and PM2 configurations all included. |
-
-See [`discord-bot/README.md`](discord-bot/README.md) for the complete setup, deployment, and monetization guide.
-
----
-
-## 12. Technology Stack
-
-| Layer | Technology | Notes |
-|---|---|---|
-| **Frontend framework** | React 19.2 | Concurrent features, Suspense for code splitting. |
-| **Build tool** | Vite 8 (Rolldown) | Sub-second HMR; production builds in ~700ms. |
-| **Styling** | Hand-written CSS + Tailwind 4 (postcss) | Custom property–driven themes; no UI kit. |
-| **Animation** | Framer Motion 12, GSAP 3 + ScrollTrigger, Lenis | Magnetic cursor, scroll-pinned timelines, smooth scroll. |
-| **3D** | React Three Fiber 9 + drei + Three.js 0.170 | Faceted icosahedron hero with physical material; lazy-loaded. |
-| **Markdown** | react-markdown 10 + remark-gfm 4 | GFM tables, fenced code, autolinks. |
-| **Icons** | lucide-react 1.7 | Plus inline SVGs for brand glyphs (LinkedIn, GitHub). |
-| **Auth & DB** | Supabase JS 2 | Auth, Postgres, Edge Functions, RLS. |
-| **Edge runtime** | Deno (Supabase Edge Functions) | TypeScript; streaming responses. |
-| **Primary AI provider** | Google Gemini (`@google/genai`) | Vision + text. |
-| **Fallback AI providers** | Groq, OpenRouter, Cerebras | Speed and redundancy. |
-| **Discord SDK** | discord.js 14 + Node.js 18+ | Slash commands, intents, partials. |
-| **Hosting (web)** | Vercel | Vercel-managed edge proxy for `/api/wiki/*`. |
-| **Hosting (bot)** | Render / Koyeb / Fly / Railway / Docker / PM2 | All configs in `discord-bot/`. |
-
----
-
-## 13. Repository Structure
+## 📁 Repository Structure
 
 ```
 GameGuide-AI/
-├── README.md                          ← this file
-├── Refer.md                           ← internal design notes
-├── package.json                       ← web app deps + scripts
-├── vite.config.js                     ← Vite build config
-├── tailwind.config.js                 ← Tailwind 4 config
-├── postcss.config.js
-├── vercel.json                        ← Vercel rewrites
-├── index.html                         ← SPA entry
-│
-├── public/                            ← static assets (favicon, OG image)
-│
-├── src/
-│   ├── main.jsx                       ← React entry
-│   ├── App.jsx                        ← view router (landing/chat/info), theme + transition state
-│   ├── App.css                        ← chat app styles + theme-dropdown swatches
-│   ├── index.css                      ← global tokens + 7 theme palettes + morph transition
-│   │
-│   ├── components/
-│   │   ├── LandingPage.jsx / .css     ← scroll-pinned showcase with WebGL hero
-│   │   ├── HoloCanvas.jsx             ← React Three Fiber icosahedron crystal
-│   │   ├── LoadingScreen.jsx / .css   ← splash with lightning bolts
-│   │   ├── ChatContainer.jsx          ← scrollable messages region
-│   │   ├── ChatInput.jsx              ← textarea + slash palette + attachments
-│   │   ├── MessageBubble.jsx          ← markdown renderer with citation chip
-│   │   ├── FollowUpChips.jsx          ← contextual [?] follow-ups
-│   │   ├── PriceBadge.jsx             ← live price pill + expanded deal table
-│   │   ├── UserProfile.jsx            ← auth avatar + dropdown
-│   │   ├── ThemeSelector.jsx          ← theme dropdown with swatches
-│   │   ├── ThemeTransition.jsx / .css ← 4-variant ambient transition overlay
-│   │   ├── InfoPage.jsx / .css        ← About / Terms / Contacts pages
-│   │
-│   ├── hooks/
-│   │   ├── useAuth.js                 ← Supabase auth wrapper
-│   │   └── useChat.js                 ← message state, scraper orchestration
-│   │
-│   ├── services/
-│   │   ├── aiProvider.js              ← Edge Function client + abort signal support
-│   │   ├── supabaseClient.js          ← Supabase JS singleton
-│   │   ├── redditScraper.js           ← per-game subreddit map + cache
-│   │   ├── wikiScraper.js             ← Fandom MediaWiki API client
-│   │   └── priceScraper.js            ← CheapShark client
-│   │
-│   └── utils/
-│       └── imagePreprocess.js         ← JPEG re-encode + dimension cap
-│
-├── supabase/
-│   ├── config.toml
-│   └── functions/
-│       └── chat-proxy/
-│           ├── index.ts               ← Cortex pipeline (1300+ lines)
-│           ├── pulseEngine.ts         ← 5-provider web search fan-out
-│           ├── visionPipeline.ts      ← OCR + HUD decoders
-│           ├── webSearch.ts           ← provider-specific search adapters
-│           ├── officialSources.ts     ← Supercell/Riot/Steam API clients
-│           ├── recencyRanker.ts       ← publish-date sort + half-life decay
-│           ├── temporalDetector.ts    ← "is this query recency-bound?"
-│           └── deno.json
+├── .github/
+│   ├── workflows/ci.yml               ← Automated CI pipeline (Node 20, tests, build)
+│   ├── ISSUE_TEMPLATE/                ← Structured bug and feature templates
+│   └── PULL_REQUEST_TEMPLATE.md       ← PR verification checklist
 │
 ├── api/
-│   └── wiki/                          ← Vercel serverless wiki proxy (CORS bridge)
-│       ├── article.js
-│       └── search.js
+│   └── wiki/                          ← Serverless CORS proxy for MediaWiki API
 │
-└── discord-bot/                       ← standalone 24/7 production bot
-    ├── README.md
-    ├── index.js                       ← bot main (1000+ lines)
-    ├── cheapshark.js                  ← price API client
-    ├── register-commands.js           ← global + guild command registration
-    ├── schema.sql                     ← Supabase tables for bot persistence
-    ├── package.json
-    ├── ecosystem.config.js            ← PM2
-    ├── Dockerfile                     ← Docker image
-    ├── Procfile                       ← Heroku-compatible runtime
-    ├── fly.toml                       ← Fly.io
-    ├── render.yaml                    ← Render
-    └── railway.json                   ← Railway
+├── discord-bot/                       ← Standalone 24/7 Discord bot
+│   ├── index.js                       ← Bot main engine
+│   ├── Dockerfile, fly.toml, render.yaml
+│   └── README.md
+│
+├── public/                            ← Static web assets, icons, llms.txt
+│
+├── src/
+│   ├── components/                    ← UI components (LandingPage, Chat, InfoPages)
+│   ├── hooks/                         ← State management (useChat, useAuth)
+│   ├── services/                      ← Scrapers, API clients, Supabase singleton
+│   └── utils/                         ← Image preprocessing and OCR utilities
+│
+├── supabase/
+│   ├── functions/chat-proxy/          ← Cortex neural mesh edge function (Deno)
+│   └── migrations/                    ← PostgreSQL schema, rate limiting, RLS
+│
+├── tests/                             ← Regression & evaluation test suites
+│   ├── behaviour.test.ts              ← User correction & persona test suite
+│   ├── corroboration.test.ts          ← Source-agreement scoring suite
+│   ├── detection.test.ts              ← Game-title and installment parsing
+│   ├── gemini.test.ts                 ← Multi-model quota rotation suite
+│   ├── ssrf.test.mjs                  ← Wiki proxy security validation
+│   └── run.mjs                        ← Master test runner
+│
+├── LOCAL_TESTING.md                   ← Guide for running the mesh locally on free keys
+├── SECURITY.md                        ← Responsible disclosure policy
+├── CONTRIBUTING.md                    ← Contribution guidelines
+└── LICENSE                            ← Proprietary software license
 ```
 
 ---
 
-## 14. Getting Started
+## 🚀 Quickstart & Local Development
 
 ### Prerequisites
+- **Node.js** ≥ 18.17.0
+- **npm** ≥ 9.0.0
+- A free [Google Gemini API Key](https://aistudio.google.com) (recommended)
+- A free [Supabase Project](https://supabase.com) (for auth & database persistence)
 
-- **Node.js** ≥ 18.17.0 (the Discord bot requires this; the web app needs ≥ 18.0).
-- **npm** (ships with Node).
-- A free [Supabase](https://supabase.com) project (used for auth, chat persistence, and the edge function host).
-- A free [Google Gemini API key](https://aistudio.google.com) (the primary AI provider).
-
-### Installation
-
+### 1. Clone & Install
 ```bash
 git clone https://github.com/angarkartanmay-ops/GameGuide-AI.git
 cd GameGuide-AI
 npm install
 ```
 
-### Local Development
-
-Create a `.env` file in the project root:
-
-```env
-VITE_SUPABASE_URL=https://<project>.supabase.co
-VITE_SUPABASE_ANON_KEY=<your_anon_key>
+### 2. Configure Environment
+```bash
+cp .env.example .env.local
+cp supabase/functions/.env.example supabase/functions/.env
 ```
 
-Then run:
-
+### 3. Run Development Server
 ```bash
+# Terminal 1: Run frontend application
 npm run dev
+
+# Terminal 2 (Optional): Run local chat-proxy Edge Function with Deno
+npm run dev:api
 ```
 
-The app will be served at `http://localhost:5173/`.
-
-### Build
-
-```bash
-npm run build      # Production bundle in /dist
-npm run preview    # Serve /dist locally
-npm run lint       # ESLint
-```
+The web client will be available at `http://localhost:5173`.
 
 ---
 
-## 15. Environment Configuration
+## ⚙️ Environment Configuration
 
-### Web App (`.env`)
-
-| Variable | Required | Purpose |
-|---|---|---|
-| `VITE_SUPABASE_URL` | Yes | Supabase project URL. |
-| `VITE_SUPABASE_ANON_KEY` | Yes | Public anon key (RLS-protected). |
-| `VITE_GEMINI_API_KEY` | Optional | Legacy; the edge function holds the real key. |
-
-### Supabase Edge Function Secrets
-
-Set these via `supabase secrets set KEY=value` or the Supabase dashboard:
-
-| Variable | Required | Purpose |
-|---|---|---|
-| `GOOGLE_API_KEY` | Yes | Primary AI provider (Gemini); also drives Google CSE if `GOOGLE_CSE_ID` set. |
-| `GOOGLE_CSE_ID` | Recommended | Google Custom Search Engine ID (100 queries/day free). |
-| `SERPER_API_KEY` | Optional | Serper.dev (2,500/month free). |
-| `BRAVE_SEARCH_API_KEY` | Optional | Brave Search (2,000/month free). |
-| `GROQ_API_KEY` | Optional | Fast path for simple queries. |
-| `OPENROUTER_API_KEY` | Optional | Vision fallback when Gemini quota is hit. |
-| `CEREBRAS_API_KEY` | Optional | Ultra-fast text fallback. |
-| `SUPERCELL_API_KEY` | Optional | Live data for Clash Royale, Clash of Clans, Brawl Stars. |
-| `STEAM_API_KEY` | Optional | Steam News + Web API. |
-
-Missing optional keys cause the respective provider to be skipped — the pipeline degrades gracefully.
-
-### Discord Bot
-
-See [`discord-bot/README.md`](discord-bot/README.md). Minimum env:
-
-```env
-DISCORD_TOKEN=
-DISCORD_CLIENT_ID=
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-```
-
----
-
-## 16. Deployment
-
-### Frontend (Vercel)
-
-The repository includes `vercel.json` with rewrites for `/api/wiki/*` to the serverless functions in `api/wiki/`. Connect the GitHub repo to Vercel, set the env vars above, and deploy. Build command is `npm run build`; output is `dist/`.
-
-### Edge Function
-
-Deploy the chat proxy from the repo root:
-
-```bash
-supabase functions deploy chat-proxy --no-verify-jwt
-supabase secrets set GOOGLE_API_KEY=...
-# repeat for any additional providers
-```
-
-### Discord Bot
-
-The bot ships configuration files for six platforms (Render, Koyeb, Fly.io, Railway, Docker, PM2). For the fastest 24/7 free deployment, use Render with the bundled `render.yaml`. Full instructions in [`discord-bot/README.md`](discord-bot/README.md).
-
----
-
-## 17. Supported Games
-
-The persona engine and HUD decoders explicitly handle 200+ titles across AAA, indie, mobile, and live-service categories. A non-exhaustive list:
-
-**AAA & Single-Player:** Elden Ring, Dark Souls (1/2/3), Bloodborne, Sekiro, Cyberpunk 2077, The Witcher 3, Skyrim, Fallout 4 / 76, Red Dead Redemption 2, GTA V / VI, Baldur's Gate 3, Diablo IV, Path of Exile 1 / 2, Hollow Knight, Silksong, Hades, Stardew Valley, Terraria, Black Myth: Wukong.
-
-**Multiplayer & Live-Service:** Valorant, Fortnite, League of Legends, Apex Legends, Counter-Strike 2, Overwatch 2, Call of Duty (Warzone, MW), Destiny 2, Helldivers 2, Marvel Rivals, The Finals, Deadlock, Marvel Snap, Hearthstone, Smite, Rainbow Six Siege, Rust, Tarkov, Sea of Thieves, Dead by Daylight, Phasmophobia, Lethal Company, Palworld, Delta Force, Arc Raiders.
-
-**Mobile & Cross-Play:** Clash Royale, Clash of Clans, Brawl Stars, PUBG Mobile, Free Fire, Mobile Legends, Wild Rift, Genshin Impact, Honkai: Star Rail, Wuthering Waves, Zenless Zone Zero.
-
-**Sandbox & Survival:** Minecraft (Java + Bedrock), Terraria, Rust, Stardew Valley.
-
-**Sports & Racing:** Forza Horizon 6, FIFA / EA Sports FC 25, NBA 2K.
-
-**JRPG & Story:** Final Fantasy (VII / XIV / XVI), Persona 5 / Metaphor, Monster Hunter Wilds / Rise, Pokémon, Zelda BOTW / TOTK.
-
-If a game isn't explicitly mapped, the engine still answers from live Wikipedia and web search results.
-
----
-
-## 18. Performance Targets
-
-| Metric | Target | Measurement |
-|---|---|---|
-| First contentful paint | < 1.2s | Vercel Analytics |
-| Time to interactive | < 2.0s | Lighthouse |
-| P50 first-token streaming | < 400ms | Server logs |
-| Lighthouse Performance | ≥ 90 | CI |
-| Cold-start edge function | < 100ms | Supabase dashboard |
-| Web build size (gzipped) | < 320kb main JS | Vite build report |
-
-The landing page includes a runtime FPS probe — if observed frame rate falls below 48fps after mount, the page enters "low-power mode" (WebGL hero is dropped, Lenis smooth-scroll is disabled, backdrop-filter is stripped, decorative overlays vanish). This keeps integrated-graphics laptops smooth without compromising the experience on capable hardware.
-
----
-
-## 19. Roadmap
-
-- [x] Multi-provider Neural Mesh (Gemini + Groq + OpenRouter + Cerebras)
-- [x] Project PULSE v2 (5-provider web search, recency ranking)
-- [x] Vision GODMODE v3 (18-game HUD decoders, second-opinion verification)
-- [x] Discord Bot v2.0 (monetization, tiers, analytics, 24/7 deployment)
-- [x] Premium landing page (Framer Motion + GSAP + R3F)
-- [x] Hash-routed About / Terms / Contacts pages
-- [x] Seven custom dark themes with ambient transition system
-- [ ] Twitch bot integration
-- [ ] Voice chat analysis (clip → transcript → advice)
-- [ ] Custom persona builder (user-defined expert overlays)
-- [ ] React Native mobile app
-- [ ] Streaming responses to the web client (currently streams server-side only)
-
----
-
-## 20. Copyright, License & Acceptable Use
-
-**Copyright.** All content, design, code, branding, visualizations, prompts, and architecture of GameGuide-AI are © 2026 Tanmay Angarkar. All rights reserved.
-
-**Protected marks.** The GameGuide-AI name, logo, and the phrases *Neural Mesh*, *PULSE Search*, *Vision GODMODE*, and *Cortex* are project marks.
-
-**Source code.** The source code, UI, animations, copy, and underlying prompt engineering are protected under copyright law and may not be copied, redistributed, mirrored, scraped, fine-tuned on, or used to train any model without prior written consent.
-
-**Third-party content.** Game titles, screenshots, lore, and patch notes belong to their respective publishers and are referenced under fair use for commentary, research, and player assistance.
-
-**Acceptable Use.** Users agree not to:
-
-- Generate harassing, illegal, or harmful content.
-- Bypass rate limits or perform automated scraping of the service.
-- Resell, white-label, or sublicense responses without permission.
-- Train competing AI models using GameGuide-AI's output.
-- Reverse engineer, decompile, or attempt to extract the system prompt, routing logic, or provider configuration.
-
-**AI-generated content disclaimer.** Responses are generated by large language models combined with live web sources. All output should be treated as *guidance, not authority*. Verify critical decisions (purchases, irreversible in-game choices, competitive plays) against primary sources. The project is not liable for losses arising from reliance on Service output.
-
-**DMCA.** If you believe content on this service infringes your copyright, contact `gameguideai.support@gmail.com` with the disputed material, your contact details, and a statement of good-faith belief. Responses are sent within seven business days.
-
-The complete terms are available in-app at `#terms`.
-
----
-
-## 21. Contact
-
-| Channel | Address |
+### Client Configuration (`.env.local`)
+| Variable | Description |
 |---|---|
-| **Support email** | [gameguideai.support@gmail.com](mailto:gameguideai.support@gmail.com) |
+| `VITE_SUPABASE_URL` | Supabase project API URL (e.g. `https://<id>.supabase.co`). |
+| `VITE_SUPABASE_ANON_KEY` | Public anonymous API key with RLS enforcement. |
+
+### Edge Function Secrets (`supabase/functions/.env`)
+| Variable | Required | Description |
+|---|:---:|---|
+| `GOOGLE_API_KEY` | **Yes** | Primary AI provider for Gemini text, vision, and OCR. |
+| `GROQ_API_KEY` | Optional | Fast-path reasoning and compound search routing. |
+| `OPENROUTER_API_KEY` | Optional | Extended vision model fallback and multi-provider options. |
+| `CEREBRAS_API_KEY` | Optional | Ultra-fast low-latency text fallback. |
+| `SERPER_API_KEY` | Optional | Google SERP API for Project PULSE (2,500 free queries/mo). |
+| `GOOGLE_CSE_ID` | Optional | Google Custom Search Engine ID (100 free queries/day). |
+| `BRAVE_SEARCH_API_KEY` | Optional | Brave Search API (2,000 free queries/mo). |
+| `SUPERCELL_API_KEY` | Optional | Official Supercell API token (Clash Royale / Brawl Stars). |
+| `STEAM_API_KEY` | Optional | Steam Web API key for live patch news retrieval. |
+
+---
+
+## 🚢 Deployment Guide
+
+### Web Frontend (Vercel)
+1. Import the GitHub repository into your [Vercel Dashboard](https://vercel.com).
+2. Set Framework Preset to **Vite**.
+3. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to Environment Variables.
+4. Deploy. The bundled `vercel.json` automatically manages SPA rewrites and serverless proxy routes.
+
+### Supabase Edge Functions
+```bash
+# Push database schema & migrations
+supabase db push
+
+# Deploy chat proxy function
+supabase functions deploy chat-proxy --no-verify-jwt
+
+# Set runtime secrets
+supabase secrets set GOOGLE_API_KEY="your_api_key"
+```
+
+---
+
+## 🧪 Automated Test & Regression Suite
+
+GameGuide-AI includes a comprehensive offline and live evaluation test suite:
+
+```bash
+# Execute master test suite (190+ tests)
+npm test
+```
+
+### Verified Test Suites:
+- `detection.test.ts`: Game name parsing, installment number extraction, and alias resolution.
+- `behaviour.test.ts`: User correction acceptance and follow-up chip suppression.
+- `gemini.test.ts`: Multi-model quota rotation and load balancing.
+- `corroboration.test.ts`: Source-agreement scoring and claim confidence metrics.
+- `ssrf.test.mjs`: Fandom/Wiki proxy URL sanitization and SSRF prevention.
+- `eval/pipeline.test.mjs`: Golden-set retrieval and routing accuracy verification.
+
+---
+
+## 🔒 Security & Responsible Disclosure
+
+We take application security and user data privacy seriously:
+- **No Client-Side Secrets**: All third-party AI provider keys are strictly isolated inside Supabase Edge Functions.
+- **SSRF Hardening**: All proxy endpoints strictly validate incoming hosts and reject arbitrary or private IP ranges.
+- **Vulnerability Reporting**: If you find a security issue, please consult [SECURITY.md](SECURITY.md) or email [gameguideai.support@gmail.com](mailto:gameguideai.support@gmail.com).
+
+---
+
+## 📄 License & Intellectual Property
+
+Copyright © 2026 Tanmay Angarkar. All rights reserved.
+
+This software, its source code, architecture, system prompts, and branding are proprietary. Unauthorized copying, distribution, modification, reverse engineering, model scraping, or training of competing AI models is strictly prohibited. See [LICENSE](LICENSE) for terms.
+
+---
+
+## 📬 Contact & Support
+
+<div align="center">
+
+| Channel | Contact |
+|---|---|
+| **Product Support** | [gameguideai.support@gmail.com](mailto:gameguideai.support@gmail.com) |
 | **LinkedIn** | [Tanmay Angarkar](https://www.linkedin.com/in/tanmay-angarkar-4b8a47319/) |
 | **GitHub** | [@angarkartanmay-ops](https://github.com/angarkartanmay-ops) |
-| **Discord bot setup** | [discord-bot/README.md](discord-bot/README.md) |
 
-Response targets: support email within 24 hours, LinkedIn within three business days, GitHub issues triaged weekly.
-
----
-
-*GameGuide-AI · © 2026 Tanmay Angarkar — built on a self-healing neural mesh.*
+</div>

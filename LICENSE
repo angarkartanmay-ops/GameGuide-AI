@@ -1,0 +1,19 @@
+Copyright (c) 2026 Tanmay Angarkar. All rights reserved.
+
+Proprietary Software License
+
+1. Grant of License:
+This software, including all related source code, architecture, prompt engineering, designs, branding, documentation, and assets ("Software"), is the proprietary intellectual property of Tanmay Angarkar ("Owner").
+
+2. Restrictions:
+You may not:
+a. Copy, modify, merge, publish, distribute, sublicense, sell, or create derivative works of the Software without express prior written permission from the Owner.
+b. Reverse engineer, decompile, or disassemble any part of the Software or prompt architecture.
+c. Use any portion of the Software, its outputs, or its datasets to train, fine-tune, evaluate, or develop competing artificial intelligence models or services.
+d. Scrape, crawl, or systematically extract data or responses from the hosted GameGuide-AI service.
+
+3. Disclaimer:
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For licensing inquiries or commercial permissions, contact:
+gameguideai.support@gmail.com
