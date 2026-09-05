@@ -17,6 +17,8 @@
 //  than a silent retry.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { createReasoningFilter, stripReasoning } from './reasoning.ts';
+
 export type SseEvent =
   | { type: 'stage'; stage: string; detail?: string }
   | { type: 'meta'; meta: Record<string, unknown> }
@@ -128,6 +130,9 @@ export async function streamOpenAICompat(
     let buffer = '';
     let full = '';
     let sawToken = false;
+    // Reasoning models emit <think>…</think> inline. Filter the visible
+    // stream; the full buffer still accumulates raw so we can strip it once at the end.
+    const reasoning = createReasoningFilter();
 
     while (true) {
       const { done, value } = await reader.read();
@@ -149,9 +154,15 @@ export async function streamOpenAICompat(
             const json = JSON.parse(payload);
             const delta = json?.choices?.[0]?.delta?.content;
             if (typeof delta === 'string' && delta.length) {
-              if (!sawToken) { sawToken = true; opts.onFirstToken?.(); }
               full += delta;
-              opts.onDelta(delta);
+              const visible = reasoning.push(delta);
+              if (visible) {
+                // Only count a token as "first" once something real is shown —
+                // otherwise the UI drops its progress indicator while the model
+                // is still silently thinking.
+                if (!sawToken) { sawToken = true; opts.onFirstToken?.(); }
+                opts.onDelta(visible);
+              }
             }
           } catch {
             // Partial or non-JSON keepalive frame — ignore.
@@ -160,8 +171,14 @@ export async function streamOpenAICompat(
       }
     }
 
-    if (!full.trim()) throw new Error('EMPTY_RESPONSE');
-    return full;
+    const tail = reasoning.finish();
+    if (tail) {
+      if (!sawToken) { sawToken = true; opts.onFirstToken?.(); }
+      opts.onDelta(tail);
+    }
+    const cleaned = stripReasoning(full);
+    if (!cleaned.trim()) throw new Error('EMPTY_RESPONSE');
+    return cleaned;
   } finally {
     clearTimeout(timeout);
   }
@@ -195,14 +212,24 @@ export async function streamGemini(
 
   let full = '';
   let sawToken = false;
+  const reasoning = createReasoningFilter();
   for await (const chunk of stream) {
     const t = chunk?.text;
     if (typeof t === 'string' && t.length) {
-      if (!sawToken) { sawToken = true; opts.onFirstToken?.(); }
       full += t;
-      opts.onDelta(t);
+      const visible = reasoning.push(t);
+      if (visible) {
+        if (!sawToken) { sawToken = true; opts.onFirstToken?.(); }
+        opts.onDelta(visible);
+      }
     }
   }
-  if (!full.trim()) throw new Error('EMPTY_RESPONSE');
-  return full;
+  const tail = reasoning.finish();
+  if (tail) {
+    if (!sawToken) { sawToken = true; opts.onFirstToken?.(); }
+    opts.onDelta(tail);
+  }
+  const cleaned = stripReasoning(full);
+  if (!cleaned.trim()) throw new Error('EMPTY_RESPONSE');
+  return cleaned;
 }

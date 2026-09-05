@@ -17,6 +17,7 @@ const SUITES = [
   ['detection',     'detection.test.ts'],      // game-name parsing incl. installment numbers
   ['behaviour',     'behaviour.test.ts'],      // correction detection + follow-up suppression
   ['gemini',        'gemini.test.ts'],         // multi-model quota rotation
+  ['reasoning',     'reasoning.test.ts'],      // strip <think> scratchpad from replies
   ['corroboration', 'corroboration.test.ts'],  // source-agreement scoring
   ['ssrf',          'ssrf.test.mjs'],          // wiki-proxy subdomain validation
   ['eval',          'eval/pipeline.test.mjs'], // golden-set retrieval + routing accuracy
