@@ -12,6 +12,7 @@ import {
   SseWriter, sseHeaders, streamOpenAICompat, streamGemini,
 } from './streaming.ts';
 import { corroborate, CorroborationInput } from './corroboration.ts';
+import { stripReasoning, createReasoningFilter } from './reasoning.ts';
 import {
   checkRateLimit, anonBucket, userIdFromAuthHeader, botCallerFromHeaders,
   LIMITS_AUTHED, LIMITS_ANON,
@@ -88,14 +89,33 @@ Instead, when a title is unfamiliar and live blocks are quiet:
 
 Never pad the gap with history about older games in the series — that's a non-answer dressed as helpfulness.
 
+**But don't swing the other way either — never CONFIRM a game you can't find.**
+"I can't verify it" and "it exists and I'm just behind" are different statements, and only the first one is honest when your sources are empty. If a title returns nothing, do NOT write as though it's real: no "check the game's official wiki", no "my training cut off before it released", no plot/mechanics/score details, and no assuming there IS a wiki.
+
+Say the search came back empty and ask them to confirm — that costs nothing if the game is real, and stops you inventing a world around a title that isn't:
+> Nothing's coming back for **X** on my end — no store page, no coverage. Could be brand new, could be a slightly different title. Where did you see it? If you've got a storefront link or the exact spelling I'll dig properly.
+
+The distinction that matters: **don't declare a game fake, but don't validate one either.** Report what your sources did and didn't return, and let the user resolve it.
+
 **If ANY live block mentions the title, the game exists.** Report what it says and cite it. Don't weigh it against training; training is the stale side. **A user asserting a game exists is strong evidence** — they're looking at a store page. Believe them.
 
 ## WHEN THE USER CORRECTS YOU
-Assume they're right. They're looking at the thing; you have compressed pixels and stale training.
+Split by what KIND of claim is being corrected. These are opposite rules and mixing them up is how you end up either arguing with reality or parroting a falsehood.
+
+**A. What THEY can see, and you can't — defer immediately.**
+Their screenshot, their game, their library, their rank, their hardware, what a title is called. They're looking at the thing; you have compressed pixels and stale training.
 1. Accept immediately: "Ah — you're right, my mistake."
 2. Do NOT re-argue or append "however, based on my analysis...".
 3. Re-answer the ORIGINAL question with the correction applied.
 4. If you have nothing on what they named, say so and work from what they tell you.
+
+**B. A checkable public fact — do NOT just fold.**
+Release dates, developer/publisher, review scores, patch numbers, whether a feature shipped. These have one right answer that doesn't change because someone pushed back.
+- If a live INTEL block or a well-established fact contradicts them, say so plainly and kindly, and cite it: "Pretty sure it was 3 August 2023 — that's what the Steam page says. Want me to double-check anything specific?"
+- Never restate a claim you believe is false as though it were fact. Bolding it makes it worse.
+- If you genuinely aren't sure, say you're not sure and say how to settle it. That is a fine answer.
+- Being wrong and corrected is fine. Agreeing to something false to be agreeable is not — it makes every other answer you give worth less.
+
 A correction is never off-topic. Answering one with a scope message is catastrophic.
 
 ## LIVE DATA
@@ -116,7 +136,14 @@ Much of what people bring isn't a mechanics question. Handle it like a friend, n
 
 You're allowed to just talk. "I finished Outer Wilds and I feel weird" wants a few sentences of genuine reaction, not a formatted guide. Never apply live-data disclaimers to feelings.
 
-One real limit, not a filter: if someone may be in danger of hurting themselves, drop the game talk, respond like a person who cares, and point them to help. Never hand them a template.
+One real limit, not a filter — and it has two settings, because getting the level wrong in either direction does harm.
+
+**If there's any explicit signal of self-harm** ("end it all", "hurt myself", "don't want to be here"): drop the game talk entirely, respond like a person who cares, and point them to real help (988 in the US; otherwise tell them to search their country's crisis line). Never hand them a template.
+
+**If the language is bleak but ambiguous** — "nothing matters", "I don't see the point anymore", "what's the point" — do NOT launch the full crisis script; that's patronising when someone is just tilted, and it teaches them not to talk to you. Answer warmly and normally, like the friend you are. But leave one door open, lightly, near the end. One sentence, no alarm:
+> "…and if this is bigger than the game lately, that's worth saying out loud to someone — I'm happy to just talk too."
+
+The failure to avoid is treating "nothing matters" as *purely* a ranked-loss complaint and moving straight to practice drills. Acknowledge the weight first, help second, and always leave the door open.
 
 # FORMATTING
 Formatting serves the answer, not a quota.
@@ -655,12 +682,25 @@ function buildCorrectionDirective(prompt: string, game: string | null): string {
   return `=== ⚠️ USER CORRECTION — HIGHEST PRIORITY ===
 The user is telling you that your PREVIOUS answer was wrong. Their message: "${prompt.slice(0, 300)}"
 
-Non-negotiable handling:
-1. The user is looking at the actual thing. You are working from compressed pixels and stale training data. **Assume they are right.**
+FIRST decide which kind of correction this is. The two kinds have OPPOSITE handling.
+
+**KIND A — something only they can see** (their screenshot, their game, their
+library, their rank, their hardware, what a title is called):
+1. They're looking at the actual thing; you have compressed pixels and stale training. **Assume they are right.**
 2. Open by accepting it plainly — "Ah, you're right, my mistake." No defensiveness, no hedging.
 3. Do NOT restate or re-justify your original answer. Never write "however, based on my analysis...".
 4. Re-answer the ORIGINAL question with the corrected fact applied.
-5. This message is a CONTINUATION of the current conversation, never a new or off-topic question. Do not change the subject and never emit any kind of scope or refusal message.
+
+**KIND B — a checkable public fact** (release date, developer/publisher, review
+score, patch number, whether a feature shipped):
+1. Do NOT simply fold. These have one right answer that does not change because someone pushed back.
+2. If a live INTEL block or a well-established fact contradicts them, say so plainly and kindly, and cite it: "Pretty sure it was 3 August 2023 — that's what the Steam page says."
+3. NEVER restate a claim you believe is false as if it were fact. Bolding it makes it worse.
+4. If you genuinely aren't sure, say you aren't sure and say how to settle it.
+5. Agreeing to something false to be agreeable devalues every other answer you give. Don't.
+
+Applies to BOTH kinds:
+- This message is a CONTINUATION of the current conversation, never a new or off-topic question. Do not change the subject and never emit any kind of scope or refusal message.
 ${game ? `6. The corrected subject appears to be **${game}**. Any live INTEL block below about it outranks both your training data and your earlier answer.\n` : ''}${game ? '7' : '6'}. If you have no reliable information about what they named — likely if it released after your training cutoff — say so honestly and ask what they're seeing. Do not invent details, and do not fall back to describing the older entry in the series as if it were the one they named.
 === END USER CORRECTION ===`;
 }
@@ -869,8 +909,15 @@ async function callOpenAICompat(
   }
 
   const data = await res.json();
-  const text = data?.choices?.[0]?.message?.content;
-  if (!text || typeof text !== 'string' || text.trim().length === 0) {
+  const raw = data?.choices?.[0]?.message?.content;
+  if (!raw || typeof raw !== 'string' || raw.trim().length === 0) {
+    throw new Error('EMPTY_RESPONSE');
+  }
+  // Reasoning models stream their scratchpad inline; never show it to a user.
+  const text = stripReasoning(raw);
+  if (!text.trim()) {
+    // The reply was scratchpad and nothing else — treat as a failed generation
+    // so the mesh falls through to another model rather than rendering blank.
     throw new Error('EMPTY_RESPONSE');
   }
   return text;
@@ -2040,7 +2087,7 @@ async function runNeuralMesh(opts: {
 // the single most robotic thing this service can do, so when the model
 // deliberately omitted chips on such a turn, we respect that instead of
 // backfilling them.
-const EMOTIONAL_RX = /\b(burn(ed|t)?\s*out|burnout|depress\w*|anxiet\w*|anxious|lonely|feel\w*\s+alone|grief|griev\w*|quit(ting)?\s+gaming|no\s+longer\s+enjoy|don'?t\s+enjoy|lost\s+interest|hardstuck|tilted|tilting|hopeless|worthless|addict\w*|ruining\s+my|hate\s+myself|kill\s+myself|end\s+it\s+all|self\s*harm|feel(s|ing)?\s+(?:\w+\s+){0,2}(weird|empty|hollow|numb|awful|terrible|deflated|lost|down|like\s+shit))\b/i;
+const EMOTIONAL_RX = /\b(burn(ed|t)?\s*out|burnout|depress\w*|anxiet\w*|anxious|lonely|feel\w*\s+alone|grief|griev\w*|quit(ting)?\s+gaming|no\s+longer\s+enjoy|don'?t\s+enjoy|lost\s+interest|hardstuck|tilted|tilting|hopeless|worthless|addict\w*|ruining\s+my|hate\s+myself|kill\s+myself|end\s+it\s+all|end\s+my\s+life|self\s*harm|hurt(ing)?\s+myself|don'?t\s+(?:see|see\s+any)\s+(?:the\s+)?point|what'?s\s+the\s+point(?!\s+of\s+(?:the|a|an|this|that|these|those|his|her|their)\b)|no\s+point\s+(?:in|to)\s+(?:any|living|it)|nothing\s+matters|nothing\s+really\s+matters|give\s+up\s+on\s+everything|can'?t\s+go\s+on|don'?t\s+want\s+to\s+be\s+here|better\s+off\s+without\s+me|tired\s+of\s+living|feel(s|ing)?\s+(?:\w+\s+){0,2}(weird|empty|hollow|numb|awful|terrible|deflated|lost|down|worthless|like\s+shit))\b/i;
 
 function shouldSkipAutoFollowUps(prompt: string, replyText: string, isCorrectionTurn: boolean): boolean {
   if (isCorrectionTurn) return true;
@@ -2108,17 +2155,23 @@ Deno.serve(async (req) => {
       getMeshState(),
       getDiscoveredModels(registry),
     ]);
+    // Report what will ACTUALLY route, not the deploy-time list. Discovery
+    // supersedes the static registry per provider, so showing `registry` here
+    // made /health describe a mesh that no longer exists — the opposite of
+    // what a diagnostic endpoint is for.
+    const effective = catalog.models.length ? catalog.models : registry;
     const status = {
       cortex: 'v5-mesh-v3',
       db: dbConfigured ? 'connected' : 'NOT CONFIGURED (rate limiting degraded to in-memory)',
       providers: Object.values(PROVIDERS).map(p => ({
         name: p.name,
         configured: !!Deno.env.get(p.keyEnv),
-        models: registry.filter(m => m.provider === p.name).length,
+        models: effective.filter(m => m.provider === p.name).length,
+        source: catalog.models.some(m => m.provider === p.name) ? catalog.source : 'static-fallback',
       })),
       // Which models are currently benched, and how much of today's free
       // allowance each one has already spent.
-      mesh: registry.map(m => ({
+      mesh: effective.map(m => ({
         model: `${m.provider}/${m.id}`,
         vision: m.vision,
         tier: m.tier,
@@ -2696,11 +2749,23 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
     }
 
     // ── LAYER 5: quality gate ──
-    const polishedText = ensureFollowUps(
-      finalText,
-      profile,
-      shouldSkipAutoFollowUps(prompt, finalText, userIsCorrecting),
-    );
+    const skipFollowUps = shouldSkipAutoFollowUps(prompt, finalText, userIsCorrecting);
+
+    // Suppressing the AUTO-append isn't enough: the model often writes its own
+    // "[?]" chips despite the instruction not to. Observed on a message saying
+    // "nothing matters" — it ended with "[?] What games are you usually
+    // playing?", which lands as deflection. Strip them deterministically rather
+    // than relying on prompt compliance for something this tone-sensitive.
+    if (skipFollowUps) {
+      finalText = finalText
+        .split('\n')
+        .filter(l => !/^\s*\[\?\]/.test(l))
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    }
+
+    const polishedText = ensureFollowUps(finalText, profile, skipFollowUps);
 
     if (!ephemeral) responseCache.set(cKey, {
       text: polishedText,
