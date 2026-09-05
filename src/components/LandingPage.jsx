@@ -545,11 +545,14 @@ function SignalPath({ pinned = true }) {
           {SIGNAL_STEPS.map((step, i) => (
             <div
               key={i}
+              // When motion is off, every step renders active. Marking only
+              // step 0 left the rest pinned at opacity .2 permanently, which
+              // is unreadable for exactly the users who opted out of motion.
               className={`
                 hg-signal__step
                 ${shouldAnimate && i === activeStep ? 'is-active' : ''}
                 ${shouldAnimate && i < activeStep ? 'is-past' : ''}
-                ${!shouldAnimate && i === 0 ? 'is-active' : ''} // Show first step as active in low-power
+                ${!shouldAnimate ? 'is-active' : ''}
               `}
             >
               <span className="hg-signal__step-label">{step.label}</span>
