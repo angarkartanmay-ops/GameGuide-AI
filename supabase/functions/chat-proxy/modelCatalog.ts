@@ -62,7 +62,9 @@ const QUALITY_ORDER: Array<{ rx: RegExp; tier: Tier; rank: number }> = [
   { rx: /^nvidia\/nemotron-\d+(\.\d+)?-super/i,  tier: 'flagship', rank: 25 },
   { rx: /^thinkingmachines\/inkling$/i,          tier: 'flagship', rank: 28 },
   { rx: /^google\/gemma-[4-9]/i,                 tier: 'balanced', rank: 30 },
-  { rx: /^qwen\/qwen3(\.\d+)?-(flash|\d+b)/i,    tier: 'balanced', rank: 35 },
+  // Optional hyphen: OpenRouter/Groq publish `qwen3.8-27b`, Cerebras publishes
+  // `qwen-3.8-27b`. Same family, two spellings.
+  { rx: /^qwen\/qwen-?3(\.\d+)?-(flash|\d+b)/i,  tier: 'balanced', rank: 35 },
   { rx: /^openai\/gpt-oss-20b/i,                 tier: 'balanced', rank: 40 },
   { rx: /^thinkingmachines\/inkling-small/i,     tier: 'balanced', rank: 42 },
   { rx: /^poolside\/laguna-s/i,                  tier: 'balanced', rank: 45 },
@@ -153,6 +155,91 @@ export async function discoverOpenRouter(timeoutMs = 4000): Promise<MeshModel[]>
   }
 }
 
+// ── OpenAI-compatible provider discovery (Groq, Cerebras) ─────────────────
+//  These were originally left out on the premise that they "publish short
+//  stable lists". Measured 2026-09-05, that premise was false: Groq had
+//  retired BOTH Llama entries (llama-3.3-70b-versatile, llama-3.1-8b-instant)
+//  — half the registry, including the entire `fast` tier — while gaining two
+//  Qwen models nothing knew to use. Cerebras had likewise gained one.
+//
+//  The circuit breaker does eventually route around a dead id, but only after
+//  paying a failed round trip, on every cold start, forever. Both providers
+//  expose a standard /v1/models endpoint, so ask them instead of guessing.
+
+interface ProviderProbe {
+  provider: string;
+  url: string;
+  keyEnv: string;
+  capEnv: string;
+  capDefault: number;
+  ctx: number;
+}
+
+const OPENAI_COMPAT_PROBES: ProviderProbe[] = [
+  { provider: 'Groq',     url: 'https://api.groq.com/openai/v1/models', keyEnv: 'GROQ_API_KEY',     capEnv: 'GROQ_DAILY_CAP',     capDefault: 1000, ctx: 131072 },
+  { provider: 'Cerebras', url: 'https://api.cerebras.ai/v1/models',     keyEnv: 'CEREBRAS_API_KEY', capEnv: 'CEREBRAS_DAILY_CAP', capDefault: 800,  ctx: 65000 },
+];
+
+/**
+ * Discover live chat models on an OpenAI-compatible provider.
+ *
+ * Reuses the same QUALITY_ORDER/EXCLUDE_RX vetting as OpenRouter, so a
+ * newly-appeared model is only adopted if it belongs to a family already
+ * trusted for this workload — discovery widens coverage without lowering the
+ * bar. Bare ids (Cerebras style, e.g. `gpt-oss-120b`) are matched by
+ * normalising to a vendor-prefixed form first.
+ */
+export async function discoverOpenAICompat(probe: ProviderProbe, timeoutMs = 4000): Promise<MeshModel[]> {
+  const key = Deno.env.get(probe.keyEnv);
+  if (!key) return [];
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(probe.url, {
+      signal: ctrl.signal,
+      headers: { 'Authorization': `Bearer ${key}`, 'Accept': 'application/json' },
+    });
+    if (!res.ok) {
+      console.warn(`[CATALOG] ${probe.provider} returned HTTP ${res.status}`);
+      return [];
+    }
+    const body = await res.json();
+    const ids: string[] = (body?.data || []).map((m: any) => m?.id).filter(Boolean);
+    if (!ids.length) return [];
+
+    const cap = envInt(probe.capEnv, probe.capDefault);
+    const out: Array<MeshModel & { rank: number }> = [];
+    for (const id of ids) {
+      if (EXCLUDE_RX.test(id)) continue;
+      // Agentic systems are routed separately (see meshRouter GROQ_AGENTIC);
+      // they must not enter the general chat rotation.
+      if (/^groq\/compound/i.test(id)) continue;
+      // Cerebras publishes bare ids; try the id as-is and vendor-prefixed so
+      // the shared QUALITY_ORDER patterns (which expect `vendor/model`) match.
+      const cls = classify(id) || classify(`openai/${id}`) || classify(`qwen/${id}`) || classify(`google/${id}`);
+      if (!cls) continue;
+      out.push({
+        provider: probe.provider,
+        id,
+        vision: false,          // none of these expose image input today
+        tier: cls.tier,
+        dailyCap: cap,
+        cost: 0,                // free and rate-limited, not credit-metered
+        ctx: probe.ctx,
+        rank: cls.rank,
+      });
+    }
+    out.sort((a, b) => a.rank - b.rank);
+    console.log(`[CATALOG] ${probe.provider}: discovered ${out.length} usable models`);
+    return out.map(({ rank: _rank, ...m }) => m);
+  } catch (e) {
+    console.warn(`[CATALOG] ${probe.provider} discovery failed:`, (e as Error).message);
+    return [];
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 /**
  * Cached discovery. Never throws, never blocks longer than the timeout, and
  * serves a stale cache in preference to nothing.
@@ -165,28 +252,47 @@ export async function getDiscoveredModels(staticFallback: MeshModel[]): Promise<
   if (inflight) return await inflight;
 
   inflight = (async (): Promise<DiscoveryResult> => {
-    const live = await discoverOpenRouter();
-    if (live.length > 0) {
+    // All three providers in parallel — one slow or failing provider must not
+    // hold up the others, and each falls back to [] independently.
+    const [orLive, ...compatLive] = await Promise.all([
+      discoverOpenRouter(),
+      ...OPENAI_COMPAT_PROBES.map(p => discoverOpenAICompat(p)),
+    ]);
+
+    // Keep each provider's static entries only where discovery came back
+    // empty, so a transient outage degrades to the old list per-provider
+    // rather than wiping that provider from the mesh entirely.
+    const discovered: MeshModel[] = [...orLive];
+    for (let i = 0; i < OPENAI_COMPAT_PROBES.length; i++) {
+      const probe = OPENAI_COMPAT_PROBES[i];
+      const found = compatLive[i] || [];
+      discovered.push(...(found.length ? found : staticFallback.filter(m => m.provider === probe.provider)));
+    }
+    if (!orLive.length) {
+      discovered.push(...staticFallback.filter(m => m.provider === 'OpenRouter'));
+    }
+
+    if (orLive.length > 0 || compatLive.some(l => l.length > 0)) {
       const result: DiscoveryResult = {
-        models: live,
+        models: discovered,
         source: 'live',
         fetchedAt: Date.now(),
-        freeCount: live.filter(m => m.cost === 1).length,
-        visionCount: live.filter(m => m.vision).length,
+        freeCount: discovered.filter(m => m.cost <= 1).length,
+        visionCount: discovered.filter(m => m.vision).length,
       };
       cache = { ts: Date.now(), result };
       return result;
     }
-    // Discovery unavailable. Prefer a stale cache over the static list —
-    // even yesterday's live catalog beats a list frozen at deploy time.
+    // Discovery unavailable everywhere. Prefer a stale cache over the static
+    // list — even yesterday's live catalog beats a list frozen at deploy time.
     if (cache) return { ...cache.result, source: 'cache' };
-    const orStatic = staticFallback.filter(m => m.provider === 'OpenRouter');
+    const anyStatic = staticFallback.filter(m => m.provider !== 'Gemini');
     return {
-      models: orStatic,
+      models: anyStatic,
       source: 'fallback',
       fetchedAt: 0,
-      freeCount: orStatic.length,
-      visionCount: orStatic.filter(m => m.vision).length,
+      freeCount: anyStatic.length,
+      visionCount: anyStatic.filter(m => m.vision).length,
     };
   })();
 

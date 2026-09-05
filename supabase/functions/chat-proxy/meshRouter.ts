@@ -93,10 +93,15 @@ export function buildRegistry(): MeshModel[] {
 
   return [
     // ── Groq: fastest + effectively unmetered. Spend here first. ──────────
-    { provider: 'Groq', id: 'openai/gpt-oss-120b',      vision: false, tier: 'flagship', dailyCap: groqCap, cost: 0, ctx: 131072 },
-    { provider: 'Groq', id: 'llama-3.3-70b-versatile',  vision: false, tier: 'flagship', dailyCap: groqCap, cost: 0, ctx: 131072 },
-    { provider: 'Groq', id: 'openai/gpt-oss-20b',       vision: false, tier: 'balanced', dailyCap: groqCap, cost: 0, ctx: 131072 },
-    { provider: 'Groq', id: 'llama-3.1-8b-instant',     vision: false, tier: 'fast',     dailyCap: groqCap, cost: 0, ctx: 131072 },
+    // Verified live 2026-09-05. Both Llama entries that used to sit here
+    // (llama-3.3-70b-versatile, llama-3.1-8b-instant) were retired upstream
+    // within 11 days — Groq now publishes no Llama chat models at all. This
+    // list is only the cold-start fallback; discovery (modelCatalog.ts) is
+    // the source of truth and now covers Groq too.
+    { provider: 'Groq', id: 'openai/gpt-oss-120b', vision: false, tier: 'flagship', dailyCap: groqCap, cost: 0, ctx: 131072 },
+    { provider: 'Groq', id: 'openai/gpt-oss-20b',  vision: false, tier: 'balanced', dailyCap: groqCap, cost: 0, ctx: 131072 },
+    { provider: 'Groq', id: 'qwen/qwen3.8-27b',    vision: false, tier: 'balanced', dailyCap: groqCap, cost: 0, ctx: 131042 },
+    { provider: 'Groq', id: 'qwen/qwen3.6-27b',    vision: false, tier: 'fast',     dailyCap: groqCap, cost: 0, ctx: 131072 },
 
     // ── Cerebras: also very fast, separate quota pool. ────────────────────
     { provider: 'Cerebras', id: 'gpt-oss-120b', vision: false, tier: 'flagship', dailyCap: cerebrasCap, cost: 0, ctx: 65000 },
@@ -270,11 +275,15 @@ export function planRoute(
   registry = buildRegistry(),
   discovered?: MeshModel[],
 ): RouteCandidate[] {
-  // Live discovery supersedes the static OpenRouter entries entirely. Those
-  // ids are frozen at deploy time and measurably rot within days; a live
-  // catalog is always the better source of truth when we have one.
+  // Live discovery supersedes the static entries for ANY provider it covers.
+  // Those ids are frozen at deploy time and measurably rot within days
+  // (Groq retired both Llama models in 11 days), so a live catalog is always
+  // the better source of truth. Deriving the set from `discovered` rather
+  // than hardcoding 'OpenRouter' means adding a provider to discovery can
+  // never leave stale duplicates behind here.
   if (discovered && discovered.length) {
-    registry = registry.filter(m => m.provider !== 'OpenRouter').concat(discovered);
+    const covered = new Set(discovered.map(m => m.provider));
+    registry = registry.filter(m => !covered.has(m.provider)).concat(discovered);
   }
   const wantTier: Tier =
     need.complexity === 'simple' ? 'fast'
