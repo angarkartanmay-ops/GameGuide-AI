@@ -33,3 +33,16 @@ jobs:
 
       - name: Build Web Application
         run: npm run build
+
+      # The bot is a separate package with its own lockfile, and the test suite
+      # above only reaches the three files that happen to have no load-time
+      # imports (quota, entitlements, billing-stripe). Nothing was parsing
+      # index.js — 1,200 lines behind a `require('discord.js')` — so a syntax
+      # error there could reach production untouched by a green CI run.
+      - name: Install Bot Dependencies
+        working-directory: discord-bot
+        run: npm ci
+
+      - name: Syntax-Check Bot
+        working-directory: discord-bot
+        run: npm run syntax-check
