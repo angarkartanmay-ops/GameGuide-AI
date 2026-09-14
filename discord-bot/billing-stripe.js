@@ -72,6 +72,39 @@ function buildCheckoutUrl(paymentLink, { userId, guildId = null }) {
 const ISO = (unixSeconds) =>
   Number.isFinite(unixSeconds) ? new Date(unixSeconds * 1000).toISOString() : null;
 
+/**
+ * Read a subscription's current period end.
+ *
+ * `current_period_end` was REMOVED from Subscription and moved onto
+ * SubscriptionItem (Stripe API 2025-03-31.basil onward; this SDK pins
+ * 2026-08-26.dahlia, so the top-level field is simply absent). Reading
+ * `sub.current_period_end` therefore yields undefined → ISO() → null, and
+ * null means "never expires" to gg_discord_quota_check:
+ *
+ *     AND (e.current_period_end IS NULL OR e.current_period_end > now())
+ *
+ * so every Stripe subscriber was being granted PERMANENT Pro. A clean cancel
+ * still revoked via customer.subscription.deleted, but a silent lapse — card
+ * expires, dunning exhausts, no `deleted` event — left paid access granted
+ * forever. Same applied to the whole-server plan via expires_at.
+ *
+ * A subscription can hold several items (add-ons, metered components) with
+ * different periods. The EARLIEST end is the honest answer: it is the first
+ * moment the subscription is no longer fully paid for.
+ */
+function subscriptionPeriodEnd(sub) {
+  const items = sub?.items?.data;
+  if (Array.isArray(items) && items.length) {
+    const ends = items
+      .map(i => i?.current_period_end)
+      .filter(Number.isFinite);
+    if (ends.length) return ISO(Math.min(...ends));
+  }
+  // Pre-basil API versions, and any future shape change, still work.
+  if (Number.isFinite(sub?.current_period_end)) return ISO(sub.current_period_end);
+  return null;
+}
+
 async function handleCheckoutCompleted(supabase, session, notify) {
   const ref = parseClientRef(session.client_reference_id);
   if (!ref) {
@@ -87,13 +120,22 @@ async function handleCheckoutCompleted(supabase, session, notify) {
   if (subscriptionId) {
     try {
       const sub = await stripe.subscriptions.retrieve(subscriptionId);
-      periodEnd = ISO(sub.current_period_end);
+      periodEnd = subscriptionPeriodEnd(sub);
     } catch (e) {
-      // A missing period end is survivable — the subscription.updated event
-      // that follows will fill it in. Refusing the grant would not be.
-      console.warn('[stripe] could not retrieve subscription for period end:', e.message);
+      // Never refuse a grant to someone who just paid. But null would mean
+      // "never expires" downstream, so fall back to a short provisional window
+      // instead of eternity: customer.subscription.updated arrives moments
+      // later and rewrites it with the real date. If that never comes, the
+      // subscriber lapses back to free in a few days and can be re-granted —
+      // far better than silently gifting a permanent plan on a transient 500.
+      periodEnd = new Date(Date.now() + 3 * 864e5).toISOString();
+      console.warn(
+        `[stripe] could not retrieve subscription ${subscriptionId} for period end (${e.message}) — granted with a 3-day provisional expiry`,
+      );
     }
   }
+  // A one-off / lifetime purchase has no subscription at all. That legitimately
+  // never expires, so null is the right value there and we leave it alone.
 
   if (ref.kind === 'guild') {
     const { error } = await supabase.from('discord_premium_servers').upsert({
@@ -132,7 +174,7 @@ async function handleSubscriptionUpdated(supabase, sub) {
     source: 'stripe',
     providerRef: sub.id,
     status: sub.status === 'past_due' ? 'past_due' : (active ? 'active' : 'canceled'),
-    currentPeriodEnd: ISO(sub.current_period_end),
+    currentPeriodEnd: subscriptionPeriodEnd(sub),
   });
   console.log(`[stripe] subscription ${sub.id} → ${sub.status} (user=${row.user_id})`);
 }
@@ -232,4 +274,6 @@ module.exports = {
   encodeClientRef,
   parseClientRef,
   stripeConfigured,
+  // exported for tests
+  subscriptionPeriodEnd,
 };
