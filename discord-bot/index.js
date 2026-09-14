@@ -3,12 +3,13 @@
 //  ───────────────────────────────────────────────────────────────────────
 //  Full feature-parity with the web app + monetization hooks.
 //
-//  Slash commands:    /ask /price /tip /lore /redpill /noclip /konami
-//                     /loading /clear /history /stats /premium /help
+//  Slash commands:    /ask /price /discover /konami /clear /history /quota
+//                     /stats /premium /help
 //  Mention chat:      @GameGuide <question> [+ image attachments]
 //  Vision:            up to 3 images per message, GODMODE pipeline
 //  History:           per-user, persistent in Supabase (table: discord_chat_messages)
-//  Tiers:             FREE 5/min · PRO 30/min · PREMIUM_SERVER 60/min
+//  Tiers:             FREE 15/day · PRO 200/day · SERVER 60/day (+800 guild pool)
+//                     Authoritative limits live in discord_quota_tiers, not here.
 //                     Tier resolution: Stripe-driven Supabase row OR env override
 //  Affiliate:         CheapShark deal URLs decorated with affiliate tags
 //                     (Humble, GreenManGaming, Fanatical) when env keys set
@@ -708,55 +709,31 @@ client.on('interactionCreate', async (interaction) => {
         });
       }
 
-      case 'tip': {
-        await interaction.deferReply();
-        return handleChatRequest({
-          userId, guildId,
-          prompt: 'Give me ONE elite pro gaming tip — concise, scannable, with **bold key terms**. Open with "💡 Pro Tip Unlocked".',
-          attachments: [],
-          replyTarget: interaction, channel: interaction.channel,
-        });
-      }
-
-      case 'lore': {
+      // /tip, /lore and /redpill were three commands issuing three nearly
+      // identical "give me a random nugget" prompts, each costing the user a
+      // full quota turn. Folded into /discover to match the web app, with the
+      // category either chosen by the user or picked at random.
+      case 'discover': {
+        const category = interaction.options.getString('category') || '';
         const game = interaction.options.getString('game') || '';
         await interaction.deferReply();
-        const prompt = game
-          ? `Give me a deep-cut lore drop about ${game}. Open with "📜 The Untold Story" — something most players miss. Use blockquotes for in-game text.`
-          : 'Give me a deep-cut lore drop about a random iconic game universe. Open with "📜 The Untold Story" — something most players miss.';
-        return handleChatRequest({
-          userId, guildId, prompt, attachments: [],
-          replyTarget: interaction, channel: interaction.channel,
-        });
-      }
 
-      case 'redpill': {
-        await interaction.deferReply();
+        const pick = category || ['tip', 'lore', 'secret'][Math.floor(Math.random() * 3)];
+        const PROMPTS = {
+          tip: 'Give me ONE elite pro gaming tip — concise, scannable, with **bold key terms**. Open with "💡 Pro Tip Unlocked".',
+          lore: game
+            ? `Give me a deep-cut lore drop about ${game}. Open with "📜 The Untold Story" — something most players miss. Use blockquotes for in-game text.`
+            : 'Give me a deep-cut lore drop about a random iconic game universe. Open with "📜 The Untold Story" — something most players miss.',
+          secret: 'Drop a hidden gaming-industry secret, accident, or unsolved mystery. Open with "🔴 Truth Unlocked" and use **bold key terms**.',
+        };
+
         return handleChatRequest({
           userId, guildId,
-          prompt: 'Drop a hidden gaming-industry secret, accident, or unsolved mystery. Open with "🔴 Truth Unlocked" and use **bold key terms**.',
+          prompt: PROMPTS[pick] || PROMPTS.tip,
           attachments: [],
           replyTarget: interaction, channel: interaction.channel,
         });
       }
-
-      case 'noclip':
-        return interaction.reply({
-          content:
-`## 👻 NOCLIP MODE ACTIVATED
-\`\`\`
-WARNING: You have clipped outside the world boundary.
-Physics: DISABLED
-Collision: DISABLED
-Game Master awareness: ENABLED
-
-You can see the void now.
-The dev notes are everywhere.
-Someone left a sticky note that says: 'fix this before launch'
-They did not fix it before launch.
-\`\`\`
-*Type anything to re-enter the simulation.*`,
-        });
 
       case 'konami':
         return interaction.reply({
@@ -774,19 +751,6 @@ They did not fix it before launch.
 | 2013 | Google | Searches in Wingdings |
 
 **One of the most recognized button combinations in human history.** 🎖️`,
-        });
-
-      case 'loading':
-        return interaction.reply({
-          content:
-`## ⏳ Loading...
-\`███████████████████░░░░░░\` 74%
-
-*Estimated time remaining: Soon™*
-
-> *While you wait, the developers added a loading screen tip: "Have you tried turning it off and on again?"*
-
-**Fun fact:** Players collectively spend over **500 million hours per year** watching loading screens. That's 57,000 years of human time. Yearly. Just waiting.`,
         });
 
       case 'clear': {
@@ -972,9 +936,7 @@ They did not fix it before launch.
             { name: '🎯 Core', value:
                 '`/ask <question> [image]` — ask anything\n' +
                 '`/price <game>` — live multi-store prices\n' +
-                '`/tip` — random elite pro gaming tip\n' +
-                '`/lore [game]` — deep-cut lore drop\n' +
-                '`/redpill` — hidden gaming-industry secret', inline: false },
+                '`/discover [category] [game]` — pro tip, industry secret, or lore drop', inline: false },
             { name: '🛠️ Utility', value:
                 '`/quota` — how much you have left today\n' +
                 '`/history` — show your recent chat with me\n' +
@@ -982,7 +944,7 @@ They did not fix it before launch.
                 '`/stats` — global + your usage stats\n' +
                 '`/premium` — compare plans and upgrade', inline: false },
             { name: '🎉 Fun', value:
-                '`/noclip` · `/konami` · `/loading` — vibe commands', inline: false },
+                '`/konami` — you know the one', inline: false },
           )
           .setFooter({ text: `Free: ${free.msgs_day ?? 15} messages/day · Pro: ${pro.msgs_day ?? 200}/day — see /premium` });
         return interaction.reply({ embeds: [embed] });
@@ -1012,7 +974,13 @@ const app = express();
 // so a re-serialised object never validates — and doing it here, rather than
 // with a route-specific express.raw(), means signature verification cannot be
 // broken later by someone registering a route above the Stripe one.
+// 1mb, not the 100kb default: a Stripe event carrying a subscription with
+// several items plus metadata can exceed 100kb, and the body parser rejects
+// with a 413 BEFORE the webhook's signature check ever runs — so the event
+// would fail verification-less, Stripe would retry it for days, and the
+// entitlement behind it would never land.
 app.use(express.json({
+  limit: '1mb',
   verify: (req, _res, buf) => { req.rawBody = buf; },
 }));
 

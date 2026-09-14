@@ -7,8 +7,8 @@ Full feature parity with the GameGuide-AI web app, hardened for production and b
 | Web app feature | Bot equivalent |
 |---|---|
 | Chat with vision queries | `@GameGuide <text>` + image attachments, OR `/ask` |
-| `/price`, `/tip`, `/lore`, `/redpill` | same slash commands |
-| `/noclip`, `/konami`, `/loading` (vibes) | same slash commands |
+| `/price`, `/discover` | same slash commands |
+| `/konami` (vibes) | same slash command |
 | Persistent chat history (Supabase) | same Supabase project, table `discord_chat_messages` |
 | Live-source telemetry chip | footer line on every reply showing sources |
 | Per-user tier (free/pro/premium-server) | daily quota enforced in Postgres, `/quota` to check |
@@ -46,16 +46,14 @@ npm start
 |---|---|
 | `/ask <question> [image]` | Free-form question, optional screenshot |
 | `/price <game>` | Live multi-store prices via CheapShark |
-| `/tip` | Random elite pro gaming tip |
-| `/lore [game]` | Deep-cut lore drop |
-| `/redpill` | Hidden gaming-industry secret |
+| `/discover [category] [game]` | Pro tip, industry secret, or lore drop — random unless you pick |
 | `/history` | Show your last messages with the bot (ephemeral) |
 | `/clear` | Wipe your chat history |
 | `/quota` | Messages and screenshots you have left today |
 | `/stats` | Global + your usage stats |
 | `/premium` | Compare plans and upgrade |
 | `/help` | Full reference |
-| `/noclip`, `/konami`, `/loading` | Vibe / fun commands |
+| `/konami` | Vibe / fun command |
 
 ## Tier System
 

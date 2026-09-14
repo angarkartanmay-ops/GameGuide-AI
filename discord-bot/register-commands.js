@@ -38,18 +38,23 @@ const commands = [
     .setDescription('Live multi-store prices for a PC game (CheapShark)')
     .addStringOption(o => o.setName('game').setDescription('Game title (e.g. "elden ring")').setRequired(true)),
 
+  // Replaces /tip, /lore and /redpill — three commands that issued three
+  // nearly identical prompts and each cost a full quota turn. Discord's native
+  // option picker means folding them loses nothing: leave `category` empty for
+  // a random pick, or choose one.
   new SlashCommandBuilder()
-    .setName('tip')
-    .setDescription('Random elite pro gaming tip'),
-
-  new SlashCommandBuilder()
-    .setName('lore')
-    .setDescription('Deep-cut lore drop on an iconic game universe')
-    .addStringOption(o => o.setName('game').setDescription('Pin to a specific game (optional)').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('redpill')
-    .setDescription('Hidden gaming-industry secret or unsolved mystery'),
+    .setName('discover')
+    .setDescription('Random pro tip, hidden industry secret, or lore drop')
+    .addStringOption(o => o
+      .setName('category')
+      .setDescription('Leave empty for a random pick')
+      .setRequired(false)
+      .addChoices(
+        { name: '💡 Pro tip', value: 'tip' },
+        { name: '📜 Lore drop', value: 'lore' },
+        { name: '🔴 Industry secret', value: 'secret' },
+      ))
+    .addStringOption(o => o.setName('game').setDescription('Pin a lore drop to a specific game (optional)').setRequired(false)),
 
   // ─── Utility ────────────────────────────────────────────────────────────
   new SlashCommandBuilder()
@@ -77,17 +82,11 @@ const commands = [
     .setDescription('Show all available commands'),
 
   // ─── Fun / vibe (parity with the web app) ───────────────────────────────
-  new SlashCommandBuilder()
-    .setName('noclip')
-    .setDescription('Secret glitch mode activated 👻'),
-
+  // /noclip and /loading were dropped here and on the web: static joke text
+  // that cost a command slot and taught users nothing about what the bot does.
   new SlashCommandBuilder()
     .setName('konami')
     .setDescription('Unlock the legendary Konami cheat code Easter Egg'),
-
-  new SlashCommandBuilder()
-    .setName('loading')
-    .setDescription('The eternal gamer struggle'),
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);

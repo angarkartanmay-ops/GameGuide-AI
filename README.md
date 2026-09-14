@@ -178,9 +178,7 @@ Type `/` in the chat input or Discord to trigger power-user actions:
 | Command | Action |
 |---|---|
 | `/price <game>` | Fetches live multi-store price comparisons and historic lows via CheapShark. |
-| `/tip` | Surfaces a pro-tier gameplay tip (blended from live community data and curated knowledge). |
-| `/lore` | Deep lore summary on iconic gaming franchises and character backstories. |
-| `/redpill` | Intriguing, little-known game development secrets and Easter eggs. |
+| `/discover` | A pro gameplay tip, a little-known industry secret, or a deep lore drop — blended from live community data and curated knowledge. |
 | `/stealth` | Activates incognito mode — conversations are never stored or logged. |
 | `/clear` | Wipes the active conversation viewport. |
 | `/help` | Displays the complete command reference palette. |
