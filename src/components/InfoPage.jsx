@@ -66,7 +66,7 @@ function AboutContent() {
         <h2>What you can ask</h2>
         <ul className="info-list">
           <li><b>/price</b> — Live multi-store price intel across 20+ storefronts via the CheapShark mesh.</li>
-          <li><b>/lore</b> — Spoiler-aware deep dives grounded in canonical sources and community archives.</li>
+          <li><b>/discover</b> — Random pro tip, hidden industry secret, or lore drop — spoiler-aware, live + curated.</li>
           <li><b>/build</b> — Endgame builds with stat trade-offs, gear pillars, and patch-current notes.</li>
           <li><b>/counter</b> — Matchup analysis with comp synergies and meta context.</li>
           <li><b>Vision</b> — Upload a screenshot, get build/kit/comp reads in seconds.</li>

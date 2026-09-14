@@ -820,18 +820,18 @@ const ARSENAL = [
     ],
   },
   {
-    id: 'lore',
-    label: '/lore',
-    sub: 'WORLDBUILDING DEEP DIVE',
+    id: 'discover',
+    label: '/discover',
+    sub: 'TIPS · SECRETS · LORE',
     accent: '#A855F7',
-    desc: 'Spoiler-aware long-form lore investigations grounded in canonical sources and community archives.',
+    desc: 'A random pro tip, hidden industry secret, or spoiler-aware lore drop — live-sourced and cross-checked against curated archives.',
     sample: [
-      '$ /lore Marika',
+      '$ /discover',
       '↻ wiki · 184ms',
       '↻ reddit · 211ms',
       '↻ patch · 92ms',
       '⏚ cross-checked across 12 sources',
-      '→ rendering narrative thread...',
+      '→ rendering lore drop...',
     ],
   },
   {
@@ -902,7 +902,7 @@ function ArsenalGlyph({ id }) {
           <path d="M58 38 v24 M50 44 h12 a4 4 0 0 1 0 8 h-12 a4 4 0 0 0 0 8 h12" />
         </svg>
       );
-    case 'lore':
+    case 'discover':
       return (
         <svg viewBox="0 0 100 100" fill="none">
           <path d="M14 22 Q50 14 50 24 Q50 14 86 22 L86 78 Q50 70 50 80 Q50 70 14 78 Z" />
@@ -1113,8 +1113,8 @@ const FEATURES = [
   { name: 'PULSE Web Search', body: 'Live multi-source intel — Wikipedia, Steam, Reddit, RSS — fused into your answer.' },
   { name: 'Vision GODMODE', body: 'Screenshot-grade visual analysis for builds, kit fits, and comp reads.' },
   { name: 'Persona Engine', body: 'Tone and depth adapt to the player. Tactical, casual, or competitive — your call.' },
-  { name: 'Slash Commands', body: 'Direct verbs for power users: /build, /counter, /price, /lore, and more.' },
-  { name: 'Discord Bot', body: 'Same brain, in your server. Voice, threads, and inline price + lore lookups.' },
+  { name: 'Slash Commands', body: 'Direct verbs for power users: /build, /counter, /price, /discover, and more.' },
+  { name: 'Discord Bot', body: 'Same brain, in your server. Voice, threads, and inline price + discovery lookups.' },
 ];
 
 function FeatureGrid() {

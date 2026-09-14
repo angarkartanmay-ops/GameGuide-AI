@@ -107,6 +107,263 @@ export default function useChat(user) {
     }
   }, [user]);
 
+  // /discover folds together what used to be three separate commands
+  // (/tip, /redpill, /lore) — each was "fetch a random nugget from Reddit,
+  // fall back to a curated bank", differing only in subreddits/theming, and
+  // splitting them across the help menu didn't earn its keep. runRedpill and
+  // runLore hold those two bodies verbatim; /discover's own action (below)
+  // holds the former /tip body directly and dispatches to these two.
+  const runRedpill = async () => {
+    // ── Try live Reddit scrape from gaming-secrets/details subs ───────
+    if (Math.random() < 0.6) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 2500);
+        // r/GamingDetails is the gold standard for "I just noticed..." facts
+        const subs = ['GamingDetails', 'gaming', 'truegaming'];
+        const sub = subs[Math.floor(Math.random() * subs.length)];
+        const url = `/api/reddit/r/${sub}/top.json?t=month&limit=40`;
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(t);
+        if (res.ok) {
+          const data = await res.json();
+          const posts = (data?.data?.children || [])
+            .map(p => p?.data)
+            .filter(p =>
+              p && !p.stickied && !p.over_18 &&
+              p.score > 200 &&
+              // Prefer "TIL", "Did you know", "I just noticed", "Hidden", "Secret", "Easter egg"
+              (sub === 'GamingDetails' ||
+               /\b(til|did you know|i just noticed|hidden|secret|easter egg|fun fact|never knew|unused|cut content)\b/i.test(p.title)) &&
+              ((p.selftext && p.selftext.length > 60) || p.title.length > 60)
+            );
+          if (posts.length > 0) {
+            const pick = posts[Math.floor(Math.random() * posts.length)];
+            const title = (pick.title || '')
+              .replace(/^\[(?:til|fact|secret|detail)\][\s:]*/i, '')
+              .trim();
+            let body = (pick.selftext || '').trim();
+            body = body
+              .replace(/&amp;#x200B;/g, '')
+              .replace(/&amp;/g, '&')
+              .replace(/&#x200B;/g, '')
+              .replace(/\n{3,}/g, '\n\n')
+              .slice(0, 700);
+            return {
+              text: `## 🔴 Truth Unlocked — fresh from the gaming detective community\n\n**${title}**\n\n${body || '*(thread is mostly visual — check the source for the full detail)*'}${body.length === 700 ? '…' : ''}\n\n*— uncovered by r/${pick.subreddit} (${pick.score.toLocaleString()} ↑)*`,
+              images: [],
+              isCommand: true,
+            };
+          }
+        }
+      } catch { /* silent fallback */ }
+    }
+
+    // ── Curated industry secrets (~55 entries) ─────────────────────────
+    const REDPILLS = [
+      // Iconic accidents / origins
+      '**Minecraft\'s** iconic creeper was a **coding accident.** Notch mixed up width and height values for the pig model. The rest is history.',
+      '**Pac-Man\'s** kill screen at level 256 is caused by an **8-bit integer overflow** — the game never expected you to get that far.',
+      'The **Konami Code** was created by Kazuhisa Hashimoto in 1986 because he found Gradius too hard while testing it. He forgot to remove the cheat before shipping.',
+      '**Halo\'s** sniper-rifle scope sound was created by **dropping a wrench into a steel pipe.** Bungie\'s sound designer made the pipe in his garage.',
+      '**Doom\'s** original music was almost entirely **soundalikes of Metallica and Slayer tracks** — Bobby Prince got within copyright-suit distance and id Software just shipped it anyway.',
+      '**Half-Life 2\'s** Combine Soldier voice was made by recording a real person and then **playing it backwards through a vocoder twice.**',
+
+      // Hidden mechanics
+      '**Left 4 Dead\'s** AI Director monitors your stress level in real-time and spawns enemies dynamically — quiet stretches mean a horde is being prepared.',
+      '**Resident Evil 4\'s** difficulty silently scales DOWN if you die too often. There\'s a hidden stat called the "Game Tension" meter.',
+      '**Skyrim\'s** Falmer language is a complete cipher of English — every line of "Falmer text" is a real English word with a substitution alphabet.',
+      'In **Dark Souls**, the NPCs that go insane are showing you the canonical fate of every player who gives up and never returns.',
+      '**Bioshock\'s** "Would you kindly?" mind-control trigger was foreshadowed in the box art if you knew where to look — Andrew Ryan\'s slogan is visible in tiny text.',
+      '**Sekiro** internally tracks how many times you\'ve died and makes very specific NPCs comment on it — the more deaths, the more lore drops.',
+      'In **Skyrim**, NPCs have a hidden "disposition" stat. **Saying "I don\'t know you" enough times can make a guard forget your bounty.**',
+      '**The Witcher 3\'s** Geralt has a hidden idle animation — if you stand still for 10 minutes in Novigrad, he\'ll start playing Gwent against himself in his head.',
+
+      // Easter eggs / unsolved mysteries
+      '**GTA San Andreas** has a ghost car on Mount Chiliad that rolls down the hill with no driver. **Still unexplained 20 years later.**',
+      '**GTA V\'s** Mount Chiliad mystery was officially confirmed by Rockstar to have a solution — but as of today, **the community has not fully cracked it.**',
+      'The **Mantis-thing** in **Doom** had a hidden room with the developer\'s heads on pikes — accessing it required a noclip code that wasn\'t in any manual.',
+      '**Diablo 2** has a "Cow Level" because in Diablo 1, players found a cow they couldn\'t kill. The cow level was the dev team\'s revenge joke.',
+      '**Fallout 4** has a unique NPC named "Dogmeat" — but in the game files, **his real name is "Mutt."** Bethesda never updated the asset name.',
+
+      // Industry / dev decisions
+      'The **"Aerith Dies"** twist in FF7 was so spoiler-sensitive that **developers internally faked the script** to mislead leakers.',
+      '**Mass Effect 3\'s** original ending was leaked 6 months early — Bioware rewrote the entire third act in a panic, which is why fans hated the result.',
+      '**Cyberpunk 2077\'s** infamous launch had over **9 million pre-orders** based on its E3 trailers — most of which were pre-rendered cinematics, not gameplay.',
+      'The **No Man\'s Sky** marketing scandal led to the developers receiving **death threats** for 2 years. Sean Murray didn\'t tweet for 18 months.',
+      '**Among Us** existed for 2 years with virtually zero players. **A single Twitch streamer (sodapoppin)** caused its viral explosion in 2020.',
+      '**Elden Ring** was originally pitched to George R.R. Martin as a side project to take a break from writing Winds of Winter. **He still hasn\'t finished Winds of Winter.**',
+      '**Persona 5** took 6 years to release in the West because of a single Japanese voice actor who wouldn\'t sign the localization rights — Atlus had to recast around him.',
+
+      // Cut content / unused assets
+      '**Pokémon Red/Blue** was meant to have **a 152nd Pokémon** called Mew. It was added in the last week of development as an inside joke — and accidentally left in 11 game cartridges.',
+      '**Halo 2** had its third act cut entirely 4 months before launch. The "ending" you played was originally **the cliffhanger of Act 2.**',
+      '**Dark Souls 1** has unused boss-arena geometry beneath Lordran for a boss called "The Stray Demon Twin" — never implemented.',
+      '**Goldeneye 007** has full mocap animations for **Roger Moore, Sean Connery, and Timothy Dalton** as Bond — Rare hoped to license their likenesses, but failed.',
+
+      // Speedrun science
+      '**Super Mario 64\'s** "A Press Counting" community spent 13 years to determine if a single jump in Tick Tock Clock could be saved. **The answer required cosmic ray physics.**',
+      '**Pokémon Red\'s** speedrun world record exploits an **arbitrary code execution glitch** that lets the runner write directly to RAM mid-gameplay using only the in-game item menu.',
+      '**Ocarina of Time\'s** Any% speedrun is **under 4 minutes** because of a glitch that lets Link teleport directly to Ganon\'s castle by getting hit by a deku scrub at frame-perfect timing.',
+
+      // Cultural impact
+      'The **Elder Scrolls: Daggerfall** map is **larger than Great Britain.** Most of it is procedurally generated wilderness — most players never saw 99% of the world.',
+      'World of Warcraft\'s **"Corrupted Blood Plague" of 2005** was used by epidemiologists as a real model for COVID-19 spread patterns.',
+      '**EVE Online\'s** "Bloodbath of B-R5RB" battle in 2014 had **$330,000 USD worth of in-game ships destroyed** in a single 21-hour fight.',
+
+      // Tech / engine secrets
+      '**The Sims** plumbob (the green diamond) is technically **the Sim\'s soul** in the game\'s code — without it, the Sim has no AI behavior tree.',
+      '**Skyrim** runs on the same engine as **Morrowind (2002)** with patches — the "Creation Engine" name is a marketing rebrand of Gamebryo.',
+      '**Half-Life: Alyx** has a hidden physics interaction where you can pick up a magnetic crowbar and stick it to metal surfaces — **a 17-year-old reference to Gordon Freeman\'s weapon.**',
+
+      // Modding lore
+      'The **DOTA** mod for Warcraft 3 made Blizzard so much money that they sold the Warcraft 3 Reforged remake **specifically to keep DOTA players on Battle.net.** Reforged failed.',
+      '**Counter-Strike** was a **Half-Life mod** before Valve hired the modders and bought the rights for $300,000. Today CS2 generates ~$1B/year.',
+      'The **PUBG** developer Brendan Greene started by modding **Arma 3 for a battle-royale gametype.** He named the mode "PlayerUnknown\'s Battle Royale" — his Arma username became the company name.',
+
+      // Weird historical
+      '**Tetris** was developed in the Soviet Union, and for years **its profits went directly to the USSR government.** It was the first game to legally cross the Iron Curtain.',
+      '**Final Fantasy 1** was named "Final" because Square thought the company was going **bankrupt** and this would be their last game.',
+      '**Hideo Kojima** was forced out of Konami in 2015. To this day, his name is being **manually scrubbed** from every Metal Gear product page on Konami\'s website.',
+      '**Atari** buried millions of unsold E.T. cartridges in a New Mexico landfill in 1983. **Archaeologists excavated them in 2014.** Some sold for $1,500 each on eBay.',
+
+      // Modern dev secrets
+      '**Bethesda** uses an internal tool called **"Creation Kit Pro"** that has **20+ years of legacy code** — every modder uses a stripped-down version that\'s missing half the features.',
+      '**Riot Games** has a hidden internal "smurf detection" system that **silently shadow-bans accounts** by matching behavioral fingerprints (mouse movement, click cadence) across logins.',
+      '**Activision Blizzard** has a patent on **matchmaking that intentionally pairs you with players who own skins you don\'t**, to encourage purchases. Multiple games in their catalog use it.',
+      '**Steam reviews** below 100 are weighted differently than reviews above 100 — so a 50-review game with 90% positive can rank LOWER than a 1000-review game with 80% positive.',
+
+      // Speedrunning / glitches
+      '**OutOfBounds (OOB)** speedruns sometimes load **dev rooms** — Halo 3\'s "Test Room A" contains a giant cube of every weapon in the game stacked in a single pile.',
+      '**Banjo-Kazooie\'s** unfinished sequel "Stop \'N\' Swop" feature was supposed to **transfer items between cartridges** through a hardware exploit. Nintendo killed it before launch.',
+      'The **Crash Bandicoot** team famously had to bribe Naughty Dog\'s engineers with **espresso machines** to convince them to optimize the PS1 RAM swap routine that made the game possible.',
+
+      // Indie miracles
+      '**Stardew Valley** was made by **one person (Eric Barone) over 5 years.** He made every pixel, every line of code, every song, every dialog. He still solo-patches it as of 2025.',
+      '**Hollow Knight** Team Cherry was **3 people in a small Australian studio.** Silksong has been "almost done" for 6+ years.',
+      '**Undertale** was made by **Toby Fox alone** in GameMaker over 3 years. He used Earthbound\'s dev tools as a reference because he couldn\'t afford other engines.',
+    ];
+
+    return {
+      text: `## 🔴 Truth Unlocked\n\n${REDPILLS[Math.floor(Math.random() * REDPILLS.length)]}`,
+      images: [],
+      isCommand: true,
+    };
+  };
+
+  const runLore = async () => {
+    // ── Try live Reddit scrape from lore + theory subreddits ──────────
+    if (Math.random() < 0.6) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 2500);
+        // Cycle across general theory subs + iconic-game-specific lore subs
+        const subs = [
+          'FanTheories',
+          'GameTheorists',
+          'gamelore',
+          'Eldenring',
+          'darksouls',
+          'HollowKnight',
+          'truezelda',
+          'FFXIV',
+          'GenshinImpact',
+          'Bloodborne',
+        ];
+        const sub = subs[Math.floor(Math.random() * subs.length)];
+        const url = `/api/reddit/r/${sub}/top.json?t=month&limit=40`;
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(t);
+        if (res.ok) {
+          const data = await res.json();
+          const posts = (data?.data?.children || [])
+            .map(p => p?.data)
+            .filter(p =>
+              p && !p.stickied && !p.over_18 &&
+              p.score > 100 &&
+              // Prefer lore/theory keywords; lore-specific subs are pre-filtered by topic
+              (/(lore|theory|theories|story|origin|connection|symbolism|mythology|backstory|canon|timeline|ending explained|secret|hidden meaning)/i.test(p.title) ||
+               ['gamelore', 'FanTheories', 'GameTheorists', 'truezelda'].includes(sub)) &&
+              p.selftext && p.selftext.length > 200 && p.selftext.length < 2000
+            );
+          if (posts.length > 0) {
+            const pick = posts[Math.floor(Math.random() * posts.length)];
+            const title = (pick.title || '')
+              .replace(/^\[(?:lore|theory|spoilers?)\][\s:]*/i, '')
+              .trim();
+            let body = (pick.selftext || '').trim();
+            body = body
+              .replace(/&amp;#x200B;/g, '')
+              .replace(/&amp;/g, '&')
+              .replace(/&#x200B;/g, '')
+              .replace(/\n{3,}/g, '\n\n')
+              .slice(0, 900);
+            return {
+              text: `## 📜 Lore Drop — fresh community theory\n\n**${title}**\n\n${body}${body.length === 900 ? '…' : ''}\n\n*— theorized in r/${pick.subreddit} (${pick.score.toLocaleString()} ↑)*\n\n*⚠️ Community theory — treat as "fan canon" unless confirmed by the developer.*`,
+              images: [],
+              isCommand: true,
+            };
+          }
+        }
+      } catch { /* silent fallback */ }
+    }
+
+    // ── Curated lore drops (~30 deep cuts across genres) ──────────────
+    const LORE = [
+      // Souls / Fromsoft
+      `**Dark Souls Lore:** The entire Age of Fire is a lie. Gwyn, the "god" you avenge throughout the trilogy, sacrificed his own humanity to link the First Flame and *condemned all life to an eternal cycle of burning and dying* just to delay the inevitable Age of Dark. You are not a hero. You are a battery.`,
+      `**Bloodborne Lore:** The "blood" everyone in Yharnam is addicted to isn't medicine — it's **Old Blood**, the ichor of an Eldritch alien being trapped beneath the Healing Church. Every healer in town is unknowingly ritualistically feeding their patients pieces of a god.`,
+      `**Sekiro Lore:** Wolf isn't loyal to Kuro because of duty — he's loyal because **Kuro saved his life as a child** by sharing the Dragon's Heritage. Every "death" Wolf experiences is technically Kuro dying with him.`,
+      `**Elden Ring Lore:** The "Elden Ring" is just *a really good rune.* Queen Marika shattered it not by accident but deliberately — she wanted to break the Golden Order system her husband Godfrey built, because she had watched it destroy everyone she loved. Every boss you kill was once someone she cared about.`,
+      `**Demon's Souls Lore:** The Old One was never the villain. It was a **storage system** for human despair, intentionally created by the Nexus to keep the world stable. The Maiden in Black guides you to "free" it, but freeing it brings the Age of Fog — i.e., death of consciousness.`,
+
+      // Zelda
+      `**Zelda Lore:** There are three parallel timelines, two caused by Link's victory and one by his **defeat**. The entire Legend of Zelda franchise canonically acknowledges a timeline where the Hero of Time was **killed by Ganon** during Ocarina of Time. Most classic Zelda games take place in the aftermath of Link losing.`,
+      `**Majora's Mask Lore:** The Skull Kid isn't possessed by the mask — **Skull Kid is one of the Lost Children of the Lost Woods.** Specifically, he's a Kokiri who left the forest, which canonically turns Kokiri into Stalkids. The mask just amplified his existing trauma.`,
+      `**Tears of the Kingdom Lore:** The Zonai aren't a "lost civilization." They're **Sheikah refugees from the Era of the Calamity** who used the depths to hide for 10,000 years. The "ancient" tech and the modern Sheikah tech are the same lineage, just split by time.`,
+
+      // Indie greats
+      `**Hollow Knight Lore:** The Pale King didn't create the infection seal out of compassion — he did it to **save his kingdom's economic model**. The bugs of Hallownest ran entirely on SOUL energy. A world without minds meant no soul, no kingdom, no legacy. The Hollow Knight is not a savior. It's a business decision.`,
+      `**Hades Lore:** Zagreus's escape attempts aren't him fighting his father — they're a **family therapy ritual.** Every god in the pantheon is using Zag's escape to communicate with each other after centuries of silence. The dynamic at Olympus is entirely his fault.`,
+      `**Undertale Lore:** Sans isn't lazy — he's **mathematically certain you'll reset the timeline.** The sweat in his judgement-hall sprite is implied to be lifeforce burning. The "you've been here before" lines are quantum awareness, not metaphor.`,
+      `**Celeste Lore:** Madeline isn't climbing a mountain. **The mountain is the inside of her own mind during a panic attack**, and "Badeline" is her depression. Reaching the summit and reconciling with her isn't "winning" — it's accepting that depression is part of you.`,
+      `**Outer Wilds Lore:** The 22-minute time loop isn't a sci-fi puzzle gimmick. It's **a meditation on knowing the universe will end.** Once you "complete" the game, the loop ends — and what waits for you is one of gaming's most beautiful explorations of acceptance.`,
+      `**Disco Elysium Lore:** Detective Du Bois is so broken because he **deleted his own personality with alcohol on purpose** to forget his ex-fiancée. Every skill voice in his head is a fragment of the man he chose to erase.`,
+
+      // Classic AAA
+      `**Minecraft Lore:** The Endermen are **corrupted Endermen.** The original humans of Minecraft, known as the "Ancient Builders", built the End Portals to escape an ancient plague. Some escaped. Some stayed and built the Nether. The ones who entered the End were slowly consumed by it and became the Endermen — still clutching blocks, still building, forever lost.`,
+      `**Skyrim Lore:** The dragons aren't "returning" — they were never gone. The Dragon Cult **trapped Alduin in time** with the Elder Scroll, but every dragon Alduin resurrects in Skyrim is a dragon that the Greybeards **had to spare** because killing one would unmake history. Paarthurnax is alive because killing him erases the Greybeards.`,
+      `**Mass Effect Lore:** The Reapers aren't a single hostile race. **They are the AI-uplifted memories of every advanced civilization that came before.** Each Reaper is a new "harvested" species turned into the next Reaper. The Catalyst's "solution" is to kill organics before they create AI that wipes them out — by becoming the AI that wipes them out first.`,
+      `**Half-Life Lore:** The G-Man isn't an alien or a government. **He's the player.** Multiple developer comments imply he's an interdimensional entity who curates universes by occasionally yanking Gordon Freeman in and out of stasis. Every cutscene where he speaks is technically him speaking to *you*.`,
+      `**Bioshock Lore:** Atlas isn't a freedom fighter. He's **Frank Fontaine** — Andrew Ryan's business rival — who used the trigger phrase "Would you kindly?" to compel Jack into killing Ryan. The entire game is a 30-year-long con. The protagonist is the weapon.`,
+      `**Witcher 3 Lore:** Ciri isn't just an Elder Blood carrier — she's **the only being who can travel between dimensions on foot**. Geralt's fight against the Wild Hunt is a fight against **interdimensional refugees from a world the White Frost already ate.**`,
+
+      // Franchise deep cuts
+      `**Final Fantasy 7 Lore:** Sephiroth's mother is technically **an alien named Jenova** that Shinra dug out of a 2,000-year-old crater. Sephiroth never found out his "real" mother was Lucrecia — a human Shinra scientist. Every character's tragedy in FF7 traces back to Shinra digging up something they shouldn't have.`,
+      `**Persona 5 Lore:** The "Phantom Thieves" are technically **Jungian Shadow projections.** The Metaverse is the collective unconscious. Each Palace boss isn't really their target — it's the *worst version of themselves* the target lets exist. The thieves are stealing distorted self-perception, not literal hearts.`,
+      `**Pokémon Lore:** Cubone wears the skull of its dead mother. **Marowak in Pokémon Red is canonically the ghost of a Cubone's mother killed by Team Rocket** in the Pokémon Tower. The Cubone wandering Lavender Town is its orphaned child. Game Freak put this in a children's game in 1996.`,
+      `**Kingdom Hearts Lore:** The convoluted timeline is intentional. **Tetsuya Nomura confirmed the lore is impossible to follow** because Sora's identity is meant to feel disjointed, mirroring the game's themes of fragmented memory and identity.`,
+
+      // Modern indie / live service
+      `**Genshin Impact Lore:** The "Traveler" is **not human.** Aether and Lumine are technically a species called "Descenders" who traverse universes. The Sustainer of Heavenly Principles imprisoned them for being a threat to the world's narrative — your sibling chose to join the Abyss because they realized **Teyvat is a prison.**`,
+      `**Honkai Star Rail Lore:** The "Aeons" aren't gods — they're **mortals who consumed a Path concept.** Each Aeon was once a person who fully embodied a single philosophical concept (Destruction, Preservation, etc.) and ascended. They're cosmic horror dressed in pretty UI.`,
+      `**Wuthering Waves Lore:** The "Lament" wasn't a single event — it was **multiple recursive realities collapsing into each other.** Every Resonator who survived has memories from a dead timeline, which is why some have abilities they "shouldn't" have learned.`,
+
+      // Cult classics
+      `**Silent Hill 2 Lore:** James Sunderland didn't get a letter from his dead wife. **He killed her.** The entire town manifests his guilt and grief. Pyramid Head is his self-imposed executioner. Every monster is a fragment of his suppressed memory of the murder.`,
+      `**Resident Evil 4 Lore:** Las Plagas isn't an infection — it's **a 600-year-old parasitic ecosystem.** The Salazar family discovered it underground, used it for power, and Saddler weaponized it. Leon's mission "rescue the President's daughter" is incidental to the parasites being a global apocalypse waiting to happen.`,
+      `**Metal Gear Solid 2 Lore:** Raiden isn't a soldier — he's **a deliberately constructed personality** built by the Patriots to test whether they could mass-produce loyal "Snake-tier" assets. The entire game is a simulation Kojima built to test if YOU, the player, would notice you weren't playing as Snake.`,
+      `**Death Stranding Lore:** The "Death Stranding" is **the boundary between life and afterlife dissolving.** BB units are babies in a coma between worlds — they can perceive BTs because they're technically half-dead themselves. Sam isn't delivering packages; he's reconnecting **the literal grid that holds reality together.**`,
+      `**Control Lore:** The "Hiss" isn't an entity — it's **a memetic incantation that rewrites consciousness through repetition.** Every infected agent is repeating it because hearing it once embeds the loop in their brain. Jesse Faden survives because she has a "counter-mantra" from her time with Polaris.`,
+    ];
+
+    return {
+      text: `## 📜 Lore Drop Incoming...\n\n${LORE[Math.floor(Math.random() * LORE.length)]}`,
+      images: [],
+      isCommand: true,
+    };
+  };
+
   // ─── Slash Command Definitions ─────────────────────────────────────────────
   // Each command: { trigger, description, emoji, action }
   const SLASH_COMMANDS = useMemo(() => [
@@ -149,7 +406,7 @@ export default function useChat(user) {
       description: 'List all available commands',
       emoji: '📖',
       action: async () => ({
-        text: `## 📖 GameGuide-AI Command Reference\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | 🗑️ Wipe your entire chat history |\n| \`/stealth\` | 🥷 Incognito mode — nothing saved, nothing learned |\n| \`/help\` | 📖 Show this command list |\n| \`/tip\` | 💡 Get a random pro gaming tip (live + curated) |\n| \`/redpill\` | 🔴 Unlock a spicy hidden gaming fact (live + curated) |\n| \`/lore\` | 📜 Lore drop on a random iconic game (live + curated) |\n| \`/price <game>\` | 💰 Get live multi-store prices via CheapShark |\n| \`/noclip\` | 👻 Secret glitch mode activated |\n| \`/konami\` | 🎮 Unlock the legendary Konami Easter Egg |\n| \`/loading\` | ⏳ The eternal gamer struggle |`,
+        text: `## 📖 GameGuide-AI Command Reference\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | 🗑️ Wipe your entire chat history |\n| \`/stealth\` | 🥷 Incognito mode — nothing saved, nothing learned |\n| \`/help\` | 📖 Show this command list |\n| \`/discover\` | 🎲 Random gaming tip, secret, or lore drop (live + curated) |\n| \`/price <game>\` | 💰 Get live multi-store prices via CheapShark |\n| \`/konami\` | 🎮 Unlock the legendary Konami Easter Egg |`,
         images: [],
         isCommand: true,
       }),
@@ -220,10 +477,19 @@ export default function useChat(user) {
       },
     },
     {
-      trigger: '/tip',
-      description: 'Get a random elite pro gaming tip (live + curated)',
-      emoji: '💡',
+      // Folded /tip, /redpill and /lore into one — three near-identical
+      // "give me a random nugget" commands were splitting the help menu for
+      // no real gain. Picks one of the three categories per call; the tip
+      // body lives inline here (unchanged from the old /tip), redpill and
+      // lore delegate to runRedpill/runLore above (their bodies, unchanged).
+      trigger: '/discover',
+      description: 'Random gaming tip, secret, or lore drop (live + curated)',
+      emoji: '🎲',
       action: async () => {
+        const category = ['tip', 'redpill', 'lore'][Math.floor(Math.random() * 3)];
+        if (category === 'redpill') return runRedpill();
+        if (category === 'lore') return runLore();
+
         // ── Try live Reddit scrape first (60% of the time, 2.5s timeout) ──
         if (Math.random() < 0.6) {
           try {
@@ -396,158 +662,6 @@ export default function useChat(user) {
       },
     },
     {
-      trigger: '/redpill',
-      description: 'Discover a hidden secret about the gaming industry (live + curated)',
-      emoji: '🔴',
-      action: async () => {
-        // ── Try live Reddit scrape from gaming-secrets/details subs ───────
-        if (Math.random() < 0.6) {
-          try {
-            const ctrl = new AbortController();
-            const t = setTimeout(() => ctrl.abort(), 2500);
-            // r/GamingDetails is the gold standard for "I just noticed..." facts
-            const subs = ['GamingDetails', 'gaming', 'truegaming'];
-            const sub = subs[Math.floor(Math.random() * subs.length)];
-            const url = `/api/reddit/r/${sub}/top.json?t=month&limit=40`;
-            const res = await fetch(url, { signal: ctrl.signal });
-            clearTimeout(t);
-            if (res.ok) {
-              const data = await res.json();
-              const posts = (data?.data?.children || [])
-                .map(p => p?.data)
-                .filter(p =>
-                  p && !p.stickied && !p.over_18 &&
-                  p.score > 200 &&
-                  // Prefer "TIL", "Did you know", "I just noticed", "Hidden", "Secret", "Easter egg"
-                  (sub === 'GamingDetails' ||
-                   /\b(til|did you know|i just noticed|hidden|secret|easter egg|fun fact|never knew|unused|cut content)\b/i.test(p.title)) &&
-                  ((p.selftext && p.selftext.length > 60) || p.title.length > 60)
-                );
-              if (posts.length > 0) {
-                const pick = posts[Math.floor(Math.random() * posts.length)];
-                const title = (pick.title || '')
-                  .replace(/^\[(?:til|fact|secret|detail)\][\s:]*/i, '')
-                  .trim();
-                let body = (pick.selftext || '').trim();
-                body = body
-                  .replace(/&amp;#x200B;/g, '')
-                  .replace(/&amp;/g, '&')
-                  .replace(/&#x200B;/g, '')
-                  .replace(/\n{3,}/g, '\n\n')
-                  .slice(0, 700);
-                return {
-                  text: `## 🔴 Truth Unlocked — fresh from the gaming detective community\n\n**${title}**\n\n${body || '*(thread is mostly visual — check the source for the full detail)*'}${body.length === 700 ? '…' : ''}\n\n*— uncovered by r/${pick.subreddit} (${pick.score.toLocaleString()} ↑)*`,
-                  images: [],
-                  isCommand: true,
-                };
-              }
-            }
-          } catch { /* silent fallback */ }
-        }
-
-        // ── Curated industry secrets (~55 entries) ─────────────────────────
-        const REDPILLS = [
-          // Iconic accidents / origins
-          '**Minecraft\'s** iconic creeper was a **coding accident.** Notch mixed up width and height values for the pig model. The rest is history.',
-          '**Pac-Man\'s** kill screen at level 256 is caused by an **8-bit integer overflow** — the game never expected you to get that far.',
-          'The **Konami Code** was created by Kazuhisa Hashimoto in 1986 because he found Gradius too hard while testing it. He forgot to remove the cheat before shipping.',
-          '**Halo\'s** sniper-rifle scope sound was created by **dropping a wrench into a steel pipe.** Bungie\'s sound designer made the pipe in his garage.',
-          '**Doom\'s** original music was almost entirely **soundalikes of Metallica and Slayer tracks** — Bobby Prince got within copyright-suit distance and id Software just shipped it anyway.',
-          '**Half-Life 2\'s** Combine Soldier voice was made by recording a real person and then **playing it backwards through a vocoder twice.**',
-
-          // Hidden mechanics
-          '**Left 4 Dead\'s** AI Director monitors your stress level in real-time and spawns enemies dynamically — quiet stretches mean a horde is being prepared.',
-          '**Resident Evil 4\'s** difficulty silently scales DOWN if you die too often. There\'s a hidden stat called the "Game Tension" meter.',
-          '**Skyrim\'s** Falmer language is a complete cipher of English — every line of "Falmer text" is a real English word with a substitution alphabet.',
-          'In **Dark Souls**, the NPCs that go insane are showing you the canonical fate of every player who gives up and never returns.',
-          '**Bioshock\'s** "Would you kindly?" mind-control trigger was foreshadowed in the box art if you knew where to look — Andrew Ryan\'s slogan is visible in tiny text.',
-          '**Sekiro** internally tracks how many times you\'ve died and makes very specific NPCs comment on it — the more deaths, the more lore drops.',
-          'In **Skyrim**, NPCs have a hidden "disposition" stat. **Saying "I don\'t know you" enough times can make a guard forget your bounty.**',
-          '**The Witcher 3\'s** Geralt has a hidden idle animation — if you stand still for 10 minutes in Novigrad, he\'ll start playing Gwent against himself in his head.',
-
-          // Easter eggs / unsolved mysteries
-          '**GTA San Andreas** has a ghost car on Mount Chiliad that rolls down the hill with no driver. **Still unexplained 20 years later.**',
-          '**GTA V\'s** Mount Chiliad mystery was officially confirmed by Rockstar to have a solution — but as of today, **the community has not fully cracked it.**',
-          'The **Mantis-thing** in **Doom** had a hidden room with the developer\'s heads on pikes — accessing it required a noclip code that wasn\'t in any manual.',
-          '**Diablo 2** has a "Cow Level" because in Diablo 1, players found a cow they couldn\'t kill. The cow level was the dev team\'s revenge joke.',
-          '**Fallout 4** has a unique NPC named "Dogmeat" — but in the game files, **his real name is "Mutt."** Bethesda never updated the asset name.',
-
-          // Industry / dev decisions
-          'The **"Aerith Dies"** twist in FF7 was so spoiler-sensitive that **developers internally faked the script** to mislead leakers.',
-          '**Mass Effect 3\'s** original ending was leaked 6 months early — Bioware rewrote the entire third act in a panic, which is why fans hated the result.',
-          '**Cyberpunk 2077\'s** infamous launch had over **9 million pre-orders** based on its E3 trailers — most of which were pre-rendered cinematics, not gameplay.',
-          'The **No Man\'s Sky** marketing scandal led to the developers receiving **death threats** for 2 years. Sean Murray didn\'t tweet for 18 months.',
-          '**Among Us** existed for 2 years with virtually zero players. **A single Twitch streamer (sodapoppin)** caused its viral explosion in 2020.',
-          '**Elden Ring** was originally pitched to George R.R. Martin as a side project to take a break from writing Winds of Winter. **He still hasn\'t finished Winds of Winter.**',
-          '**Persona 5** took 6 years to release in the West because of a single Japanese voice actor who wouldn\'t sign the localization rights — Atlus had to recast around him.',
-
-          // Cut content / unused assets
-          '**Pokémon Red/Blue** was meant to have **a 152nd Pokémon** called Mew. It was added in the last week of development as an inside joke — and accidentally left in 11 game cartridges.',
-          '**Halo 2** had its third act cut entirely 4 months before launch. The "ending" you played was originally **the cliffhanger of Act 2.**',
-          '**Dark Souls 1** has unused boss-arena geometry beneath Lordran for a boss called "The Stray Demon Twin" — never implemented.',
-          '**Goldeneye 007** has full mocap animations for **Roger Moore, Sean Connery, and Timothy Dalton** as Bond — Rare hoped to license their likenesses, but failed.',
-
-          // Speedrun science
-          '**Super Mario 64\'s** "A Press Counting" community spent 13 years to determine if a single jump in Tick Tock Clock could be saved. **The answer required cosmic ray physics.**',
-          '**Pokémon Red\'s** speedrun world record exploits an **arbitrary code execution glitch** that lets the runner write directly to RAM mid-gameplay using only the in-game item menu.',
-          '**Ocarina of Time\'s** Any% speedrun is **under 4 minutes** because of a glitch that lets Link teleport directly to Ganon\'s castle by getting hit by a deku scrub at frame-perfect timing.',
-
-          // Cultural impact
-          'The **Elder Scrolls: Daggerfall** map is **larger than Great Britain.** Most of it is procedurally generated wilderness — most players never saw 99% of the world.',
-          'World of Warcraft\'s **"Corrupted Blood Plague" of 2005** was used by epidemiologists as a real model for COVID-19 spread patterns.',
-          '**EVE Online\'s** "Bloodbath of B-R5RB" battle in 2014 had **$330,000 USD worth of in-game ships destroyed** in a single 21-hour fight.',
-
-          // Tech / engine secrets
-          '**The Sims** plumbob (the green diamond) is technically **the Sim\'s soul** in the game\'s code — without it, the Sim has no AI behavior tree.',
-          '**Skyrim** runs on the same engine as **Morrowind (2002)** with patches — the "Creation Engine" name is a marketing rebrand of Gamebryo.',
-          '**Half-Life: Alyx** has a hidden physics interaction where you can pick up a magnetic crowbar and stick it to metal surfaces — **a 17-year-old reference to Gordon Freeman\'s weapon.**',
-
-          // Modding lore
-          'The **DOTA** mod for Warcraft 3 made Blizzard so much money that they sold the Warcraft 3 Reforged remake **specifically to keep DOTA players on Battle.net.** Reforged failed.',
-          '**Counter-Strike** was a **Half-Life mod** before Valve hired the modders and bought the rights for $300,000. Today CS2 generates ~$1B/year.',
-          'The **PUBG** developer Brendan Greene started by modding **Arma 3 for a battle-royale gametype.** He named the mode "PlayerUnknown\'s Battle Royale" — his Arma username became the company name.',
-
-          // Weird historical
-          '**Tetris** was developed in the Soviet Union, and for years **its profits went directly to the USSR government.** It was the first game to legally cross the Iron Curtain.',
-          '**Final Fantasy 1** was named "Final" because Square thought the company was going **bankrupt** and this would be their last game.',
-          '**Hideo Kojima** was forced out of Konami in 2015. To this day, his name is being **manually scrubbed** from every Metal Gear product page on Konami\'s website.',
-          '**Atari** buried millions of unsold E.T. cartridges in a New Mexico landfill in 1983. **Archaeologists excavated them in 2014.** Some sold for $1,500 each on eBay.',
-
-          // Modern dev secrets
-          '**Bethesda** uses an internal tool called **"Creation Kit Pro"** that has **20+ years of legacy code** — every modder uses a stripped-down version that\'s missing half the features.',
-          '**Riot Games** has a hidden internal "smurf detection" system that **silently shadow-bans accounts** by matching behavioral fingerprints (mouse movement, click cadence) across logins.',
-          '**Activision Blizzard** has a patent on **matchmaking that intentionally pairs you with players who own skins you don\'t**, to encourage purchases. Multiple games in their catalog use it.',
-          '**Steam reviews** below 100 are weighted differently than reviews above 100 — so a 50-review game with 90% positive can rank LOWER than a 1000-review game with 80% positive.',
-
-          // Speedrunning / glitches
-          '**OutOfBounds (OOB)** speedruns sometimes load **dev rooms** — Halo 3\'s "Test Room A" contains a giant cube of every weapon in the game stacked in a single pile.',
-          '**Banjo-Kazooie\'s** unfinished sequel "Stop \'N\' Swop" feature was supposed to **transfer items between cartridges** through a hardware exploit. Nintendo killed it before launch.',
-          'The **Crash Bandicoot** team famously had to bribe Naughty Dog\'s engineers with **espresso machines** to convince them to optimize the PS1 RAM swap routine that made the game possible.',
-
-          // Indie miracles
-          '**Stardew Valley** was made by **one person (Eric Barone) over 5 years.** He made every pixel, every line of code, every song, every dialog. He still solo-patches it as of 2025.',
-          '**Hollow Knight** Team Cherry was **3 people in a small Australian studio.** Silksong has been "almost done" for 6+ years.',
-          '**Undertale** was made by **Toby Fox alone** in GameMaker over 3 years. He used Earthbound\'s dev tools as a reference because he couldn\'t afford other engines.',
-        ];
-
-        return {
-          text: `## 🔴 Truth Unlocked\n\n${REDPILLS[Math.floor(Math.random() * REDPILLS.length)]}`,
-          images: [],
-          isCommand: true,
-        };
-      },
-    },
-    {
-      trigger: '/noclip',
-      description: 'Secret glitch mode activated',
-      emoji: '👻',
-      action: async () => ({
-        text: `## 👻 NOCLIP MODE ACTIVATED\n\n\`\`\`\nWARNING: You have clipped outside the world boundary.\nPhysics: DISABLED\nCollision: DISABLED  \nGame Master awareness: ENABLED\n\nYou can see the void now.\nThe dev notes are everywhere.\nSomeone left a sticky note that says: 'fix this before launch'\nThey did not fix it before launch.\n\`\`\`\n*Type anything to re-enter the simulation.*`,
-        images: [],
-        isCommand: true,
-      }),
-    },
-    {
       trigger: '/konami',
       description: 'Unlock the legendary Konami cheat code Easter Egg',
       emoji: '🎮',
@@ -556,133 +670,6 @@ export default function useChat(user) {
         images: [],
         isCommand: true,
       }),
-    },
-    {
-      trigger: '/loading',
-      description: 'The eternal gamer struggle',
-      emoji: '⏳',
-      action: async () => ({
-        text: `## ⏳ Loading...\n\n\`███████████████████░░░░░░\` 74%\n\n*Estimated time remaining: Soon™*\n\n> *While you wait, the developers added a loading screen tip: "Have you tried turning it off and on again?"*\n\n**Fun fact:** Players collectively spend over **500 million hours per year** watching loading screens. That's 57,000 years of human time. Yearly. Just waiting.`,
-        images: [],
-        isCommand: true,
-      }),
-    },
-    {
-      trigger: '/lore',
-      description: 'Get a lore drop on a random iconic game universe (live + curated)',
-      emoji: '📜',
-      action: async () => {
-        // ── Try live Reddit scrape from lore + theory subreddits ──────────
-        if (Math.random() < 0.6) {
-          try {
-            const ctrl = new AbortController();
-            const t = setTimeout(() => ctrl.abort(), 2500);
-            // Cycle across general theory subs + iconic-game-specific lore subs
-            const subs = [
-              'FanTheories',
-              'GameTheorists',
-              'gamelore',
-              'Eldenring',
-              'darksouls',
-              'HollowKnight',
-              'truezelda',
-              'FFXIV',
-              'GenshinImpact',
-              'Bloodborne',
-            ];
-            const sub = subs[Math.floor(Math.random() * subs.length)];
-            const url = `/api/reddit/r/${sub}/top.json?t=month&limit=40`;
-            const res = await fetch(url, { signal: ctrl.signal });
-            clearTimeout(t);
-            if (res.ok) {
-              const data = await res.json();
-              const posts = (data?.data?.children || [])
-                .map(p => p?.data)
-                .filter(p =>
-                  p && !p.stickied && !p.over_18 &&
-                  p.score > 100 &&
-                  // Prefer lore/theory keywords; lore-specific subs are pre-filtered by topic
-                  (/(lore|theory|theories|story|origin|connection|symbolism|mythology|backstory|canon|timeline|ending explained|secret|hidden meaning)/i.test(p.title) ||
-                   ['gamelore', 'FanTheories', 'GameTheorists', 'truezelda'].includes(sub)) &&
-                  p.selftext && p.selftext.length > 200 && p.selftext.length < 2000
-                );
-              if (posts.length > 0) {
-                const pick = posts[Math.floor(Math.random() * posts.length)];
-                const title = (pick.title || '')
-                  .replace(/^\[(?:lore|theory|spoilers?)\][\s:]*/i, '')
-                  .trim();
-                let body = (pick.selftext || '').trim();
-                body = body
-                  .replace(/&amp;#x200B;/g, '')
-                  .replace(/&amp;/g, '&')
-                  .replace(/&#x200B;/g, '')
-                  .replace(/\n{3,}/g, '\n\n')
-                  .slice(0, 900);
-                return {
-                  text: `## 📜 Lore Drop — fresh community theory\n\n**${title}**\n\n${body}${body.length === 900 ? '…' : ''}\n\n*— theorized in r/${pick.subreddit} (${pick.score.toLocaleString()} ↑)*\n\n*⚠️ Community theory — treat as "fan canon" unless confirmed by the developer.*`,
-                  images: [],
-                  isCommand: true,
-                };
-              }
-            }
-          } catch { /* silent fallback */ }
-        }
-
-        // ── Curated lore drops (~30 deep cuts across genres) ──────────────
-        const LORE = [
-          // Souls / Fromsoft
-          `**Dark Souls Lore:** The entire Age of Fire is a lie. Gwyn, the "god" you avenge throughout the trilogy, sacrificed his own humanity to link the First Flame and *condemned all life to an eternal cycle of burning and dying* just to delay the inevitable Age of Dark. You are not a hero. You are a battery.`,
-          `**Bloodborne Lore:** The "blood" everyone in Yharnam is addicted to isn't medicine — it's **Old Blood**, the ichor of an Eldritch alien being trapped beneath the Healing Church. Every healer in town is unknowingly ritualistically feeding their patients pieces of a god.`,
-          `**Sekiro Lore:** Wolf isn't loyal to Kuro because of duty — he's loyal because **Kuro saved his life as a child** by sharing the Dragon's Heritage. Every "death" Wolf experiences is technically Kuro dying with him.`,
-          `**Elden Ring Lore:** The "Elden Ring" is just *a really good rune.* Queen Marika shattered it not by accident but deliberately — she wanted to break the Golden Order system her husband Godfrey built, because she had watched it destroy everyone she loved. Every boss you kill was once someone she cared about.`,
-          `**Demon's Souls Lore:** The Old One was never the villain. It was a **storage system** for human despair, intentionally created by the Nexus to keep the world stable. The Maiden in Black guides you to "free" it, but freeing it brings the Age of Fog — i.e., death of consciousness.`,
-
-          // Zelda
-          `**Zelda Lore:** There are three parallel timelines, two caused by Link's victory and one by his **defeat**. The entire Legend of Zelda franchise canonically acknowledges a timeline where the Hero of Time was **killed by Ganon** during Ocarina of Time. Most classic Zelda games take place in the aftermath of Link losing.`,
-          `**Majora's Mask Lore:** The Skull Kid isn't possessed by the mask — **Skull Kid is one of the Lost Children of the Lost Woods.** Specifically, he's a Kokiri who left the forest, which canonically turns Kokiri into Stalkids. The mask just amplified his existing trauma.`,
-          `**Tears of the Kingdom Lore:** The Zonai aren't a "lost civilization." They're **Sheikah refugees from the Era of the Calamity** who used the depths to hide for 10,000 years. The "ancient" tech and the modern Sheikah tech are the same lineage, just split by time.`,
-
-          // Indie greats
-          `**Hollow Knight Lore:** The Pale King didn't create the infection seal out of compassion — he did it to **save his kingdom's economic model**. The bugs of Hallownest ran entirely on SOUL energy. A world without minds meant no soul, no kingdom, no legacy. The Hollow Knight is not a savior. It's a business decision.`,
-          `**Hades Lore:** Zagreus's escape attempts aren't him fighting his father — they're a **family therapy ritual.** Every god in the pantheon is using Zag's escape to communicate with each other after centuries of silence. The dynamic at Olympus is entirely his fault.`,
-          `**Undertale Lore:** Sans isn't lazy — he's **mathematically certain you'll reset the timeline.** The sweat in his judgement-hall sprite is implied to be lifeforce burning. The "you've been here before" lines are quantum awareness, not metaphor.`,
-          `**Celeste Lore:** Madeline isn't climbing a mountain. **The mountain is the inside of her own mind during a panic attack**, and "Badeline" is her depression. Reaching the summit and reconciling with her isn't "winning" — it's accepting that depression is part of you.`,
-          `**Outer Wilds Lore:** The 22-minute time loop isn't a sci-fi puzzle gimmick. It's **a meditation on knowing the universe will end.** Once you "complete" the game, the loop ends — and what waits for you is one of gaming's most beautiful explorations of acceptance.`,
-          `**Disco Elysium Lore:** Detective Du Bois is so broken because he **deleted his own personality with alcohol on purpose** to forget his ex-fiancée. Every skill voice in his head is a fragment of the man he chose to erase.`,
-
-          // Classic AAA
-          `**Minecraft Lore:** The Endermen are **corrupted Endermen.** The original humans of Minecraft, known as the "Ancient Builders", built the End Portals to escape an ancient plague. Some escaped. Some stayed and built the Nether. The ones who entered the End were slowly consumed by it and became the Endermen — still clutching blocks, still building, forever lost.`,
-          `**Skyrim Lore:** The dragons aren't "returning" — they were never gone. The Dragon Cult **trapped Alduin in time** with the Elder Scroll, but every dragon Alduin resurrects in Skyrim is a dragon that the Greybeards **had to spare** because killing one would unmake history. Paarthurnax is alive because killing him erases the Greybeards.`,
-          `**Mass Effect Lore:** The Reapers aren't a single hostile race. **They are the AI-uplifted memories of every advanced civilization that came before.** Each Reaper is a new "harvested" species turned into the next Reaper. The Catalyst's "solution" is to kill organics before they create AI that wipes them out — by becoming the AI that wipes them out first.`,
-          `**Half-Life Lore:** The G-Man isn't an alien or a government. **He's the player.** Multiple developer comments imply he's an interdimensional entity who curates universes by occasionally yanking Gordon Freeman in and out of stasis. Every cutscene where he speaks is technically him speaking to *you*.`,
-          `**Bioshock Lore:** Atlas isn't a freedom fighter. He's **Frank Fontaine** — Andrew Ryan's business rival — who used the trigger phrase "Would you kindly?" to compel Jack into killing Ryan. The entire game is a 30-year-long con. The protagonist is the weapon.`,
-          `**Witcher 3 Lore:** Ciri isn't just an Elder Blood carrier — she's **the only being who can travel between dimensions on foot**. Geralt's fight against the Wild Hunt is a fight against **interdimensional refugees from a world the White Frost already ate.**`,
-
-          // Franchise deep cuts
-          `**Final Fantasy 7 Lore:** Sephiroth's mother is technically **an alien named Jenova** that Shinra dug out of a 2,000-year-old crater. Sephiroth never found out his "real" mother was Lucrecia — a human Shinra scientist. Every character's tragedy in FF7 traces back to Shinra digging up something they shouldn't have.`,
-          `**Persona 5 Lore:** The "Phantom Thieves" are technically **Jungian Shadow projections.** The Metaverse is the collective unconscious. Each Palace boss isn't really their target — it's the *worst version of themselves* the target lets exist. The thieves are stealing distorted self-perception, not literal hearts.`,
-          `**Pokémon Lore:** Cubone wears the skull of its dead mother. **Marowak in Pokémon Red is canonically the ghost of a Cubone's mother killed by Team Rocket** in the Pokémon Tower. The Cubone wandering Lavender Town is its orphaned child. Game Freak put this in a children's game in 1996.`,
-          `**Kingdom Hearts Lore:** The convoluted timeline is intentional. **Tetsuya Nomura confirmed the lore is impossible to follow** because Sora's identity is meant to feel disjointed, mirroring the game's themes of fragmented memory and identity.`,
-
-          // Modern indie / live service
-          `**Genshin Impact Lore:** The "Traveler" is **not human.** Aether and Lumine are technically a species called "Descenders" who traverse universes. The Sustainer of Heavenly Principles imprisoned them for being a threat to the world's narrative — your sibling chose to join the Abyss because they realized **Teyvat is a prison.**`,
-          `**Honkai Star Rail Lore:** The "Aeons" aren't gods — they're **mortals who consumed a Path concept.** Each Aeon was once a person who fully embodied a single philosophical concept (Destruction, Preservation, etc.) and ascended. They're cosmic horror dressed in pretty UI.`,
-          `**Wuthering Waves Lore:** The "Lament" wasn't a single event — it was **multiple recursive realities collapsing into each other.** Every Resonator who survived has memories from a dead timeline, which is why some have abilities they "shouldn't" have learned.`,
-
-          // Cult classics
-          `**Silent Hill 2 Lore:** James Sunderland didn't get a letter from his dead wife. **He killed her.** The entire town manifests his guilt and grief. Pyramid Head is his self-imposed executioner. Every monster is a fragment of his suppressed memory of the murder.`,
-          `**Resident Evil 4 Lore:** Las Plagas isn't an infection — it's **a 600-year-old parasitic ecosystem.** The Salazar family discovered it underground, used it for power, and Saddler weaponized it. Leon's mission "rescue the President's daughter" is incidental to the parasites being a global apocalypse waiting to happen.`,
-          `**Metal Gear Solid 2 Lore:** Raiden isn't a soldier — he's **a deliberately constructed personality** built by the Patriots to test whether they could mass-produce loyal "Snake-tier" assets. The entire game is a simulation Kojima built to test if YOU, the player, would notice you weren't playing as Snake.`,
-          `**Death Stranding Lore:** The "Death Stranding" is **the boundary between life and afterlife dissolving.** BB units are babies in a coma between worlds — they can perceive BTs because they're technically half-dead themselves. Sam isn't delivering packages; he's reconnecting **the literal grid that holds reality together.**`,
-          `**Control Lore:** The "Hiss" isn't an entity — it's **a memetic incantation that rewrites consciousness through repetition.** Every infected agent is repeating it because hearing it once embeds the loop in their brain. Jesse Faden survives because she has a "counter-mantra" from her time with Polaris.`,
-        ];
-
-        return {
-          text: `## 📜 Lore Drop Incoming...\n\n${LORE[Math.floor(Math.random() * LORE.length)]}`,
-          images: [],
-          isCommand: true,
-        };
-      },
     },
   ], [clearChat, stealthMode]);
 

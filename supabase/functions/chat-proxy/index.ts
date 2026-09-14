@@ -2089,9 +2089,19 @@ async function runNeuralMesh(opts: {
 // backfilling them.
 const EMOTIONAL_RX = /\b(burn(ed|t)?\s*out|burnout|depress\w*|anxiet\w*|anxious|lonely|feel\w*\s+alone|grief|griev\w*|quit(ting)?\s+gaming|no\s+longer\s+enjoy|don'?t\s+enjoy|lost\s+interest|hardstuck|tilted|tilting|hopeless|worthless|addict\w*|ruining\s+my|hate\s+myself|kill\s+myself|end\s+it\s+all|end\s+my\s+life|self\s*harm|hurt(ing)?\s+myself|don'?t\s+(?:see|see\s+any)\s+(?:the\s+)?point|what'?s\s+the\s+point(?!\s+of\s+(?:the|a|an|this|that|these|those|his|her|their)\b)|no\s+point\s+(?:in|to)\s+(?:any|living|it)|nothing\s+matters|nothing\s+really\s+matters|give\s+up\s+on\s+everything|can'?t\s+go\s+on|don'?t\s+want\s+to\s+be\s+here|better\s+off\s+without\s+me|tired\s+of\s+living|feel(s|ing)?\s+(?:\w+\s+){0,2}(weird|empty|hollow|numb|awful|terrible|deflated|lost|down|worthless|like\s+shit))\b/i;
 
+// Catches the model's own "I can't find this game" reply (the NEVER CLAIM A
+// GAME DOESN'T EXIST template asks for phrasing like this). Suggesting
+// "[?] beginner tips for <title>" right under a sentence saying the title
+// came back empty is the same self-contradicting-chip problem the emotional
+// case already had — found live in production asking about a fabricated
+// title ("Chrono Aegis: Fractured Skies"), where the reply correctly declined
+// to invent details but still appended two confident tip/feature chips for it.
+const NOT_FOUND_RX = /\b(nothing'?s? coming back|couldn'?t find (?:any(?:thing)?|a game)|no (?:store page|wiki|coverage|results?)\s+(?:came up|found)|search came back empty|can'?t find (?:any(?:thing)?|a game) (?:called|named|on)|doesn'?t (?:seem to )?exist|isn'?t (?:a real|showing up)|no (?:info(?:rmation)?|data) on (?:a game|this) call(?:ed)?)\b/i;
+
 function shouldSkipAutoFollowUps(prompt: string, replyText: string, isCorrectionTurn: boolean): boolean {
   if (isCorrectionTurn) return true;
   if (EMOTIONAL_RX.test(prompt) || EMOTIONAL_RX.test(replyText)) return true;
+  if (NOT_FOUND_RX.test(replyText)) return true;
   // Short conversational exchanges — chips are padding, not value.
   if (replyText.trim().length < 320) return true;
   return false;
