@@ -15,7 +15,7 @@ import { corroborate, CorroborationInput } from './corroboration.ts';
 import { stripReasoning, createReasoningFilter } from './reasoning.ts';
 import {
   checkRateLimit, anonBucket, userIdFromAuthHeader, botCallerFromHeaders,
-  LIMITS_AUTHED, LIMITS_ANON,
+  LIMITS_AUTHED, LIMITS_ANON, LIMITS_BOT, LIMITS_BOT_GLOBAL,
   getMeshState, reportProvider, recordUsage, noteLocalFailure,
   loadProfile, saveProfilePatch, recordTrace, dbConfigured,
   PlayerProfile, MeshState as MeshStateT,
@@ -2360,10 +2360,29 @@ async function runChatPipeline(
       : botCaller
         ? `d:${botCaller.discordUserId}`
         : await anonBucket(req);
-    const limits = (authedUserId || botCaller) ? LIMITS_AUTHED : LIMITS_ANON;
+    // A bot caller has already been metered per tier by the bot itself, in
+    // Postgres. Applying LIMITS_AUTHED here as well made the stricter of two
+    // disagreeing limiters win, so a Pro user sold 20 turns/minute was cut off
+    // at 12. LIMITS_BOT is the infrastructure ceiling that sits above every tier.
+    const limits = botCaller ? LIMITS_BOT : (authedUserId ? LIMITS_AUTHED : LIMITS_ANON);
     const wantsImage = shouldGenerateImage(prompt);
     const kind: 'chat' | 'vision' | 'image_gen' =
       wantsImage ? 'image_gen' : (cleanAttachments.length > 0 ? 'vision' : 'chat');
+
+    // Whole-bot breaker, checked first so a leaked token cannot mint fresh
+    // snowflakes to escape the per-user ceiling. Counted in the same ledger, so
+    // one extra RPC per bot request and none for anyone else.
+    if (botCaller) {
+      const botGlobal = await checkRateLimit('d:_global', kind, LIMITS_BOT_GLOBAL);
+      if (!botGlobal.allowed) {
+        console.warn(`[RATE-LIMIT] BOT GLOBAL breaker tripped on ${botGlobal.scope} (${botGlobal.day}/${botGlobal.dayLimit}d)`);
+        return finish({
+          text: `## ⏳ Easy there\n\nThe bot is at capacity right now — give it a little while.`,
+          images: [],
+          _meta: { error: true, rateLimited: true, scope: botGlobal.scope, retryAfter: botGlobal.retryAfter },
+        }, 429, { 'Retry-After': String(botGlobal.retryAfter) });
+      }
+    }
 
     const rate = await checkRateLimit(bucket, kind, limits);
     if (!rate.allowed) {
