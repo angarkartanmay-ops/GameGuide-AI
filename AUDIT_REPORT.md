@@ -404,3 +404,106 @@ Ran the actual fixes against **production**, not just local code — real anon k
 **Fixed:** added `NOT_FOUND_RX`, matching the phrasing family the system prompt's own not-found template produces (verified against the literal live-captured reply above, plus the template string in the prompt itself), and folded it into `shouldSkipAutoFollowUps`. Same deterministic strip-then-suppress mechanism already used for emotional turns now also fires here. `deno check` clean, all 215 assertions still pass.
 
 **Not yet deployed** — this fix exists locally only; it needs the same `supabase functions deploy chat-proxy` step as the rest.
+
+---
+
+## Discord bot audit + deployment hardening (2026-09-14)
+
+The bot had already been through a round of fixes by the other agent working on
+it (`e66b141`: per-Discord-user rate limiting via a shared bot secret, real 429
+`Retry-After` handling, post-encode attachment sizing, `images[]` attached as
+uploads). Those were verified as present and correct — the old plan's "P0
+blocks deploy" item is genuinely closed. What follows is what was still wrong.
+
+### 🔴 Stripe subscribers were getting PERMANENT Pro
+
+`billing-stripe.js` read `sub.current_period_end`. Stripe **removed** that field
+from `Subscription` and moved it onto `SubscriptionItem` (API `2025-03-31.basil`
+onward; the SDK here pins `2026-08-26.dahlia`). Confirmed in the vendored SDK:
+
+```
+node_modules/stripe/CHANGELOG.md
+  * Remove support for `current_period_end` and `current_period_start` on `Subscription`
+  * Add support for `current_period_end` and `current_period_start` on `SubscriptionItem`
+```
+
+So the read returned `undefined` → `ISO()` → `null`. And `null` is not "unknown"
+to the quota function — it is **"never expires"**:
+
+```sql
+AND (e.current_period_end IS NULL OR e.current_period_end > now())   -- line 228
+AND (s.expires_at        IS NULL OR s.expires_at        > now())   -- line 236, guild
+```
+
+A clean cancellation still revoked access through `customer.subscription.deleted`.
+But a **silent lapse** — card expires, dunning exhausts, Stripe stops retrying
+without emitting `deleted` — left paid access granted forever, on both the
+individual and the whole-server plan. Pure revenue leakage, and invisible: no
+user complains about keeping a plan they stopped paying for.
+
+**Fixed** with `subscriptionPeriodEnd()`, which reads from `items.data[]`, takes
+the **earliest** end across items (the first moment the subscription is no longer
+fully paid for), and still falls back to the legacy top-level field so a
+pre-basil API version keeps working.
+
+Second-order issue in the same path: when `stripe.subscriptions.retrieve()`
+*failed*, the code granted Pro with `periodEnd = null` — i.e. a transient Stripe
+500 also bought a permanent plan. Keeping the grant is the right instinct (never
+refuse someone who just paid), so the fallback is now a **3-day provisional
+expiry** that `customer.subscription.updated` overwrites moments later. A genuine
+one-off/lifetime purchase has no subscription at all and correctly stays `null`.
+
+**19 new assertions** in `tests/billing.test.mjs`, and I verified they actually
+catch the bug: reverting to the old one-line read produces 5 failures plus a
+crash. A money bug with no regression test comes back.
+
+### 🟠 CI never parsed the bot's main file
+
+`npm test` reaches `quota.js`, `entitlements.js` and `billing-stripe.js` only
+because those three happen to have no load-time imports. `index.js` — 1,200
+lines — sits behind `require('discord.js')`, and CI never ran `npm ci` inside
+`discord-bot/`, so **a syntax error in the bot's core file would ship past a
+green CI run.** Added an install + `npm run syntax-check` step (bot lockfile
+verified in sync first, so `npm ci` won't fail the way the earlier run did).
+
+### 🟠 Stripe webhooks could fail on body size
+
+`express.json()` was left at its 100kb default. A Stripe event carrying a
+multi-item subscription plus metadata can exceed that, and the parser rejects
+with 413 **before** the signature check runs — so the event fails, Stripe
+retries for days, and the entitlement never lands. Raised to 1mb.
+
+### Command parity with the web app
+
+Applied the same consolidation: `/noclip` and `/loading` removed, and `/tip`,
+`/redpill`, `/lore` folded into `/discover`. On the bot this matters more than on
+the web — each of those three issued a near-identical prompt and **cost the user
+a full quota turn**. Discord's native option picker means the fold loses nothing:
+`/discover` takes an optional `category` (random if omitted) and keeps `/lore`'s
+`game` option. Registration choice values verified to match the handler's keys
+exactly, so no category can silently fall through to the default.
+
+Also corrected the file header, which advertised `FREE 5/min · PRO 30/min ·
+PREMIUM_SERVER 60/min` against the real `discord_quota_tiers` values (Free 15/day
++5/min, Pro 200/day+20/min, Server 60/day+10/min, 800 guild pool), and updated
+both READMEs.
+
+### Verified by actually running it
+
+Booted the bot with throwaway credentials: the full module tree loads, Stripe
+correctly self-disables when unconfigured, the HTTP server binds, and an invalid
+token is reported as unrecoverable rather than retried forever. Probed the HTTP
+layer directly — `/ping` → 200, `/health` → **503 while not ready** (so a
+platform health check won't route traffic to a bot that hasn't reached Discord
+yet), and `req.rawBody` arrives as a real Buffer, without which Stripe signature
+verification could not work at all.
+
+**Not fixed, noted deliberately:** the Top.gg webhook compares its auth header
+with `!==` rather than a constant-time comparison. Real but negligible here —
+network jitter swamps the timing signal and the payoff is capped at 20 bonus
+message credits. Not worth a dependency or hand-rolled crypto.
+
+### State
+
+- **234 assertions passing** (was 215) · web build clean · bot syntax clean
+- Both lockfiles in sync
