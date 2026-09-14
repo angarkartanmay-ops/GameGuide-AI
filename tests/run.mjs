@@ -22,6 +22,9 @@ const SUITES = [
   ['ssrf',          'ssrf.test.mjs'],          // wiki-proxy subdomain validation
   ['eval',          'eval/pipeline.test.mjs'], // golden-set retrieval + routing accuracy
   ['catalog',       'catalog.test.mjs'],       // live model discovery + filter safety
+  ['quota',         'quota.test.mjs'],         // Discord freemium tiers + upsell copy
+  ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres
+  ['quota-contract','quota-contract.test.mjs'],// quota.js against that same SQL
 ];
 
 try {
