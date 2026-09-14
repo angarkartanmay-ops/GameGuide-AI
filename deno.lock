@@ -33,6 +33,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
+        "npm:@electric-sql/pglite@~0.5.8",
         "npm:@eslint/js@^9.39.4",
         "npm:@google/genai@^1.48.0",
         "npm:@react-three/drei@^10.7.7",

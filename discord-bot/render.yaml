@@ -28,3 +28,18 @@ services:
       # to keep the free instance from sleeping after 15 min idle.
       - key: KEEPALIVE_URL
         sync: false
+      # Must match BOT_SERVICE_TOKEN in the Supabase edge function secrets.
+      # Without it the chat-proxy buckets every Discord user in every guild
+      # into a single IP bucket, and the whole bot shares one allowance.
+      - key: BOT_SERVICE_TOKEN
+        sync: false
+      # Billing. Without the first two, /premium can only show links and
+      # nobody who pays is granted anything.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PAYMENT_LINK
+        sync: false
+      - key: STRIPE_SERVER_PAYMENT_LINK
+        sync: false

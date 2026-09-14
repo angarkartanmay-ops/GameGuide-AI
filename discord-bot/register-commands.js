@@ -61,6 +61,10 @@ const commands = [
     .setDescription('Wipe your chat history'),
 
   new SlashCommandBuilder()
+    .setName('quota')
+    .setDescription('How many messages and screenshots you have left today'),
+
+  new SlashCommandBuilder()
     .setName('stats')
     .setDescription('Global + your personal usage stats'),
 

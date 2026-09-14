@@ -72,6 +72,19 @@ export interface RateLimits {
 export const LIMITS_AUTHED: RateLimits = { perMinute: 12, perHour: 120, perDay: 600 };
 export const LIMITS_ANON: RateLimits   = { perMinute: 6,  perHour: 40,  perDay: 120 };
 
+// The Discord bot enforces PRODUCT quota itself, in Postgres, per tier
+// (gg_discord_quota_check). These numbers are therefore an INFRASTRUCTURE
+// ceiling, not a product limit — they exist only to bound the damage from a
+// leaked BOT_SERVICE_TOKEN, and must sit above the most generous tier or they
+// silently become the real limit. They did: at LIMITS_AUTHED a Pro user sold
+// 20 turns/minute was cut off at 12, and four vision turns (weight 3 each)
+// exhausted a free user's minute before the bot's own limiter noticed.
+export const LIMITS_BOT: RateLimits = { perMinute: 30, perHour: 400, perDay: 2500 };
+
+// Whole-bot circuit breaker. Per-user ceilings cannot stop someone who has the
+// token and mints fresh snowflakes, so cap the bot in aggregate too.
+export const LIMITS_BOT_GLOBAL: RateLimits = { perMinute: 200, perHour: 1500, perDay: 4000 };
+
 // Per-isolate fallback. Not shared across isolates, so it is strictly weaker
 // than the DB limiter — but it still caps a single hot isolate, which is where
 // a burst from one client lands.

@@ -11,7 +11,7 @@ Full feature parity with the GameGuide-AI web app, hardened for production and b
 | `/noclip`, `/konami`, `/loading` (vibes) | same slash commands |
 | Persistent chat history (Supabase) | same Supabase project, table `discord_chat_messages` |
 | Live-source telemetry chip | footer line on every reply showing sources |
-| Per-user tier (free/pro/premium-server) | rate-limit aware (`5/30/60` per minute) |
+| Per-user tier (free/pro/premium-server) | daily quota enforced in Postgres, `/quota` to check |
 | Backend model hidden | provider/model never leak in responses |
 
 ## Quick Start (Local Dev)
@@ -22,6 +22,7 @@ npm install
 
 # 1. Run schema.sql in Supabase SQL Editor (one-time)
 #    → app.supabase.com → your project → SQL Editor → paste schema.sql → Run
+#    THEN run schema-v3.sql the same way (the freemium quota engine).
 
 # 2. Copy .env.example → .env and fill it in
 cp .env.example .env
@@ -50,31 +51,79 @@ npm start
 | `/redpill` | Hidden gaming-industry secret |
 | `/history` | Show your last messages with the bot (ephemeral) |
 | `/clear` | Wipe your chat history |
+| `/quota` | Messages and screenshots you have left today |
 | `/stats` | Global + your usage stats |
-| `/premium` | Upgrade for higher rate limits |
+| `/premium` | Compare plans and upgrade |
 | `/help` | Full reference |
 | `/noclip`, `/konami`, `/loading` | Vibe / fun commands |
 
 ## Tier System
 
-| Tier | Rate limit | How it's granted |
-|---|---|---|
-| **🆓 Free** | 5/min | Default |
-| **⭐ Pro** | 30/min | `discord_premium` row OR `PREMIUM_USER_IDS` env OR Top.gg vote (12h) |
-| **🌟 Premium Server** | 60/min for all members | `discord_premium_servers` row OR `PREMIUM_GUILD_IDS` env |
+Quota is enforced in Postgres by `gg_discord_quota_check()`, so it survives
+restarts, is shared across instances, and cannot disagree with itself. Limits
+live in the `discord_quota_tiers` **table** — retune them with an `UPDATE`, no
+redeploy. A vision turn costs 1 message *and* 1 screenshot.
 
-## Monetization Hooks (already wired)
+| | 🆓 Free | ⭐ Pro — $4.99/mo | 🌟 Server — $14.99/mo |
+|---|---|---|---|
+| Messages / day | **15** | **200** | **60 per member** |
+| Guild pool / day | — | — | **800 shared** |
+| Burst / minute | 5 | 20 | 10 |
+| Screenshots / day | 3 | 40 | 10 |
+| Image generations / day | 1 | 15 | 5 |
+| History retained | 10 | 50 | 25 |
+| Context sent to model | 6 turns | 24 turns | 12 turns |
+| Priority routing | — | ✅ | ✅ |
+| At global capacity | waits | never queued | protected |
 
-### 1. Stripe / Patreon / Ko-fi (paid Pro tier)
-Set any of these in `.env` — `/premium` will show buttons linking to them:
-- `STRIPE_PAYMENT_LINK` — direct Stripe Payment Link (easiest)
-- `PATREON_URL` — your Patreon page
-- `KOFI_URL` — your Ko-fi page
+**Why 15/day free:** median engaged use is 3–5 messages/day, so 15 clears
+roughly 88% of users untouched while the heaviest ~12% — the only group that
+costs real money — hit the wall by mid-afternoon. The platform can serve about
+3,000 turns/day in total across all providers; that ceiling is what the whole
+table is derived from, and it is enforced by `global_daily_cap` in
+`discord_quota_config`.
 
-For Stripe: create a [Payment Link](https://dashboard.stripe.com/payment-links), set its **success URL** to a tiny page that asks for the user's Discord ID, and use a [Stripe webhook](https://stripe.com/docs/webhooks) to write to `discord_premium`. The bot picks up the new tier on next call (5-min cache TTL).
+**Granted by:** `discord_entitlements` row (Stripe, or `manual`), a
+`discord_premium_servers` row for the server plan, or the `PREMIUM_USER_IDS` /
+`PREMIUM_GUILD_IDS` env vars, which are synced into the database at boot.
 
-### 2. Top.gg Vote-for-Premium (free traffic)
-List the bot at [Top.gg](https://top.gg). Users get **12 hours of free Pro tier per vote** (24h on weekends).
+Users check their own balance with `/quota`.
+
+## Monetization
+
+### 1. Stripe (paid Pro + Server) — fully wired
+
+Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, create two recurring
+[Payment Links](https://dashboard.stripe.com/payment-links), and point a
+[webhook](https://stripe.com/docs/webhooks) at
+`https://<your-bot-host>/stripe-webhook` subscribed to
+`checkout.session.completed`, `customer.subscription.updated`,
+`customer.subscription.deleted` and `invoice.payment_failed`.
+
+The bot appends `?client_reference_id=<discord id>` to the payment link, so the
+buyer is joined to their Discord account automatically — no "paste your Discord
+ID" step, which is where most bot conversions are lost. Entitlements are written
+through `entitlements.js`, so enabling Discord's own App Subscriptions later
+writes the same table and nothing downstream changes.
+
+A failed charge marks the account `past_due` but **keeps Pro active** while
+Stripe's dunning retries — pulling access on the first declined card turns an
+expired card into a cancellation.
+
+Test it end to end without leaving your machine:
+```bash
+stripe listen --forward-to localhost:3000/stripe-webhook
+stripe trigger checkout.session.completed
+```
+
+### 2. Top.gg votes (free traffic)
+List the bot at [Top.gg](https://top.gg). A vote grants **+10 bonus messages for
+24h**, capped at 20 banked, spent before the daily allowance.
+
+> Votes deliberately do **not** grant a tier. Top.gg allows a vote every 12
+> hours, so the previous "12h of Pro per vote" meant voting twice a day bought
+> permanent free Pro — and because it upserted on `user_id`, a lifetime customer
+> who voted was silently downgraded to a 12-hour expiry.
 
 To wire the webhook:
 1. Set `TOPGG_WEBHOOK_AUTH` to a long random string
@@ -96,8 +145,13 @@ Sign up:
 - Fanatical: https://www.fanatical.com/affiliate
 
 ### 4. Per-server Premium upgrade (B2B)
-A server admin pays once — every member of their guild gets 60/min for the period.
-Add their guild ID to `discord_premium_servers` (with optional `expires_at`).
+A server admin pays once — every member of their guild gets 60 messages/day for
+the period, drawn from an 800/day shared pool. Buying via `/premium` writes the
+row automatically; to grant one by hand, add the guild id to
+`discord_premium_servers` (with optional `expires_at`).
+
+Per-member caps stop one loud member consuming the whole subscription; the pool
+stops one guild consuming the platform.
 
 ## Production Deploy (24/7)
 

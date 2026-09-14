@@ -29,6 +29,9 @@ const {
 } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
 const { fetchPriceDirect } = require('./cheapshark');
+const quota = require('./quota');
+const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
+const { mountStripeWebhook, buildCheckoutUrl, stripeConfigured } = require('./billing-stripe');
 
 // ─── Native fetch sanity ───────────────────────────────────────────────────
 if (typeof fetch !== 'function') {
@@ -49,6 +52,7 @@ const PREMIUM_GUILD_IDS = (process.env.PREMIUM_GUILD_IDS || '').split(',').map(s
 const PATREON_URL = process.env.PATREON_URL || '';
 const KOFI_URL = process.env.KOFI_URL || '';
 const STRIPE_PAYMENT_LINK = process.env.STRIPE_PAYMENT_LINK || '';
+const STRIPE_SERVER_PAYMENT_LINK = process.env.STRIPE_SERVER_PAYMENT_LINK || '';
 const TOPGG_VOTE_URL = process.env.TOPGG_VOTE_URL || '';
 const HUMBLE_AFFILIATE = process.env.HUMBLE_AFFILIATE || ''; // ?partner=YOUR_ID
 const GMG_AFFILIATE = process.env.GMG_AFFILIATE || '';       // mw_aref=YOUR_ID
@@ -74,116 +78,85 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY || SUPABAS
 const supabaseHasServiceRole = !!SUPABASE_SERVICE_ROLE_KEY;
 
 // ─── Constants ─────────────────────────────────────────────────────────────
-const MAX_HISTORY_PER_USER = 10;
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_FREE = 5;
-const RATE_LIMIT_PRO = 30;
-const RATE_LIMIT_PREMIUM_SERVER = 60;
+// Upper bound on what /history will ever render. The per-tier retention that
+// actually governs a request comes from discord_quota_tiers.history_len.
+const MAX_HISTORY_DISPLAY = 50;
 // Raised from 60s: the proxy now always gathers live data (multi-source web
 // search + wiki + Steam/RSS) before generating, because gating retrieval on
 // successful game detection was how brand-new titles got answered from stale
 // training. Discord does not stream, so the whole pipeline must fit here.
 const PROXY_TIMEOUT_MS = 90_000;
 const TYPING_PULSE_MS = 8_000;
-const VOTE_REWARD_HOURS = 12; // free PRO tier for 12h after voting
+
+// Vote rewards grant CREDITS, never a tier — see entitlements.grantBonusCredits
+// for why the old "12h of Pro per vote" was a hole rather than a perk.
+const VOTE_BONUS_CREDITS = 10;
+const VOTE_BONUS_HOURS = 24;
+const VOTE_BONUS_CAP = 20;
+
+const PRO_PRICE = '$4.99';
+const SERVER_PRICE = '$14.99';
 
 // ─── In-memory state ───────────────────────────────────────────────────────
-const rateLimits = new Map();        // userId → [timestamps]
-const premiumCacheUser = new Map();  // userId → { tier, expiresAt, fetchedAt }
-const premiumCacheGuild = new Map(); // guildId → { tier, expiresAt, fetchedAt }
-const PREMIUM_CACHE_MS = 5 * 60_000;
+// Rate limiting used to live here in a Map. It now lives in Postgres, because
+// a Map resets on every restart and free hosts restart constantly — see quota.js.
 const historyCache = new Map();      // userId → { history: [], fetchedAt }
 const HISTORY_CACHE_MS = 30_000;     // small cache to dedupe rapid replies
+let tierCache = null;                // { rows, fetchedAt } — pricing copy for /premium
+const TIER_CACHE_MS = 10 * 60_000;
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  Helpers — tier resolution + rate limiting
-// ═══════════════════════════════════════════════════════════════════════════
-
-async function resolveUserTier(userId) {
-  // Env override always wins (zero-DB hot config for the operator).
-  if (PREMIUM_USER_IDS.includes(userId)) return 'pro';
-
-  const cached = premiumCacheUser.get(userId);
-  if (cached && Date.now() - cached.fetchedAt < PREMIUM_CACHE_MS) {
-    if (!cached.expiresAt || new Date(cached.expiresAt) > new Date()) return cached.tier;
-    return 'free';
-  }
-
+/**
+ * Tier rows, for copy that quotes limits. Read from the same table the quota
+ * function enforces against, so an operator retuning discord_quota_tiers can
+ * never leave /premium advertising a number the bot will not honour.
+ */
+async function fetchTiers() {
+  if (tierCache && Date.now() - tierCache.fetchedAt < TIER_CACHE_MS) return tierCache.rows;
   try {
     const { data } = await supabase
-      .from('discord_premium')
-      .select('tier, expires_at')
-      .eq('user_id', userId)
-      .maybeSingle();
-    const tier = data && (!data.expires_at || new Date(data.expires_at) > new Date()) ? data.tier : 'free';
-    premiumCacheUser.set(userId, { tier, expiresAt: data?.expires_at, fetchedAt: Date.now() });
-    return tier;
+      .from('discord_quota_tiers')
+      .select('tier, label, msgs_day, burst_min, vision_day, imagegen_day, guild_pool_day');
+    const rows = Object.fromEntries((data || []).map(r => [r.tier, r]));
+    if (Object.keys(rows).length) tierCache = { rows, fetchedAt: Date.now() };
+    return rows;
   } catch {
-    return 'free';
+    return tierCache?.rows || {};
   }
 }
 
-async function resolveGuildTier(guildId) {
-  if (!guildId) return 'free';
-  if (PREMIUM_GUILD_IDS.includes(guildId)) return 'premium-server';
-
-  const cached = premiumCacheGuild.get(guildId);
-  if (cached && Date.now() - cached.fetchedAt < PREMIUM_CACHE_MS) {
-    if (!cached.expiresAt || new Date(cached.expiresAt) > new Date()) return cached.tier;
-    return 'free';
-  }
-
-  try {
-    const { data } = await supabase
-      .from('discord_premium_servers')
-      .select('expires_at')
-      .eq('guild_id', guildId)
-      .maybeSingle();
-    const tier = data && (!data.expires_at || new Date(data.expires_at) > new Date()) ? 'premium-server' : 'free';
-    premiumCacheGuild.set(guildId, { tier, expiresAt: data?.expires_at, fetchedAt: Date.now() });
-    return tier;
-  } catch {
-    return 'free';
-  }
-}
-
-async function effectiveLimit(userId, guildId) {
-  const [userTier, guildTier] = await Promise.all([
-    resolveUserTier(userId),
-    resolveGuildTier(guildId),
-  ]);
-  if (guildTier === 'premium-server') return { tier: 'premium-server', limit: RATE_LIMIT_PREMIUM_SERVER };
-  if (userTier === 'pro' || userTier === 'lifetime') return { tier: userTier, limit: RATE_LIMIT_PRO };
-  return { tier: 'free', limit: RATE_LIMIT_FREE };
-}
-
-function checkRateLimit(userId, limit) {
-  const now = Date.now();
-  const stamps = (rateLimits.get(userId) || []).filter(t => now - t < RATE_LIMIT_WINDOW_MS);
-  if (stamps.length >= limit) {
-    return { allowed: false, waitSec: Math.ceil((RATE_LIMIT_WINDOW_MS - (now - stamps[0])) / 1000), limit };
-  }
-  stamps.push(now);
-  rateLimits.set(userId, stamps);
-  return { allowed: true, remaining: limit - stamps.length, limit };
-}
+// ═══════════════════════════════════════════════════════════════════════════
+//  Tier resolution and rate limiting now happen inside a single Postgres call
+//  (gg_discord_quota_check, via quota.js). The three functions that used to
+//  live here — resolveUserTier, resolveGuildTier, effectiveLimit — plus the
+//  in-memory checkRateLimit have been removed rather than kept alongside it:
+//  two limiters that disagreed is precisely what made a paid Pro user hit a
+//  429 at message 13 while the bot told them they had 30.
+// ═══════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Helpers — chat history (Supabase persistent + in-memory cache)
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function getHistory(userId) {
+/**
+ * @param {number} limit  How many messages to retain for this caller. Comes
+ *   from the tier's `history_len`, so Pro genuinely remembers more of the
+ *   conversation than free does — a perk that costs nothing to grant.
+ */
+async function getHistory(userId, limit = 10) {
   const cached = historyCache.get(userId);
-  if (cached && Date.now() - cached.fetchedAt < HISTORY_CACHE_MS) return cached.history;
+  // A cache entry filled for a shorter tier must not be served to a longer one.
+  if (cached && Date.now() - cached.fetchedAt < HISTORY_CACHE_MS && cached.limit >= limit) {
+    return cached.history.slice(-limit);
+  }
   try {
     const { data } = await supabase
       .from('discord_chat_messages')
       .select('text, sender, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-      .limit(MAX_HISTORY_PER_USER);
+      .limit(limit);
     const history = (data || []).reverse().map(r => ({ sender: r.sender, text: r.text }));
-    historyCache.set(userId, { history, fetchedAt: Date.now() });
+    historyCache.set(userId, { history, limit, fetchedAt: Date.now() });
     return history;
   } catch (e) {
     console.warn('[history] read failed:', e.message);
@@ -376,7 +349,7 @@ async function fetchAttachmentAsBase64(att) {
   }
 }
 
-async function callChatProxy({ prompt, history, attachments, discordUserId }) {
+async function callChatProxy({ prompt, history, attachments, discordUserId, tier, softCapped }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PROXY_TIMEOUT_MS);
   try {
@@ -391,6 +364,12 @@ async function callChatProxy({ prompt, history, attachments, discordUserId }) {
     if (BOT_SERVICE_TOKEN && discordUserId) {
       headers['X-GG-Bot-Token'] = BOT_SERVICE_TOKEN;
       headers['X-GG-Bot-User'] = String(discordUserId);
+      // Routing preference ONLY — explicitly not security-bearing. Quota is
+      // resolved server-side from the database, so the worst a leaked bot token
+      // buys here is slightly better model selection, never extra quota.
+      // `softCapped` asks the mesh to stay on free models for a Pro user who is
+      // far past normal usage, protecting margin without refusing them.
+      if (tier) headers['X-GG-Bot-Tier'] = softCapped ? 'free' : String(tier);
     }
 
     const res = await fetch(CHAT_PROXY_URL, {
@@ -491,26 +470,52 @@ function userFacingError(err) {
 //  CORE — handle a chat-style request (mention or /ask)
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function handleChatRequest({ userId, guildId, prompt, attachments, replyTarget, channel, skipRateLimit }) {
+/** Reply with a quota-block message plus, for free users, an upgrade button. */
+function sendBlocked(replyTarget, decision, userId) {
+  const content = quota.blockedMessage(decision);
+  const components = [];
+  if (decision.tier === 'free' && STRIPE_PAYMENT_LINK) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel(`Upgrade to Pro — ${PRO_PRICE}/mo`)
+        .setStyle(ButtonStyle.Link)
+        .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })),
+    ));
+  }
+  const payload = { content, components, allowedMentions: { parse: [] } };
+  return replyTarget.editReply ? replyTarget.editReply(payload) : replyTarget.reply(payload);
+}
+
+/**
+ * @param {object} [decision]  A quota decision already obtained by the caller
+ *   (e.g. /price, which checks before trying CheapShark). Passing it through
+ *   prevents billing the same turn twice.
+ */
+async function handleChatRequest({ userId, guildId, prompt, attachments, replyTarget, channel, decision }) {
   const cleaned = prompt.trim();
   if (!cleaned && (!attachments || attachments.length === 0)) {
     const msg = 'Please give me a question, or attach an image to analyse.';
     return replyTarget.editReply ? replyTarget.editReply(msg) : replyTarget.reply(msg);
   }
 
-  // Rate limit (tier-aware) — skip when caller already counted the request (e.g. /price fallback)
-  const { tier, limit } = await effectiveLimit(userId, guildId);
-  const rl = skipRateLimit ? { allowed: true, limit } : checkRateLimit(userId, limit);
-  if (!rl.allowed) {
-    const tierLabel = tier === 'premium-server' ? '🌟 Premium Server'
-      : tier === 'pro' || tier === 'lifetime' ? '⭐ Pro'
-      : '🆓 Free';
-    const upsell = tier === 'free'
-      ? `\n\nUpgrade with \`/premium\` to lift the cap to ${RATE_LIMIT_PRO}/min.`
-      : '';
-    const out = `⏳ **Rate limit reached** (${tierLabel}: ${rl.limit}/min). Try again in **${rl.waitSec}s**.${upsell}`;
-    return replyTarget.editReply ? replyTarget.editReply(out) : replyTarget.reply(out);
+  // ── Quota ───────────────────────────────────────────────────────────────
+  // One Postgres round trip resolves tier, spends any bonus credits, checks
+  // every window and records the admission. It also hands back the per-tier
+  // history and context lengths used below, so no second lookup is needed.
+  if (!decision) {
+    if (!quota.localSpamGate(userId)) {
+      // A slash command has already been deferred by this point. Returning
+      // silently would leave it showing "thinking…" forever, so drop the work
+      // but always close the interaction; a duplicate @-mention can stay quiet.
+      if (replyTarget.editReply) return replyTarget.editReply('⏳ One at a time — that one is still running.');
+      return;
+    }
+    const kind = quota.kindFor({ attachments });
+    decision = await quota.checkQuota(supabase, { userId, guildId, kind });
   }
+  if (!decision.allowed) return sendBlocked(replyTarget, decision, userId);
+
+  const tierLimits = decision.limits || {};
 
   // Typing indicator
   let typingTimer = null;
@@ -520,8 +525,15 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
   }
 
   try {
-    const history = await getHistory(userId);
-    const data = await callChatProxy({ prompt: cleaned, history, attachments, discordUserId: userId });
+    const history = await getHistory(userId, tierLimits.history_len || 10);
+    const data = await callChatProxy({
+      prompt: cleaned,
+      history: history.slice(-(tierLimits.context_turns || 6)),
+      attachments,
+      discordUserId: userId,
+      tier: decision.tier,
+      softCapped: !!tierLimits.soft_capped,
+    });
 
     // Persist history + bump stats (fire-and-forget)
     pushHistory(userId, guildId, 'user', cleaned).catch(() => {});
@@ -536,6 +548,11 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
       ? `*— ${persona ? persona + ' · ' : ''}📡 ${uniqueSources.length} live source${uniqueSources.length > 1 ? 's' : ''}: ${uniqueSources.join(', ')}*`
       : (persona ? `*— ${persona}*` : '');
 
+    // One quiet line once they are ~80% through the day, at most hourly.
+    // Nothing at all for a paying user, and nothing while running degraded.
+    const nudge = quota.quotaFooter(decision, { userId });
+    const footer = [sourceLine, nudge].filter(Boolean).join('\n');
+
     // Apply affiliate decoration when CheapShark / store URLs appear
     const decorated = decorateWithAffiliate(data.text);
 
@@ -549,7 +566,7 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
         name: `gameguide-${Date.now()}-${i}.${(img.mimeType.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '')}`,
       }));
 
-    await sendLongResponse(replyTarget, decorated, sourceLine, files);
+    await sendLongResponse(replyTarget, decorated, footer, files);
   } catch (err) {
     console.error(`[chat-proxy] user=${userId}:`, err.message);
     const friendly = userFacingError(err);
@@ -574,12 +591,23 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-client.once('clientReady', () => {
+client.once('clientReady', async () => {
   console.log(`🎮 GameGuide-AI Bot online as ${client.user.tag}`);
   console.log(`   Proxy: ${CHAT_PROXY_URL}`);
-  console.log(`   Premium users (env): ${PREMIUM_USER_IDS.length}`);
-  console.log(`   Premium guilds (env): ${PREMIUM_GUILD_IDS.length}`);
   console.log(`   Service role key: ${supabaseHasServiceRole ? 'configured' : 'NOT configured (history disabled)'}`);
+  console.log(`   Billing: ${stripeConfigured ? 'Stripe enabled' : 'disabled (no STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET)'}`);
+
+  // Mirror the env overrides into the database. Tier is resolved inside the
+  // quota function, which cannot read process.env — without this sync an
+  // env-listed user would be shown "Pro" and still be enforced as free.
+  if (PREMIUM_USER_IDS.length || PREMIUM_GUILD_IDS.length) {
+    const synced = await syncEnvOverrides(supabase, {
+      userIds: PREMIUM_USER_IDS,
+      guildIds: PREMIUM_GUILD_IDS,
+    });
+    console.log(`   Env overrides synced: ${synced.users} user(s), ${synced.guilds} guild(s)`);
+  }
+
   client.user.setActivity('🎮 /help · @ me with anything', { type: 0 });
 });
 
@@ -658,17 +686,9 @@ client.on('interactionCreate', async (interaction) => {
         const game = interaction.options.getString('game', true);
         await interaction.deferReply();
 
-        // Rate-limit /price the same way chat is rate-limited.
-        const { tier, limit } = await effectiveLimit(userId, guildId);
-        const rl = checkRateLimit(userId, limit);
-        if (!rl.allowed) {
-          const tierLabel = tier === 'premium-server' ? '🌟 Premium Server'
-            : tier === 'pro' || tier === 'lifetime' ? '⭐ Pro'
-            : '🆓 Free';
-          return interaction.editReply(
-            `⏳ **Rate limit reached** (${tierLabel}: ${rl.limit}/min). Try again in **${rl.waitSec}s**.`
-          );
-        }
+        // Bill /price like any other turn, once, up front.
+        const priceDecision = await quota.checkQuota(supabase, { userId, guildId, kind: 'chat' });
+        if (!priceDecision.allowed) return sendBlocked(interaction, priceDecision, userId);
 
         // Live CheapShark — mirrors the web app's /price path (no LLM hop).
         const data = await fetchPriceDirect(game);
@@ -678,13 +698,13 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         // Fallback: nothing on CheapShark — let the LLM try with web search.
-        // (Still rate-limited above, so no double-counting.)
+        // The decision is handed through so this does not bill a second time.
         return handleChatRequest({
           userId, guildId,
           prompt: `What's the current price for "${game}" on PC? Use live data and include store URLs. If you can't find anything, say so directly.`,
           attachments: [],
           replyTarget: interaction, channel: interaction.channel,
-          skipRateLimit: true,
+          decision: priceDecision,
         });
       }
 
@@ -780,11 +800,11 @@ They did not fix it before launch.
       }
 
       case 'history': {
-        const history = await getHistory(userId);
+        const history = await getHistory(userId, MAX_HISTORY_DISPLAY);
         if (history.length === 0) {
           return interaction.reply({ content: 'You have no chat history yet. Try `/ask` or @-mention me.', ephemeral: true });
         }
-        const lines = history.slice(-MAX_HISTORY_PER_USER).map(m => {
+        const lines = history.slice(-MAX_HISTORY_DISPLAY).map(m => {
           const tag = m.sender === 'user' ? '🧑' : '🤖';
           return `${tag} ${m.text.slice(0, 250)}${m.text.length > 250 ? '…' : ''}`;
         });
@@ -815,10 +835,9 @@ They did not fix it before launch.
           userRow = data;
         } catch { /* fine */ }
 
-        const tier = await resolveUserTier(userId);
-        const guildTier = await resolveGuildTier(guildId);
-        const effLimit = guildTier === 'premium-server' ? RATE_LIMIT_PREMIUM_SERVER
-          : (tier === 'pro' || tier === 'lifetime') ? RATE_LIMIT_PRO : RATE_LIMIT_FREE;
+        // dryRun: reading your own stats must not spend a message.
+        const d = await quota.checkQuota(supabase, { userId, guildId, kind: 'chat', dryRun: true });
+        const m = d.messages || {};
 
         const embed = new EmbedBuilder()
           .setColor(0x00FFD1)
@@ -829,33 +848,122 @@ They did not fix it before launch.
                 ? `**${(userRow.total_calls || 0).toLocaleString()}** calls · **${(userRow.vision_calls || 0).toLocaleString()}** vision\nLast call: <t:${Math.floor(new Date(userRow.last_call_at).getTime() / 1000)}:R>`
                 : 'No calls yet — try `/ask`!',
               inline: false },
-            { name: '🎟️ Your tier', value: `${guildTier === 'premium-server' ? '🌟 Premium Server' : (tier === 'pro' || tier === 'lifetime' ? '⭐ Pro' : '🆓 Free')} · **${effLimit}/min** rate limit`, inline: false },
+            { name: '🎟️ Your tier', value: `**${d.tier_label || 'Free'}** · ${m.remaining ?? 0}/${m.limit ?? 0} messages left today · see \`/quota\``, inline: false },
           );
         return interaction.reply({ embeds: [embed] });
       }
 
+      case 'quota': {
+        const d = await quota.checkQuota(supabase, { userId, guildId, kind: 'chat', dryRun: true });
+
+        if (d.degraded) {
+          return interaction.reply({
+            content: '⚠️ Usage tracking is temporarily unavailable, so I can\'t show exact numbers right now. The bot still works.',
+            ephemeral: true,
+          });
+        }
+
+        const isFree = d.tier === 'free';
+        const embed = new EmbedBuilder()
+          .setColor(isFree ? 0x00FFD1 : 0xFFD700)
+          .setTitle(`${d.tier_label} — today's usage`)
+          .addFields(quota.quotaFields(d));
+
+        if (d.limits?.soft_capped) {
+          embed.setFooter({ text: 'Past your daily fair-use point — answers keep coming, from the standard model pool.' });
+        }
+
+        const components = [];
+        if (isFree && STRIPE_PAYMENT_LINK) {
+          components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setLabel(`Upgrade to Pro — ${PRO_PRICE}/mo`)
+              .setStyle(ButtonStyle.Link)
+              .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })),
+          ));
+        }
+        return interaction.reply({ embeds: [embed], components, ephemeral: true });
+      }
+
       case 'premium': {
-        const tier = await resolveUserTier(userId);
-        const guildTier = await resolveGuildTier(guildId);
-        const isPremium = tier === 'pro' || tier === 'lifetime' || guildTier === 'premium-server';
+        // dryRun so opening the upgrade page never costs the user a message.
+        const [d, tiers] = await Promise.all([
+          quota.checkQuota(supabase, { userId, guildId, kind: 'chat', dryRun: true }),
+          fetchTiers(),
+        ]);
+        // Defaults matter here: if the tier table is briefly unreachable this
+        // page still has to quote correct prices and limits rather than
+        // "0 of undefined messages left". Keep in step with discord_quota_tiers.
+        const free = { msgs_day: 15, vision_day: 3, burst_min: 5, ...(tiers.free || {}) };
+        const pro = { msgs_day: 200, vision_day: 40, burst_min: 20, ...(tiers.pro || {}) };
+        const srv = { msgs_day: 60, ...(tiers.server || {}) };
+        const isPremium = d.tier !== 'free';
+
         const embed = new EmbedBuilder()
           .setColor(isPremium ? 0xFFD700 : 0x00FFD1)
-          .setTitle(isPremium ? '⭐ You\'re already on Premium' : '⭐ Upgrade to GameGuide Premium')
-          .setDescription(isPremium
-            ? `Thank you for supporting GameGuide-AI! You have access to:\n\n• **${RATE_LIMIT_PRO}/min** rate limit (free tier is ${RATE_LIMIT_FREE})\n• Priority routing\n• Persistent chat history\n• Early access to new features`
-            : `Free tier: **${RATE_LIMIT_FREE} calls/min** · Pro tier: **${RATE_LIMIT_PRO} calls/min**\n\n**What you get with Pro:**\n• 6× more queries per minute\n• Priority during peak hours\n• Persistent chat history\n• Early access to new features\n• Support a solo dev keeping the bot free for everyone`);
+          .setTitle(isPremium ? `${d.tier_label} — active` : '⭐ Upgrade to GameGuide Pro');
+
+        if (isPremium) {
+          embed.setDescription(
+            'Thank you for supporting GameGuide-AI — you\'re the reason it stays free for everyone else.\n\n' +
+            `• **${d.messages?.limit ?? pro.msgs_day} messages/day** · **${d.vision?.limit ?? pro.vision_day} screenshots**\n` +
+            '• Priority routing — never queued when the free pool is exhausted\n' +
+            '• Longer memory of your conversation\n\n' +
+            'Track it any time with `/quota`.',
+          );
+        } else {
+          embed
+            .setDescription(d.degraded
+              ? `You're on **Free**.`
+              : `You're on **${d.tier_label || 'Free'}** — ${d.messages?.remaining ?? 0} of ${d.messages?.limit || free.msgs_day} messages left today.`)
+            .addFields(
+              {
+                name: `🆓 Free`,
+                value: `**${free.msgs_day}** messages/day\n**${free.vision_day}** screenshots/day\n${free.burst_min}/min`,
+                inline: true,
+              },
+              {
+                name: `⭐ Pro — ${PRO_PRICE}/mo`,
+                value: `**${pro.msgs_day}** messages/day\n**${pro.vision_day}** screenshots/day\n${pro.burst_min}/min · priority`,
+                inline: true,
+              },
+              {
+                name: `🌟 Server — ${SERVER_PRICE}/mo`,
+                value: `**${srv.msgs_day}**/day for **every member**\nWhole-server upgrade\nBest value for communities`,
+                inline: true,
+              },
+            )
+            .setFooter({ text: 'Cancel any time. Supports a solo dev keeping the bot free for everyone.' });
+        }
 
         const buttons = [];
-        if (STRIPE_PAYMENT_LINK) buttons.push(new ButtonBuilder().setLabel('💳 Upgrade ($3/mo)').setStyle(ButtonStyle.Link).setURL(STRIPE_PAYMENT_LINK));
+        if (STRIPE_PAYMENT_LINK && !isPremium) {
+          // Carries the Discord id into checkout, so the webhook can grant Pro
+          // without ever asking the buyer what their snowflake is.
+          buttons.push(new ButtonBuilder()
+            .setLabel(`⭐ Go Pro — ${PRO_PRICE}/mo`)
+            .setStyle(ButtonStyle.Link)
+            .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })));
+        }
+        if (STRIPE_SERVER_PAYMENT_LINK && guildId && d.tier !== 'server') {
+          buttons.push(new ButtonBuilder()
+            .setLabel(`🌟 Upgrade this server — ${SERVER_PRICE}/mo`)
+            .setStyle(ButtonStyle.Link)
+            .setURL(buildCheckoutUrl(STRIPE_SERVER_PAYMENT_LINK, { userId, guildId })));
+        }
         if (PATREON_URL) buttons.push(new ButtonBuilder().setLabel('🎨 Patreon').setStyle(ButtonStyle.Link).setURL(PATREON_URL));
         if (KOFI_URL) buttons.push(new ButtonBuilder().setLabel('☕ Ko-fi').setStyle(ButtonStyle.Link).setURL(KOFI_URL));
-        if (TOPGG_VOTE_URL) buttons.push(new ButtonBuilder().setLabel(`🗳️ Vote for ${VOTE_REWARD_HOURS}h free Pro`).setStyle(ButtonStyle.Link).setURL(TOPGG_VOTE_URL));
+        if (TOPGG_VOTE_URL) buttons.push(new ButtonBuilder().setLabel(`🗳️ Vote for +${VOTE_BONUS_CREDITS} messages`).setStyle(ButtonStyle.Link).setURL(TOPGG_VOTE_URL));
 
-        const components = buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [];
+        // Discord allows at most 5 buttons per action row.
+        const components = buttons.length ? [new ActionRowBuilder().addComponents(buttons.slice(0, 5))] : [];
         return interaction.reply({ embeds: [embed], components });
       }
 
       case 'help': {
+        const tiers = await fetchTiers();
+        const free = tiers.free || {};
+        const pro = tiers.pro || {};
         const embed = new EmbedBuilder()
           .setColor(0x00FFD1)
           .setTitle('🎮 GameGuide-AI Command Reference')
@@ -868,14 +976,15 @@ They did not fix it before launch.
                 '`/lore [game]` — deep-cut lore drop\n' +
                 '`/redpill` — hidden gaming-industry secret', inline: false },
             { name: '🛠️ Utility', value:
+                '`/quota` — how much you have left today\n' +
                 '`/history` — show your recent chat with me\n' +
                 '`/clear` — wipe your chat history\n' +
                 '`/stats` — global + your usage stats\n' +
-                '`/premium` — upgrade for higher rate limits', inline: false },
+                '`/premium` — compare plans and upgrade', inline: false },
             { name: '🎉 Fun', value:
                 '`/noclip` · `/konami` · `/loading` — vibe commands', inline: false },
           )
-          .setFooter({ text: `Free: ${RATE_LIMIT_FREE}/min · Pro: ${RATE_LIMIT_PRO}/min · Premium Server: ${RATE_LIMIT_PREMIUM_SERVER}/min` });
+          .setFooter({ text: `Free: ${free.msgs_day ?? 15} messages/day · Pro: ${pro.msgs_day ?? 200}/day — see /premium` });
         return interaction.reply({ embeds: [embed] });
       }
     }
@@ -898,7 +1007,14 @@ They did not fix it before launch.
 
 const express = require('express');
 const app = express();
-app.use(express.json());
+
+// `verify` stashes the exact bytes before parsing. Stripe signs the raw body,
+// so a re-serialised object never validates — and doing it here, rather than
+// with a route-specific express.raw(), means signature verification cannot be
+// broken later by someone registering a route above the Stripe one.
+app.use(express.json({
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 
 // Process lifecycle metrics — surfaced on /health for uptime monitors.
 const PROCESS_STARTED_AT = Date.now();
@@ -932,23 +1048,41 @@ if (TOPGG_WEBHOOK_AUTH) {
     const { user, isWeekend, bot } = req.body || {};
     if (!user) return res.status(400).json({ error: 'missing user' });
 
-    const expiresAt = new Date(Date.now() + (isWeekend ? VOTE_REWARD_HOURS * 2 : VOTE_REWARD_HOURS) * 3600_000).toISOString();
+    // Credits, NOT a tier — and capped.
+    //
+    // This used to upsert `tier:'pro'` with a 12-hour expiry, which had two
+    // consequences. Top.gg permits a vote every 12 hours, so voting twice a day
+    // bought permanent free Pro and nobody ever needed to pay. And because the
+    // upsert was keyed on user_id, a LIFETIME customer who voted had their row
+    // overwritten and was silently downgraded to a 12-hour expiry.
     try {
       await supabase.from('discord_votes').insert({
         user_id: user, bot_id: bot || null, source: 'topgg', is_weekend: !!isWeekend,
       });
-      await supabase.from('discord_premium').upsert({
-        user_id: user, tier: 'pro', source: 'topgg-vote', expires_at: expiresAt,
+      const result = await grantBonusCredits(supabase, user, {
+        credits: isWeekend ? VOTE_BONUS_CREDITS * 2 : VOTE_BONUS_CREDITS,
+        hours: VOTE_BONUS_HOURS,
+        cap: VOTE_BONUS_CAP,
       });
-      premiumCacheUser.delete(user);
-      console.log(`[topgg] vote rewarded → user=${user} expires=${expiresAt}`);
-      return res.json({ ok: true });
+      console.log(`[topgg] vote → user=${user} granted=${result.granted} balance=${result.balance}`);
+
+      client.users.fetch(String(user))
+        .then(u => u.send(
+          result.granted > 0
+            ? `🗳️ **Thanks for voting!** +${result.granted} bonus messages, good for ${VOTE_BONUS_HOURS}h. You now have **${result.balance}** banked — they're spent before your daily allowance.`
+            : `🗳️ **Thanks for voting!** You're already at the ${VOTE_BONUS_CAP}-credit cap — spend a few and vote again later.`,
+        ))
+        .catch(() => { /* DMs closed */ });
+
+      return res.json({ ok: true, granted: result.granted });
     } catch (e) {
       console.error('[topgg] vote handling failed:', e);
       return res.status(500).json({ error: 'internal' });
     }
   });
 }
+
+mountStripeWebhook(app, { supabase, client });
 
 const httpServer = app.listen(HTTP_PORT, '0.0.0.0', () => {
   console.log(`🌐 HTTP health server listening on :${HTTP_PORT} (/, /health, /ping${TOPGG_WEBHOOK_AUTH ? ', /topgg-webhook' : ''})`);
@@ -1046,6 +1180,11 @@ let lastReadySeenAt = Date.now();
 
 setInterval(async () => {
   if (shuttingDown) return;
+
+  // Bound the quota module's in-memory Maps. They only ever pruned entries for
+  // users who came back, so a bot in many guilds leaked one entry per user seen.
+  quota.sweepAll();
+
   if (client.isReady()) {
     lastReadySeenAt = Date.now();
     return;
