@@ -360,6 +360,36 @@ const EMPTY_STATE: MeshState = { usage: {}, cooldowns: {} };
 let stateCache: { ts: number; state: MeshState } | null = null;
 const STATE_TTL_MS = 20_000;
 
+/**
+ * Does the database actually have the mesh-v3 schema, or are we only
+ * *configured* to talk to one?
+ *
+ * `dbConfigured` is a env-var presence check — it says the keys exist, nothing
+ * more. That is a genuinely misleading thing for /health to render as
+ * "connected": this project ran in production with every gg_* table and RPC
+ * absent (the migration had never been applied), rate limiting silently
+ * degraded to the per-isolate memory fallback, and /health reported
+ * "db: connected" the entire time. Monitoring cannot catch what it does not
+ * look at, so look at it: one cheap dry-run RPC that fails exactly when the
+ * schema is missing.
+ */
+export async function dbSchemaReady(): Promise<boolean> {
+  if (!dbConfigured) return false;
+  // Charged to a dedicated 'health:probe' bucket with limits high enough never
+  // to trip, so this can never consume or block a real caller's allowance. It
+  // does append one ledger row per probe (the SQL clamps p_weight to >= 1), and
+  // gg_prune_usage_events sweeps them with everything else.
+  const row = await rpc<any>('gg_check_rate_limit', {
+    p_bucket: 'health:probe',
+    p_kind: 'chat',
+    p_limit_min: 1_000_000,
+    p_limit_hour: 1_000_000,
+    p_limit_day: 1_000_000,
+    p_weight: 1,
+  }, 1500);
+  return !!row && typeof row.allowed === 'boolean';
+}
+
 export async function getMeshState(): Promise<MeshState> {
   if (stateCache && Date.now() - stateCache.ts < STATE_TTL_MS) return stateCache.state;
   const row = await rpc<any>('gg_mesh_state', {}, 1500);

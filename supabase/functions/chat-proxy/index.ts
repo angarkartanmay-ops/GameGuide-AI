@@ -17,7 +17,7 @@ import {
   checkRateLimit, anonBucket, userIdFromAuthHeader, botCallerFromHeaders,
   LIMITS_AUTHED, LIMITS_ANON, LIMITS_BOT, LIMITS_BOT_GLOBAL,
   getMeshState, reportProvider, recordUsage, noteLocalFailure,
-  loadProfile, saveProfilePatch, recordTrace, dbConfigured,
+  loadProfile, saveProfilePatch, recordTrace, dbConfigured, dbSchemaReady,
   PlayerProfile, MeshState as MeshStateT,
 } from './meshDb.ts';
 
@@ -2161,9 +2161,10 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   if (req.method === 'GET' && url.pathname.endsWith('/health')) {
     const registry = buildRegistry();
-    const [liveState, catalog] = await Promise.all([
+    const [liveState, catalog, schemaReady] = await Promise.all([
       getMeshState(),
       getDiscoveredModels(registry),
+      dbSchemaReady(),
     ]);
     // Report what will ACTUALLY route, not the deploy-time list. Discovery
     // supersedes the static registry per provider, so showing `registry` here
@@ -2172,7 +2173,13 @@ Deno.serve(async (req) => {
     const effective = catalog.models.length ? catalog.models : registry;
     const status = {
       cortex: 'v5-mesh-v3',
-      db: dbConfigured ? 'connected' : 'NOT CONFIGURED (rate limiting degraded to in-memory)',
+      // Three distinct states, because "configured" and "usable" are not the
+      // same thing and conflating them hid a fully-missing schema in production.
+      db: !dbConfigured
+        ? 'NOT CONFIGURED (rate limiting degraded to in-memory)'
+        : schemaReady
+          ? 'connected'
+          : 'SCHEMA MISSING — run supabase db push (rate limiting degraded to in-memory)',
       providers: Object.values(PROVIDERS).map(p => ({
         name: p.name,
         configured: !!Deno.env.get(p.keyEnv),

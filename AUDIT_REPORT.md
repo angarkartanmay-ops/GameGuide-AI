@@ -507,3 +507,65 @@ message credits. Not worth a dependency or hand-rolled crypto.
 
 - **234 assertions passing** (was 215) · web build clean · bot syntax clean
 - Both lockfiles in sync
+
+---
+
+## 🔴 The web app's database migration had never been applied (2026-09-18)
+
+Found while verifying the Discord bot's `BOT_SERVICE_TOKEN`. Tracing where the
+rate-limit bucket gets recorded led to `gg_usage_events` — which returned **404**.
+So did every other mesh-v3 table, and all three RPCs:
+
+| Object | Status before |
+|---|---|
+| `gg_usage_events`, `gg_player_profile`, `gg_provider_health`, `gg_provider_usage`, `gg_request_trace` | ❌ 404 — absent |
+| `gg_check_rate_limit`, `gg_upsert_profile`, `gg_prune_usage_events` | ❌ `PGRST202` — absent (confirmed with the exact correct signature, not a param mismatch) |
+
+`supabase migration list` gave independent confirmation: `local: 20260813`,
+**`remote: ""`**. The Discord bot's `schema-v3.sql` had been applied; the web
+app's own `20260813_mesh_v3.sql` never had.
+
+**What that meant in production.** `checkRateLimit()` fell through to
+`memoryRateLimit()` on every single request. That fallback's own comment is
+explicit: *"Not shared across isolates, so it is strictly weaker than the DB
+limiter."* Supabase recycles isolates constantly and scales them horizontally,
+so hourly and daily caps on the website were **effectively unenforced** — only a
+per-isolate minute burst held. Player profiles and request traces silently wrote
+nowhere.
+
+**Why nobody noticed:** `/health` reported `db: connected` throughout. That field
+was computed from `dbConfigured`, which is
+`!!(SUPABASE_URL && SERVICE_KEY)` — an **env-var presence check that never
+touches the database**. The one endpoint whose job is to surface this was
+structurally incapable of seeing it.
+
+**Fixed:**
+
+1. Applied the migration (`supabase db push`). Verified all 5 tables now 200 and
+   `gg_check_rate_limit` returns a real decision with counters incrementing.
+2. Added `dbSchemaReady()` in `meshDb.ts` — one cheap RPC that fails exactly when
+   the schema is missing — and `/health` now distinguishes three states rather
+   than two: `NOT CONFIGURED`, `SCHEMA MISSING — run supabase db push`, and
+   `connected`. Monitoring cannot catch what it does not look at.
+
+The probe bills a dedicated `health:probe` bucket with limits high enough never
+to trip, so it can never consume or block a real caller. It does append one
+ledger row per probe — the SQL clamps `p_weight` to `>= 1`, so a zero-weight
+probe is not possible — and `gg_prune_usage_events` sweeps those with everything
+else. (I initially wrote `p_weight: 0` with a comment claiming it consumed
+nothing; verified against the SQL, that was wrong, and both the value and the
+comment were corrected.)
+
+### `BOT_SERVICE_TOKEN` — verified working end to end
+
+Header presence was not enough to prove the two sides *match*, so I checked the
+recorded bucket. A live bot request now writes:
+
+```
+d:111111111111111111   <-- per-Discord-user bucket
+d:_global              <-- whole-bot breaker (intentional; stops a leaked
+                           token minting fake snowflakes to escape the cap)
+```
+
+A `d:` prefix only appears when the presented token passes the constant-time
+comparison. The original P0 is now closed on **both** sides.
