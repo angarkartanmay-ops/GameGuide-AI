@@ -1464,7 +1464,19 @@ async function fetchWebSearchForGame(game: string, prompt: string, timeoutMs = 3
     const { multiWebSearch } = await import('./webSearch.ts');
     const currentYear = new Date().getFullYear();
     const query = `${game} latest news update ${currentYear}`;
-    const hits = await multiWebSearch(query, 6);
+    // `timeoutMs` was accepted and then never used: multiWebSearch fans out to
+    // five search backends under Promise.allSettled with no deadline of its
+    // own, so this call ran unbounded and measured 8.6-9.5s in production —
+    // single-handedly blowing omniScrape's whole budget and starving every
+    // other source. Enforce the deadline here, where the parameter is declared.
+    const hits = await Promise.race([
+      multiWebSearch(query, 6),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+    if (!hits) {
+      console.warn(`[OMNI] web-search timed out after ${timeoutMs}ms for "${game}"`);
+      return null;
+    }
     if (hits.length === 0) return null;
 
     const formatted = hits.slice(0, 5).map((h, i) =>
@@ -1506,35 +1518,53 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
   const named = !!game;
   console.log(`[OMNI] Starting omni-scrape subject="${subject}" (${named ? 'detected' : 'from prompt'}) budget=${totalBudgetMs}ms`);
 
-  const overallTimeout = new Promise<ScrapeBlock[]>(resolve =>
-    setTimeout(() => {
-      console.warn(`[OMNI] Overall budget ${totalBudgetMs}ms exceeded — returning partial results`);
-      resolve([]);
-    }, totalBudgetMs)
-  );
+  // Each source writes here the moment it lands, so a budget overrun keeps
+  // whatever already arrived.
+  //
+  // This used to `resolve([])` on timeout while logging "returning partial
+  // results" — it discarded everything, finished sources included. Combined
+  // with fetchWebSearchForGame's own 3000ms timeout equalling the entire
+  // default budget, the race was unwinnable: measured against production, the
+  // full fan-out takes 8.6-9.5s, so the 3000ms pipeline budget expired every
+  // single time and EVERY answer silently fell back to hedged training data
+  // ("live sources didn't pull through"). PULSE was dead in production while
+  // testing green in isolation, because /omni-test passes 5000ms.
+  const landed: ScrapeBlock[] = [];
+  const collect = (p: Promise<ScrapeBlock | null>) =>
+    p.then(b => { if (b) landed.push(b); }).catch(() => {});
 
   // Sources keyed on an exact game name (Supercell, Steam, YouTube channel
   // lookups) only make sense for a confirmed title; web search and Wikipedia
   // work fine on a raw phrase, so they still run when detection failed.
-  const allFetches = Promise.allSettled(
+  //
+  // Web search is given the smaller of its own default and what is actually
+  // left of the budget, so one slow source can no longer eat the whole window.
+  const webSearchMs = Math.max(1200, Math.min(3000, totalBudgetMs - 600));
+  const allFetches = Promise.all(
     named
       ? [
-          fetchSupercellAPI(subject),
-          fetchWikipedia(subject),
-          fetchSteamNews(subject),
-          fetchInvidious(subject),
-          fetchGamingRSS(subject),
-          fetchWebSearchForGame(subject, _prompt),
+          collect(fetchSupercellAPI(subject)),
+          collect(fetchWikipedia(subject)),
+          collect(fetchSteamNews(subject)),
+          collect(fetchInvidious(subject)),
+          collect(fetchGamingRSS(subject)),
+          collect(fetchWebSearchForGame(subject, _prompt, webSearchMs)),
         ]
       : [
-          fetchWikipedia(subject),
-          fetchWebSearchForGame(subject, _prompt),
+          collect(fetchWikipedia(subject)),
+          collect(fetchWebSearchForGame(subject, _prompt, webSearchMs)),
         ]
   );
-  const results = await Promise.race([
-    allFetches.then(r => r.filter(x => x.status === 'fulfilled' && x.value).map((x: any) => x.value as ScrapeBlock)),
-    overallTimeout,
-  ]);
+
+  const overallTimeout = new Promise<void>(resolve =>
+    setTimeout(() => {
+      console.warn(`[OMNI] Overall budget ${totalBudgetMs}ms exceeded — keeping ${landed.length} block(s) that landed in time`);
+      resolve();
+    }, totalBudgetMs)
+  );
+
+  await Promise.race([allFetches, overallTimeout]);
+  const results = landed.slice();
 
   console.log(`[OMNI] Returned ${results.length} blocks: ${results.map(b => `${b.source}(${b.score})`).join(', ')}`);
   return results;
@@ -2541,8 +2571,13 @@ async function runChatPipeline(
       console.log(`[PULSE] fired (${pulse.diagnostics.mode}) — sources=${pulse.sourcesUsed.join(',')} blocks=${pulse.diagnostics.blocksUsed}/${pulse.diagnostics.blocksFound}`);
     }
 
-    // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 1.6s budget) ─────
-    // Tightened from 2.5s → 1.6s for speed. Most sources resolve in <1s.
+    // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 4.5s budget) ─────
+    // The comment here long claimed "1.6s" while the call passed 3000ms, and
+    // web search ignored its timeout entirely and ran ~9s — so the budget
+    // always expired and every block was thrown away. With web search now
+    // actually bounded, the fast sources (wiki/steam/rss/invidious ~1.2s each,
+    // concurrent) comfortably land inside 4.5s, which buys working live
+    // retrieval for the cost of a couple of seconds on a scraped turn.
     // VISION queries ALWAYS get omni context — even "simple" classification —
     // so screenshots can be linked to live news/patches/Heroes-update content
     // (e.g. "this is the new Mini P.E.K.K.A Hero from the Oct 2024 update").
@@ -2559,7 +2594,7 @@ async function runChatPipeline(
     const emotionalTurn = EMOTIONAL_RX.test(prompt);
     const shouldScrape = (!!resolvedGame || prompt.trim().length >= 12) && !emotionalTurn;
     if (shouldScrape) stage('scanning-sources', resolvedGame || undefined);
-    const omniBlocks = shouldScrape ? await omniScrape(resolvedGame, prompt, 3000) : [];
+    const omniBlocks = shouldScrape ? await omniScrape(resolvedGame, prompt, 4500) : [];
     const rankedOmni = rankAndCapContext(omniBlocks, 6000);
     const omniContextStrings = omniBlocksToContextStrings(rankedOmni);
 
