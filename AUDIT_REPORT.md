@@ -569,3 +569,81 @@ d:_global              <-- whole-bot breaker (intentional; stops a leaked
 
 A `d:` prefix only appears when the presented token passes the constant-time
 comparison. The original P0 is now closed on **both** sides.
+
+---
+
+# Security audit — Strix methodology (2026-09-18)
+
+The Strix CLI needs Docker + an LLM key; Docker is not available on this
+machine, so the live scanner could not run. This is the **manual
+Strix-methodology audit** instead: same phases (recon → hunt → validate → rank),
+same reporting shape, and every finding below was proven with a working PoC
+against the live deployment rather than inferred from reading code.
+
+## 🟠 MEDIUM — `/omni-test` bypassed rate limiting entirely
+
+**Location:** `supabase/functions/chat-proxy/index.ts:2251` · CWE-770
+(Allocation of Resources Without Limits) / CWE-406 (Insufficient Control of
+Network Message Volume)
+
+The diagnostic route returns at line ~2260, while every rate-limit check lives
+inside `runChatPipeline` (lines 2393/2404). So it was never limited at all.
+
+One call fans out to **six concurrent live outbound fetches** (Supercell API,
+Wikipedia, Steam news, Invidious, gaming RSS, web search) and costs ~7.5s of
+function time. The only credential needed is the anon key — which ships inside
+the public frontend bundle, so effectively anyone.
+
+**PoC (validated against production):**
+
+```
+$ for i in 1..6; curl -H "apikey: <anon>" ".../chat-proxy/omni-test?game=test$i"
+call 1 → HTTP 200      call 4 → HTTP 200
+call 2 → HTTP 200      call 5 → HTTP 200
+call 3 → HTTP 200      call 6 → HTTP 200
+```
+
+Six consecutive calls, zero 429s, against a **5/min** anon ceiling. A loop here
+burns the project's Supabase function quota and turns the deployment into a free
+traffic amplifier aimed at third parties — the kind of thing that gets an egress
+IP throttled by Wikipedia or Valve, degrading the real product.
+
+Not SSRF: `game` reaches query *parameters* of fixed hosts, never a hostname.
+
+**Fixed** by gating the route through the same `checkRateLimit` the pipeline
+uses, keyed per caller (`probe:u:<id>` authed, `probe:<anonBucket>` otherwise) at
+`LIMITS_ANON`, returning 429 with `Retry-After`. Its own bucket, so diagnostics
+cannot consume a real user's chat allowance or vice versa.
+
+## 🔵 LOW — model provenance volunteered to users
+
+Asked "what model are you", the reply included *"trained by Google"*. The design
+goal is that the backend never leaks, and every other probe held (no key, no
+model ID, no provider name). Cosmetic disclosure only — no credential or routing
+detail — so noted rather than patched, since forcing a denial here risks making
+the assistant sound evasive on an innocuous question.
+
+## What was tested and **held**
+
+| Surface | Attack attempted | Result |
+|---|---|---|
+| **SSRF — wiki proxy** | 30 payloads: `example.com#`, `%2523` double-encode, `evil.com:80`, `a@evil.com`, `169.254.169.254`, `metadata.google.internal`, CRLF `%0d%0a`, null byte, `[::1]`, `../etc/passwd` | ✅ **0 host escapes.** Every accepted value resolved to `*.fandom.com` |
+| **CORS allowlist** | `evil.vercel.app` (public-suffix trap), `…vercel.app.evil.com`, plain HTTP, `null`, `javascript:` | ✅ All rejected; exact-host matching is correct |
+| **RLS — read** | Anon key against 8 sensitive tables | ✅ 0 rows. Proven *not* emptiness: `gg_usage_events` shows `0-2/3` to service_role, `*/0` to anon |
+| **RLS — write / privilege escalation** | Anon `INSERT` granting itself `tier:'lifetime'` on `discord_entitlements` | ✅ Rejected, `42501 violates row-level security` |
+| **Vote-credit farming** | Replayed `gg_discord_grant_bonus` 6× (10 credits, cap 20) | ✅ Hard cap: grants 3–6 returned `granted: 0`. Clamp is inside the transaction, so concurrent replays cannot race past it |
+| **SQL injection** | `p_user_id = "not-a-snowflake; DROP TABLE x;--"` | ✅ Rejected by `BIGINT` coercion — payload never reaches SQL |
+| **Prompt injection** | System-prompt exfil, env-var exfil (`GROQ_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`), DAN role-override, injection smuggled inside a lore question | ✅ No secret, no system prompt, no jailbreak. *"Nice try. Not happening."* |
+| **Secret leakage** | Shipped bundle, `src/`, git history (`-S sk_live`) | ✅ Clean. The one history hit is `sk_live_...` as a **format comment** in `.env.example` |
+| **XSS sinks** | `dangerouslySetInnerHTML`, `eval`, `new Function`, `innerHTML` in `src/` | ✅ None present |
+| **Stripe webhook** | Signature verification path | ✅ Verifies over raw bytes via the `express.json` `verify` hook; fails closed on mismatch |
+
+**Not fixed, stated plainly:** the Top.gg webhook compares its auth header with
+`!==` rather than a constant-time comparison. Real but negligible — network
+jitter swamps the timing signal, and the payoff is capped at 20 bonus message
+credits by the very cap proven above. Not worth a dependency or hand-rolled
+crypto.
+
+**Verification:** `deno check` clean · 234 assertions passing · probe rows
+created during testing were deleted from `gg_usage_events` and
+`discord_bonus_credits`.

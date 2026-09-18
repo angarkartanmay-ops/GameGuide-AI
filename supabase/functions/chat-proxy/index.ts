@@ -2249,7 +2249,29 @@ Deno.serve(async (req) => {
   }
 
   // ── Omniscience probe: GET /omni-test?game=<name> for diagnostics ─────
+  //  Rate limited, because this route returns BEFORE runChatPipeline and so
+  //  never reached the limiter that guards every other request. One call fans
+  //  out to six live outbound fetches (Supercell, Wikipedia, Steam, Invidious,
+  //  RSS, web search) and burns ~7s of function time, and the anon key that
+  //  reaches it ships inside the public frontend bundle. Verified pre-fix: six
+  //  consecutive calls all returned 200 against a 5/min anon ceiling — a free
+  //  traffic amplifier pointed at third parties, billed to this project.
+  //  Charged to its own bucket so diagnostics cannot eat a real user's chat
+  //  allowance, and vice versa.
   if (req.method === 'GET' && url.pathname.endsWith('/omni-test')) {
+    const probeAuthed = await userIdFromAuthHeader(req);
+    const probeBucket = probeAuthed
+      ? `probe:u:${probeAuthed}`
+      : `probe:${await anonBucket(req)}`;
+    const probeRate = await checkRateLimit(probeBucket, 'chat', LIMITS_ANON);
+    if (!probeRate.allowed) {
+      return jsonResponse(
+        { error: 'rate_limited', scope: probeRate.scope, retryAfter: probeRate.retryAfter },
+        429,
+        { 'Retry-After': String(probeRate.retryAfter || 60) },
+      );
+    }
+
     const game = url.searchParams.get('game') || 'clash royale';
     const blocks = await omniScrape(game, '', 5000);
     return new Response(JSON.stringify({
