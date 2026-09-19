@@ -47,7 +47,14 @@ export default function useAuth() {
     };
   }, []);
 
+  // Surfaced to the UI so a failed sign-in says something. This was swallowed
+  // into console.error, so when the Google OAuth client was deleted the button
+  // simply did nothing and there was no way to tell a broken credential from a
+  // slow network.
+  const [authError, setAuthError] = useState(null);
+
   const signInWithGoogle = async () => {
+    setAuthError(null);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -58,6 +65,11 @@ export default function useAuth() {
       if (error) throw error;
     } catch (error) {
       console.error('Error signing in:', error.message);
+      setAuthError(
+        /provider is not enabled/i.test(error.message)
+          ? 'Google sign-in is not configured right now.'
+          : 'Sign-in failed. Please try again in a moment.'
+      );
     }
   };
 
@@ -70,5 +82,5 @@ export default function useAuth() {
     }
   };
 
-  return { user, loading, signInWithGoogle, signOut };
+  return { user, loading, signInWithGoogle, signOut, authError };
 }

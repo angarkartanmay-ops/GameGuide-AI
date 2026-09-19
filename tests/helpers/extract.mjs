@@ -49,7 +49,7 @@ export function generateModules() {
     // web-search path for every "latest / newest / release date" question.
     slice(src, 'const TEMPORAL_HINT_RX', 'const INTENT_PATTERNS') +
     slice(src, 'const KNOWN_GAMES', 'function scoreComplexity') +
-    '\nexport { detectGame, detectGames, extendWithInstallment, guessUnknownTitle, promptSubject, TEMPORAL_HINT_RX };\n';
+    '\nexport { detectGame, detectGames, gamesFromHistory, extendWithInstallment, guessUnknownTitle, promptSubject, TEMPORAL_HINT_RX };\n';
 
   const behaviour =
     slice(src, 'const CORRECTION_LEAD_RX', 'function scoreComplexity') +

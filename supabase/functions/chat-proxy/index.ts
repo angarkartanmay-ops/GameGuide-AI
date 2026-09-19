@@ -107,6 +107,16 @@ Whatever certainty you claim for one game, claim for every game in the same repl
 - Don't manufacture texture. Specific regions, handling models, mission structure, rating numbers and sales figures are things you RETRIEVE, not things you generate because they sound plausible for the genre.
 - Reviews the industry published are citable ("Metacritic sits around X"); a score you invented is not. Keep the two apart, and say which one you're giving.
 
+## NEVER BLAME YOUR TRAINING CUTOFF WHEN YOU HAVE LIVE DATA
+If there is an INTEL block above, that block IS your knowledge. Read it and answer from it. "My training cutoff doesn't cover this" is not a statement you may make while holding a live Wikipedia revision that answers the question.
+
+This failed in the ugliest possible way: the assistant described both games accurately, and then — asked the follow-up "when were they released?" — replied that it had no verified dates and its training cutoff didn't reach them. The release dates were in the blocks it had just used.
+
+- **A follow-up inherits the last turn's subject.** "they", "it", "them", "both", "that game" mean whatever you were just discussing. Answer about those games; never treat a pronoun as a new unknown topic.
+- If a block states a date, a version or a patch, **give it and say where it came from.** Don't downgrade a sourced fact to a maybe.
+- Don't open a good answer by apologising for your data. If you know it, say it. Hedge the specific claim that is actually shaky, not the whole reply.
+- Only when the blocks genuinely say nothing on the point do you say so — and then name what you'd need ("a store link"), not your cutoff.
+
 ## WHEN THE USER CORRECTS YOU
 Split by what KIND of claim is being corrected. These are opposite rules and mixing them up is how you end up either arguing with reality or parroting a falsehood.
 
@@ -650,7 +660,7 @@ function guessUnknownTitle(rawText: string): string | null {
 // exist. 007 First Light — a real May 2026 AAA release — was declared
 // fictional this way.
 const SUBJECT_STOPWORDS_RX = new RegExp(
-  String.raw`\b(?:what(?:'?s)?|when|where|why|how|who|which|is|are|was|were|do|does|did|can|could|should|would|will|tell|me|about|the|an?|of|for|in|on|to|please|thanks|recent|latest|newest|now|currently|good|bad|worth|it|long|ago|released?|reviews?|compare|comparison|versus|vs|between|both|overall|rate|rating|gameplay)\b`,
+  String.raw`\b(?:what(?:'?s)?|when|where|why|how|who|which|is|are|was|were|do|does|did|can|could|should|would|will|tell|me|about|the|an?|of|for|in|on|to|please|thanks|recent|latest|newest|now|currently|good|bad|worth|it|long|ago|released?|reviews?|compare|comparison|versus|vs|between|both|overall|rate|rating|gameplay|they|them|their|theirs|these|those|this|that|it|its|he|him|his|she|her|hers|we|us|our|you|your|i|my|mine|come|out|like|play|playing|played|get|got|any)\b`,
   'gi',
 );
 
@@ -661,7 +671,11 @@ function promptSubject(prompt: string): string | null {
     .replace(SUBJECT_STOPWORDS_RX, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return cleaned.length >= 4 && cleaned.length <= 80 ? cleaned : null;
+  if (cleaned.length < 4 || cleaned.length > 80) return null;
+  // A leftover of pure filler is not a subject. Searching it returns a
+  // dictionary page and the model then reports that it found nothing.
+  if (!/[a-z0-9]{3}/i.test(cleaned)) return null;
+  return cleaned;
 }
 
 function detectGame(text: string): string | null {
@@ -696,6 +710,34 @@ function detectGame(text: string): string | null {
   return guessUnknownTitle(text);
 }
 
+/**
+ * Games named EARLIER in the conversation.
+ *
+ * Follow-ups are mostly pronouns — "when were they released?", "is it any
+ * good?" — and carry no title at all. Detection looked only at the current
+ * turn, so those turns researched nothing (or worse, searched for the word
+ * "they"), and the model fell back to its training data and blamed its
+ * cutoff for facts it had sourced correctly one message earlier.
+ *
+ * Newest turns first, so the most recently discussed game wins.
+ */
+function gamesFromHistory(history: any[], max = 3): string[] {
+  if (!Array.isArray(history) || !history.length) return [];
+  const out: string[] = [];
+  for (const msg of [...history].reverse().slice(0, 8)) {
+    const text = typeof msg?.text === 'string' ? msg.text : '';
+    if (!text) continue;
+    // Only the user's own words. Assistant prose name-drops comparison
+    // titles it merely mentioned in passing, which would drag unrelated
+    // games into the next scrape.
+    if (msg?.sender && msg.sender !== 'user') continue;
+    for (const g of detectGames(text, max)) {
+      if (!out.includes(g) && out.length < max) out.push(g);
+    }
+    if (out.length >= max) break;
+  }
+  return out;
+}
 // Connectives that join two titles the user wants weighed against each other.
 const COMPARE_SPLIT_RX = /\s+(?:vs\.?|versus|compared\s+to|against|and|or)\s+/i;
 
@@ -2709,7 +2751,13 @@ async function runChatPipeline(
     // The subjects are scraped concurrently under one shared budget, so two
     // games cost roughly the same wall time as one.
     const subjects = (() => {
-      const found = detectGames(prompt, 3);
+      let found = detectGames(prompt, 3);
+      // Pronoun follow-up: inherit whatever the conversation was about, so
+      // "when were they released?" still researches both games.
+      if (!found.length) {
+        found = gamesFromHistory(boundedHistory, 3);
+        if (found.length) console.log(`[OMNI] carried from history: ${found.join(' | ')}`);
+      }
       const primary = (resolvedGame ?? '').toLowerCase().trim();
       const merged = primary ? [primary, ...found.filter(g => g !== primary)] : found;
       return merged.slice(0, 3);
@@ -2717,6 +2765,10 @@ async function runChatPipeline(
     if (subjects.length > 1) {
       console.log(`[OMNI] multi-subject scrape: ${subjects.join(' | ')}`);
     }
+    // A pronoun follow-up detects no game of its own, which left the profile
+    // blank and the follow-up chips reading "tips for this game". The
+    // conversation plainly is about the carried title, so adopt it.
+    if (!profile.game && subjects.length) profile.game = subjects[0];
     const omniBlocks = shouldScrape
       ? (subjects.length
           ? (await Promise.all(subjects.map(s => omniScrape(s, prompt, 4500)))).flat()

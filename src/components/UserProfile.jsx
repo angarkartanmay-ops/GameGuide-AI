@@ -3,7 +3,7 @@ import { LogIn, LogOut, User as UserIcon } from 'lucide-react';
 import useAuth from '../hooks/useAuth';
 
 export default function UserProfile() {
-  const { user, loading, signInWithGoogle, signOut } = useAuth();
+  const { user, loading, signInWithGoogle, signOut, authError } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -26,10 +26,13 @@ export default function UserProfile() {
 
   if (!user) {
     return (
-      <button className="glass-panel sign-in-btn" onClick={signInWithGoogle}>
-        <LogIn size={16} />
-        <span>Sign in</span>
-      </button>
+      <div className="sign-in-wrap">
+        <button className="glass-panel sign-in-btn" onClick={signInWithGoogle}>
+          <LogIn size={16} />
+          <span>Sign in</span>
+        </button>
+        {authError && <span className="sign-in-error" role="alert">{authError}</span>}
+      </div>
     );
   }
 
