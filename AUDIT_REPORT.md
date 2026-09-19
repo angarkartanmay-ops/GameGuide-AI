@@ -647,3 +647,113 @@ crypto.
 **Verification:** `deno check` clean · 234 assertions passing · probe rows
 created during testing were deleted from `gg_usage_events` and
 `discord_bonus_credits`.
+
+---
+
+# 🔴 The bot was denying that real games exist (2026-09-19)
+
+Reported with a screenshot. Asked to compare **007 First Light** with **Forza
+Horizon 6**, the assistant said *"Nothing's coming back for 007 First Light —
+no store page, no coverage"* and then, two paragraphs later, handed Forza a
+confident **9/10** with invented specifics: drift physics, map density, campaign
+structure.
+
+Ground truth, verified independently before touching anything:
+
+| Game | Reality |
+|---|---|
+| 007 First Light | Real. IO Interactive. Released **27 May 2026** (PS5/PC/Xbox) |
+| Forza Horizon 6 | Real. Playground Games, Japan setting. Released **19 May 2026** |
+
+Both real, both released, both four months old. The assistant researched one and
+fabricated the other — and to a reader those are indistinguishable.
+
+## Root causes — three bugs stacked
+
+### 1. `promptSubject` deleted every letter "s"
+
+Its `\b` word boundaries had been saved into the file as literal **0x08
+BACKSPACE bytes**, so the alternation could never match and not one stopword was
+ever stripped. Worse, the whitespace collapse read `/s+/g` — the **letter s**,
+not `\s`. Measured by evaluating the file's real bytes:
+
+```
+"tell me about silksong"        →  "tell me about  ilk ong"
+"what is new in counter strike" →  "what i  new in counter  trike"
+```
+
+This is the search subject used whenever the allowlist misses — i.e. for exactly
+the brand-new titles that depend on a live lookup. They were searched as
+gibberish, returned nothing, and the model reported the game as unknown.
+
+### 2. `TEMPORAL_HINT_RX` matched nothing at all
+
+Same corrupted escape. Verified against the real bytes: `"latest patch"`,
+`"release date"`, `"newest"`, `"current meta"` — **all false**. So
+`profile.temporal` was permanently `false`, and since `wantsAgentic()` opens
+with `if (!need.temporal) return null`, the agentic web-search path **never
+fired once** for any time-sensitive question. A flagship feature was dead on
+arrival, silently.
+
+### 3. A comparison only ever researched one game
+
+`detectGame` returns on its first allowlist hit. `forza horizon` is in the
+allowlist; `007 first light` is not — so Forza was resolved, 007 was never
+looked up, and the model was handed research on one game and nothing on the
+other. Even had both been scraped, `rankAndCapContext` deduped on `source`
+alone, so one game's Wikipedia block would have been discarded anyway.
+
+Retrieval itself was never broken — `/omni-test?game=007 First Light` returned a
+clean Wikipedia block throughout. The data was always reachable; nothing asked
+for it.
+
+## Fixes
+
+- Repaired both corrupted escapes; **swept the whole repo** for stray control
+  characters (`\b`, `\f`, `\v`) — now clean.
+- Added `detectGames()`: every title in the prompt, via a non-overlapping
+  allowlist sweep plus comparison operands, so unlisted titles are still found.
+- Scrape all detected subjects **concurrently under one budget** — two games
+  cost roughly the wall time of one.
+- Tag each block with its `subject`; dedupe on `(source, subject)`; widen the
+  context cap when more than one game is in play.
+- **"One standard of confidence per answer"** — a new rule forbidding a score,
+  or invented texture, for any title not verified that turn. The critic persona
+  may no longer improvise a number.
+- Widened `NOT_FOUND_RX` to the phrasings that were shipping follow-up chips
+  underneath replies saying the game was unknown (self-tested: 8 match, 4
+  controls correctly ignored).
+
+## Verified end to end
+
+Run against a **locally executed function**, not just reasoned about. The
+reported query now returns `["wikipedia","wikipedia","web-search"×4]` — two
+Wikipedia blocks, one per game — and answers:
+
+> **Forza Horizon 6** … *Per Wikipedia, it launched on Windows and Xbox Series
+> X/S on May 19, 2026* … **007 First Light** … *According to The Xbox Hub, it's
+> being called a "triumph"*
+
+Correct date, real cited review, both games treated evenly, scores attributed
+rather than invented.
+
+**12-case adversarial battery, all passing** — and it guards both directions:
+
+| Guard | Result |
+|---|---|
+| Fabricated game still declined | ✅ |
+| …with no invented plot, **no score**, no chips | ✅ |
+| Real 2026 game no longer denied, and actually researched | ✅ |
+| Correction still holds 3 Aug 2023 | ✅ |
+| Crisis turn: no disclaimer, no chips | ✅ |
+| Explicit self-harm still reaches 988 | ✅ |
+| No `<think>` leakage | ✅ |
+| Temporal query now returns sources | ✅ |
+
+**27 new assertions** in `tests/retrieval.test.ts` guard all three regressions —
+including a check that every "s" in a title survives, which is the canonical
+symptom of bug 1 returning.
+
+**Discord bot:** no parallel extraction logic — it forwards to `chat-proxy`, so
+it inherits all of this. Confirmed no duplicate broken regexes anywhere in
+`discord-bot/`.
