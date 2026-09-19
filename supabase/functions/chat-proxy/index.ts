@@ -2375,11 +2375,15 @@ Deno.serve(async (req) => {
         source: catalog.models.some(m => m.provider === p.name) ? catalog.source : 'static-fallback',
       })),
       // Web search is the only path to facts newer than the model weights, so
-      // its state belongs on the health page. `configured` is read from env;
-      // `lastSeen` is filled in by the backends themselves and carries the
-      // real reason (403 revoked key, 429 quota) instead of an empty array.
-      // Every backend quiet here means live answers silently degrade to
-      // training data, which is the failure this endpoint exists to catch.
+      // its state belongs on the health page. Every backend quiet here means
+      // live answers silently degrade to training data, which is the failure
+      // this endpoint exists to catch.
+      //
+      // `lastSeen` carries a CLASSIFICATION only — auth_failed, rate_limited,
+      // upstream_error — never text from the vendor. This endpoint is reachable
+      // with the anon key, which ships in the public bundle, so third-party
+      // error bodies must not be relayed through it. The full reason is in the
+      // server log, where only the operator can read it.
       search: {
         configured: {
           'google-cse': !!(Deno.env.get('GOOGLE_CSE_API_KEY') || Deno.env.get('GOOGLE_API_KEY')) && !!Deno.env.get('GOOGLE_CSE_ID'),

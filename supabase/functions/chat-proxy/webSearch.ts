@@ -58,30 +58,68 @@ async function fetchTimeout(url: string, init: RequestInit, ms: number): Promise
 // ── Google Custom Search Engine (most reliable, 100 free queries/day) ────
 
 // ── Backend health ─────────────────────────────────────────────────────────
-// Populated on every failed call so /health can report WHY a search backend
-// is quiet. Without this, a revoked key and a query with genuinely no results
-// were the same observable event: an empty array.
-export interface BackendStatus { ok: boolean; detail: string; at: string; }
+// Why a backend is quiet, split by audience.
+//
+// /health is reachable with the anon key, which ships in the public frontend
+// bundle — so it is a PUBLIC endpoint and must never carry text we did not
+// author. An earlier version of this block stored the "message" field lifted
+// out of the upstream error body and published it there; upstream text comes
+// from four different vendors, is outside our control, and can carry request
+// context including credentials.
+//
+// So: the public side gets a fixed classification from the list below, and the
+// full upstream reason goes to the server log only, redacted even there.
+export type BackendCode =
+  | 'ok'
+  | 'auth_failed'      // 401/403 — key revoked, wrong key, or not entitled
+  | 'rate_limited'     // 429 — quota or QPS exhausted
+  | 'upstream_error'   // 5xx or anything else the vendor returned
+  | 'not_configured';
+
+export interface BackendStatus { ok: boolean; code: BackendCode; status: number; at: string; }
+
 const backendHealth = new Map<string, BackendStatus>();
 
+/** Public-safe: classification only, never vendor text. */
 export function getSearchBackendHealth(): Record<string, BackendStatus> {
   return Object.fromEntries(backendHealth);
 }
 
-function noteBackend(name: string, ok: boolean, detail: string) {
-  backendHealth.set(name, { ok, detail, at: new Date().toISOString() });
-  if (!ok) console.warn(`[WEB-SEARCH] ${name} unavailable: ${detail}`);
+function classify(status: number): BackendCode {
+  if (status === 401 || status === 403) return 'auth_failed';
+  if (status === 429) return 'rate_limited';
+  return 'upstream_error';
 }
 
-/** Read a short reason off a failed response without consuming much body. */
-async function failReason(res: Response): Promise<string> {
-  let hint = '';
+// Anything shaped like a credential, so a key cannot reach even the log.
+// Long opaque runs, and the usual query-string and header carriers.
+function redact(s: string): string {
+  return s
+    .replace(/([?&](?:key|apikey|api_key|token|access_token|auth)=)[^&\s"']+/gi, '$1<redacted>')
+    .replace(/\b(?:bearer\s+)[A-Za-z0-9._\-]{12,}/gi, 'bearer <redacted>')
+    .replace(/\b[A-Za-z0-9_\-]{32,}\b/g, '<redacted>');
+}
+
+/**
+ * Record an outcome. `publicCode` is what /health shows; `logDetail` is the
+ * operator-only reason and is redacted before it reaches the log.
+ */
+function noteBackend(name: string, ok: boolean, code: BackendCode, status: number, logDetail = '') {
+  backendHealth.set(name, { ok, code, status, at: new Date().toISOString() });
+  if (!ok) {
+    console.warn(`[WEB-SEARCH] ${name} unavailable (${code}, HTTP ${status})${logDetail ? ': ' + redact(logDetail) : ''}`);
+  }
+}
+
+/** Operator-only reason text. Never returned to a caller. */
+async function failDetail(res: Response): Promise<string> {
   try {
     const body = (await res.text()).slice(0, 300);
     const m = body.match(/"message"\s*:\s*"([^"]+)"/);
-    hint = m ? ` — ${m[1]}` : '';
-  } catch { /* body unreadable; status alone is still useful */ }
-  return `HTTP ${res.status}${hint}`;
+    return m ? m[1] : body.slice(0, 120);
+  } catch {
+    return '';
+  }
 }
 
 export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000, recent = false): Promise<SearchHit[]> {
@@ -98,7 +136,7 @@ export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000
     const res = await fetchTimeout(url, {
       headers: { 'Accept': 'application/json' },
     }, timeoutMs);
-    if (!res.ok) { noteBackend('google-cse', false, await failReason(res)); return []; }
+    if (!res.ok) { noteBackend('google-cse', false, classify(res.status), res.status, await failDetail(res)); return []; }
     const data = await res.json();
     const items = data?.items || [];
     return items.slice(0, limit).map((r: any) => ({
@@ -132,7 +170,7 @@ export async function serperSearch(query: string, limit = 6, timeoutMs = 5000, r
         ...(recent ? { tbs: 'qdr:m6' } : {}),
       }),
     }, timeoutMs);
-    if (!res.ok) { noteBackend('serper', false, await failReason(res)); return []; }
+    if (!res.ok) { noteBackend('serper', false, classify(res.status), res.status, await failDetail(res)); return []; }
     const data = await res.json();
 
     const hits: SearchHit[] = [];
@@ -234,7 +272,7 @@ export async function duckduckgoSearch(query: string, limit = 6, timeoutMs = 250
     const res = await fetchTimeout(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
     }, timeoutMs);
-    if (!res.ok) { noteBackend('duckduckgo', false, await failReason(res)); return []; }
+    if (!res.ok) { noteBackend('duckduckgo', false, classify(res.status), res.status, await failDetail(res)); return []; }
     const html = await res.text();
 
     const hits: SearchHit[] = [];
@@ -300,7 +338,7 @@ export async function braveSearch(query: string, limit = 6, timeoutMs = 4500, re
     const res = await fetchTimeout(url, {
       headers: { 'X-Subscription-Token': key, 'Accept': 'application/json' },
     }, timeoutMs);
-    if (!res.ok) { noteBackend('brave', false, await failReason(res)); return []; }
+    if (!res.ok) { noteBackend('brave', false, classify(res.status), res.status, await failDetail(res)); return []; }
     const data = await res.json();
     const results = data?.web?.results || [];
     return results.slice(0, limit).map((r: any) => ({
@@ -351,7 +389,7 @@ export async function multiWebSearch(query: string, limit = 8, recent = false): 
   };
   console.log(`[WEB-SEARCH] Results: gcse=${counts.gcse} serper=${counts.serper} brave=${counts.brave} searxng=${counts.searxng} ddg=${counts.ddg} total=${all.length}`);
   for (const [n, c] of [['google-cse', counts.gcse], ['serper', counts.serper], ['brave', counts.brave], ['searxng', counts.searxng], ['duckduckgo', counts.ddg]] as Array<[string, number]>) {
-    if (c > 0) noteBackend(n, true, `${c} result(s)`);
+    if (c > 0) noteBackend(n, true, 'ok', 200);
   }
   if (all.length === 0) console.warn('[WEB-SEARCH] every backend returned nothing — live answers will fall back to training data');
 

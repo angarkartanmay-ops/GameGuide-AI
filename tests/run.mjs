@@ -24,6 +24,7 @@ const SUITES = [
   ['eval',          'eval/pipeline.test.mjs'], // golden-set retrieval + routing accuracy
   ['catalog',       'catalog.test.mjs'],       // live model discovery + filter safety
   ['quota',         'quota.test.mjs'],         // Discord freemium tiers + upsell copy
+  ['search-health', 'search-health.test.ts'],  // /health must not relay vendor error text
   ['billing',       'billing.test.mjs'],       // Stripe period-end + checkout ref linking
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres
   ['quota-contract','quota-contract.test.mjs'],// quota.js against that same SQL
