@@ -15,6 +15,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 const SUITES = [
   ['detection',     'detection.test.ts'],      // game-name parsing incl. installment numbers
+  ['retrieval',     'retrieval.test.ts'],      // subject extraction, temporal hints, multi-game
   ['behaviour',     'behaviour.test.ts'],      // correction detection + follow-up suppression
   ['gemini',        'gemini.test.ts'],         // multi-model quota rotation
   ['reasoning',     'reasoning.test.ts'],      // strip <think> scratchpad from replies

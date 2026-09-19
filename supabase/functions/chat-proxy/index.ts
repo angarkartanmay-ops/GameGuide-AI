@@ -99,6 +99,14 @@ The distinction that matters: **don't declare a game fake, but don't validate on
 
 **If ANY live block mentions the title, the game exists.** Report what it says and cite it. Don't weigh it against training; training is the stale side. **A user asserting a game exists is strong evidence** — they're looking at a store page. Believe them.
 
+## ONE STANDARD OF CONFIDENCE PER ANSWER
+Whatever certainty you claim for one game, claim for every game in the same reply. The worst answer this assistant has produced said "nothing's coming back for **007 First Light**" and then, two paragraphs later, awarded another game a confident **9/10** with invented specifics — drift physics, map density, campaign structure — none of it retrieved. Both games were real and had released. To the reader that reads as: it researched one and made up the other.
+
+- Comparing two titles and you could only verify one? **Say that first**, then give what you have on the verified one clearly labelled as one-sided. Do not present a verdict as though the comparison happened.
+- **A score is a judgement about a game you actually know.** Never attach a number — 9/10, "easily the best in the series", "a masterpiece" — to a title you could not verify this turn. No score is vastly better than a fabricated one.
+- Don't manufacture texture. Specific regions, handling models, mission structure, rating numbers and sales figures are things you RETRIEVE, not things you generate because they sound plausible for the genre.
+- Reviews the industry published are citable ("Metacritic sits around X"); a score you invented is not. Keep the two apart, and say which one you're giving.
+
 ## WHEN THE USER CORRECTS YOU
 Split by what KIND of claim is being corrected. These are opposite rules and mixing them up is how you end up either arguing with reality or parroting a falsehood.
 
@@ -423,7 +431,8 @@ You are now the **GAME CRITIC** — an opinionated, well-read reviewer with tast
 - Use "**💎 What It Nails**" and "**💢 What It Bungles**" sections side-by-side.
 - Compare to 2-3 other games in the same genre via a table.
 - End with "**🎯 You'll Love It If...**" / "**🚫 Skip It If...**" recommendations.
-- Tone: confident, evocative, willing to take a stance.`,
+- Tone: confident, evocative, willing to take a stance.
+- **The score is the one thing you may not improvise.** Only rate a game you actually verified this turn. If the live blocks came back empty on it, drop the number entirely and say what you'd need to judge it — a reviewer who hasn't played it doesn't publish a score, they say so.`,
   },
 
   generalist: {
@@ -455,7 +464,7 @@ interface QueryProfile {
 // Recency signal available at classification time, before PULSE has run.
 // Deliberately broad: a false positive costs one agentic call, a false
 // negative costs a stale answer — which is the failure this project keeps hitting.
-const TEMPORAL_HINT_RX = /(latest|newest|new|current|currently|right now|today|this (?:week|month|season|patch|year)|recent|recently|just (?:released|launched|dropped)|upcoming|coming soon|release date|releasing|patch notes|meta|nerf|buff|202[5-9]|20[3-9]d)/i;
+const TEMPORAL_HINT_RX = /\b(latest|newest|new|current|currently|right now|today|this (?:week|month|season|patch|year)|recent|recently|just (?:released|launched|dropped)|upcoming|coming soon|release date|releasing|patch notes|meta|nerf|buff|202[5-9]|20[3-9]d)\b/i;
 
 const INTENT_PATTERNS: Array<{ intent: Intent; persona: keyof typeof PERSONAS; rx: RegExp }> = [
   { intent: 'troubleshoot', persona: 'techwizard', rx: /\b(error|crash|won.?t (start|load|launch)|black screen|stuck|bug|glitch|fix|fps drop|lag|freezing|stuttering|disconnect|install|update fail|won.?t connect|driver|gpu|directx|launcher|won.?t download)\b/i },
@@ -622,6 +631,39 @@ function guessUnknownTitle(rawText: string): string | null {
   return null;
 }
 
+// Strip question scaffolding down to the searchable subject.
+//
+// Two faults lived here, and between them they poisoned every fallback
+// lookup — the path taken for exactly the brand-new titles that most need a
+// live search:
+//
+//   * the \b word boundaries were written into the file as literal 0x08
+//     BACKSPACE bytes, so the alternation could never match and not one
+//     stopword was ever removed;
+//   * `/s+/g` matches the LETTER s, not whitespace — `\s` was meant — so
+//     every "s" in the prompt was deleted.
+//
+// Measured against the real file bytes: "tell me about silksong" came out as
+// "tell me about  ilk ong", and "what is new in counter strike" as "what i
+// new in counter  trike". Those strings were then used as the live search
+// query, returned nothing, and the model told the user the game did not
+// exist. 007 First Light — a real May 2026 AAA release — was declared
+// fictional this way.
+const SUBJECT_STOPWORDS_RX = new RegExp(
+  String.raw`\b(?:what(?:'?s)?|when|where|why|how|who|which|is|are|was|were|do|does|did|can|could|should|would|will|tell|me|about|the|an?|of|for|in|on|to|please|thanks|recent|latest|newest|now|currently|good|bad|worth|it|long|ago|released?|reviews?|compare|comparison|versus|vs|between|both|overall|rate|rating|gameplay)\b`,
+  'gi',
+);
+
+function promptSubject(prompt: string): string | null {
+  if (!prompt) return null;
+  const cleaned = prompt
+    .replace(/[?!.,]+/g, ' ')
+    .replace(SUBJECT_STOPWORDS_RX, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned.length >= 4 && cleaned.length <= 80 ? cleaned : null;
+}
+
 function detectGame(text: string): string | null {
   // A title the user put in quotes is unambiguous intent — trust it over the
   // allowlist, which would otherwise match a shorter substring of it
@@ -652,6 +694,68 @@ function detectGame(text: string): string | null {
   // Nothing in the allowlist — try to recover an unlisted / brand-new title so
   // live scraping still fires instead of silently returning zero sources.
   return guessUnknownTitle(text);
+}
+
+// Connectives that join two titles the user wants weighed against each other.
+const COMPARE_SPLIT_RX = /\s+(?:vs\.?|versus|compared\s+to|against|and|or)\s+/i;
+
+/** Reject obvious non-titles before they become a search query. */
+function plausibleTitle(t: string | null): string | null {
+  if (!t) return null;
+  const v = t.toLowerCase().trim();
+  if (v.length < 3 || v.length > 50) return null;
+  if (v.split(/\s+/).length > 6) return null;
+  return v;
+}
+
+/**
+ * Every game the prompt is asking about, not just the first one matched.
+ *
+ * `detectGame` returns on its first allowlist hit, so "compare 007 first light
+ * and forza horizon 6" resolved to Forza alone — 007 First Light was never
+ * looked up, and the model, handed research on one game and nothing on the
+ * other, told the user the real May-2026 release did not exist while
+ * confidently reviewing the game it HAD researched. Detecting both is what
+ * makes a comparison answerable.
+ */
+function detectGames(text: string, max = 3): string[] {
+  const out: string[] = [];
+  const push = (raw: string | null) => {
+    const v = plausibleTitle(raw);
+    if (!v || out.length >= max) return;
+    // Skip anything that merely restates a title we already hold (either
+    // direction) so "forza" and "forza horizon 6" cannot both be searched.
+    if (out.some(o => o === v || o.includes(v) || v.includes(o))) return;
+    out.push(v);
+  };
+
+  // Allowlist sweep, longest-first and non-overlapping, so "forza horizon 6"
+  // claims its span and the bare "forza" entry cannot match inside it.
+  const lower = text.toLowerCase();
+  const claimed: Array<[number, number]> = [];
+  for (const g of [...KNOWN_GAMES].sort((a, b) => b.length - a.length)) {
+    if (out.length >= max) break;
+    const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = new RegExp(`\\b${escaped}\\b`, 'i').exec(lower);
+    if (!m) continue;
+    const s = m.index;
+    const e = s + m[0].length;
+    if (claimed.some(([cs, ce]) => s < ce && e > cs)) continue;
+    claimed.push([s, e]);
+    push(extendWithInstallment(lower, g));
+  }
+
+  // Then each side of a comparison. This is what rescues titles the allowlist
+  // has never heard of, which is precisely where a live lookup matters most.
+  if (COMPARE_SPLIT_RX.test(text)) {
+    for (const part of text.split(COMPARE_SPLIT_RX)) {
+      if (out.length >= max) break;
+      push(guessUnknownTitle(part) ?? promptSubject(part));
+    }
+  }
+
+  if (out.length === 0) push(detectGame(text));
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -996,7 +1100,11 @@ function isProviderFatal(errMsg: string): boolean {
 //  YouTube > RSS.
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface ScrapeBlock { text: string; score: number; source: string; }
+// `subject` records WHICH title a block is about. Without it, a comparison
+// ("X vs Y") scraped both games and then rankAndCapContext — which deduped on
+// `source` alone — threw one of the two Wikipedia blocks away, leaving the
+// model with research on one game and nothing on the other.
+interface ScrapeBlock { text: string; score: number; source: string; subject?: string; }
 
 const OMNI_USER_AGENT = 'GameGuide-AI/4.0 (educational gaming assistant; contact: jai.sharma93927@gmail.com)';
 
@@ -1498,15 +1606,7 @@ async function fetchWebSearchForGame(game: string, prompt: string, timeoutMs = 3
 // Reduces a question to a searchable subject when no game name was detected.
 // Deliberately conservative: strips interrogatives and filler, and bails on
 // anything too short to be a meaningful query.
-function promptSubject(prompt: string): string | null {
-  if (!prompt) return null;
-  const cleaned = prompt
-    .replace(/[?!.]+/g, " ")
-    .replace(/(what|whats|what's|when|where|why|how|who|which|is|are|was|were|do|does|did|can|could|should|would|will|tell|me|about|the|a|an|of|for|in|on|to|please|thanks|recent|latest|newest|now|currently|good|bad|worth|it|long|ago|release[d]?|review[s]?)/gi, " ")
-    .replace(/s+/g, " ")
-    .trim();
-  return cleaned.length >= 4 && cleaned.length <= 80 ? cleaned : null;
-}
+
 
 async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 3000): Promise<ScrapeBlock[]> {
   // Previously this returned [] whenever detection failed, which meant a title
@@ -1531,7 +1631,7 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
   // testing green in isolation, because /omni-test passes 5000ms.
   const landed: ScrapeBlock[] = [];
   const collect = (p: Promise<ScrapeBlock | null>) =>
-    p.then(b => { if (b) landed.push(b); }).catch(() => {});
+    p.then(b => { if (b) landed.push({ ...b, subject }); }).catch(() => {});
 
   // Sources keyed on an exact game name (Supercell, Steam, YouTube channel
   // lookups) only make sense for a confirmed title; web search and Wikipedia
@@ -1577,8 +1677,12 @@ function rankAndCapContext(blocks: ScrapeBlock[], maxChars: number): ScrapeBlock
   const out: ScrapeBlock[] = [];
   let total = 0;
   for (const b of sorted) {
-    if (seen.has(b.source)) continue;
-    seen.add(b.source);
+    // Keyed on (source, subject), not source alone: in a two-game comparison
+    // both titles legitimately produce a `wikipedia` block, and deduping on
+    // the source name silently discarded one game's entire research.
+    const key = `${b.source}|${b.subject ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     if (total + b.text.length > maxChars) {
       // Truncate to remaining budget if it's a high-score block; else skip
       const remaining = maxChars - total;
@@ -2126,7 +2230,7 @@ const EMOTIONAL_RX = /\b(burn(ed|t)?\s*out|burnout|depress\w*|anxiet\w*|anxious|
 // case already had — found live in production asking about a fabricated
 // title ("Chrono Aegis: Fractured Skies"), where the reply correctly declined
 // to invent details but still appended two confident tip/feature chips for it.
-const NOT_FOUND_RX = /\b(nothing'?s? coming back|couldn'?t find (?:any(?:thing)?|a game)|no (?:store page|wiki|coverage|results?)\s+(?:came up|found)|search came back empty|can'?t find (?:any(?:thing)?|a game) (?:called|named|on)|doesn'?t (?:seem to )?exist|isn'?t (?:a real|showing up)|no (?:info(?:rmation)?|data) on (?:a game|this) call(?:ed)?)\b/i;
+const NOT_FOUND_RX = /\b(nothing'?s? coming back|couldn'?t find (?:any(?:thing)?|a game)|no (?:store page|wiki|coverage|results?)\s+(?:came up|found)|search came back empty|can'?t find (?:any(?:thing)?|a game) (?:called|named|on)|doesn'?t (?:seem to )?exist|isn'?t (?:a real|showing up)|no (?:info(?:rmation)?|data) on (?:a game|this) call(?:ed)?|don'?t have (?:any |reliable )?(?:data|info(?:rmation)?)\s+(?:on|for|about)|no live sources?\s+(?:are |is )?(?:pulling|coming|turning)|live sources? (?:came back|are) (?:thin|quiet|empty)|couldn'?t turn up|drew a blank|not matching anything|blanked on|never heard of|no sign of (?:it|that|a game))\b/i;
 
 function shouldSkipAutoFollowUps(prompt: string, replyText: string, isCorrectionTurn: boolean): boolean {
   if (isCorrectionTurn) return true;
@@ -2594,8 +2698,26 @@ async function runChatPipeline(
     const emotionalTurn = EMOTIONAL_RX.test(prompt);
     const shouldScrape = (!!resolvedGame || prompt.trim().length >= 12) && !emotionalTurn;
     if (shouldScrape) stage('scanning-sources', resolvedGame || undefined);
-    const omniBlocks = shouldScrape ? await omniScrape(resolvedGame, prompt, 4500) : [];
-    const rankedOmni = rankAndCapContext(omniBlocks, 6000);
+    // Research EVERY title the prompt names, not just the first one matched.
+    // The subjects are scraped concurrently under one shared budget, so two
+    // games cost roughly the same wall time as one.
+    const subjects = (() => {
+      const found = detectGames(prompt, 3);
+      const primary = (resolvedGame ?? '').toLowerCase().trim();
+      const merged = primary ? [primary, ...found.filter(g => g !== primary)] : found;
+      return merged.slice(0, 3);
+    })();
+    if (subjects.length > 1) {
+      console.log(`[OMNI] multi-subject scrape: ${subjects.join(' | ')}`);
+    }
+    const omniBlocks = shouldScrape
+      ? (subjects.length
+          ? (await Promise.all(subjects.map(s => omniScrape(s, prompt, 4500)))).flat()
+          : await omniScrape(null, prompt, 4500))
+      : [];
+    // Cap scales with how many games are in play so a second title cannot be
+    // squeezed out of the context window by the first one's research.
+    const rankedOmni = rankAndCapContext(omniBlocks, subjects.length > 1 ? 9000 : 6000);
     const omniContextStrings = omniBlocksToContextStrings(rankedOmni);
 
     // ── Build augmented prompt with all live context blocks + game card ──

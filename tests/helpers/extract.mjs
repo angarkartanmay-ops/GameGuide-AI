@@ -43,8 +43,13 @@ export function generateModules() {
   mkdirSync(OUT_DIR, { recursive: true });
 
   const detection =
+    // TEMPORAL_HINT_RX sits above KNOWN_GAMES but is pulled in so the suite can
+    // guard it: its \b escapes were once saved as literal 0x08 bytes, which
+    // stopped it matching anything at all and silently disabled the agentic
+    // web-search path for every "latest / newest / release date" question.
+    slice(src, 'const TEMPORAL_HINT_RX', 'const INTENT_PATTERNS') +
     slice(src, 'const KNOWN_GAMES', 'function scoreComplexity') +
-    '\nexport { detectGame, extendWithInstallment, guessUnknownTitle };\n';
+    '\nexport { detectGame, detectGames, extendWithInstallment, guessUnknownTitle, promptSubject, TEMPORAL_HINT_RX };\n';
 
   const behaviour =
     slice(src, 'const CORRECTION_LEAD_RX', 'function scoreComplexity') +
