@@ -636,7 +636,7 @@ function SectionDivider({ variant = 'default' }) {
 const STAGES = [
   { id: 1, name: 'Intent', body: 'Slash commands, natural language, vision uploads — all parsed in parallel.', accent: '#00E5FF', viz: 'intent' },
   { id: 2, name: 'Mesh route', body: '4 providers. Load-aware. Self-healing fallback at the token level.', accent: '#22D3EE', viz: 'mesh' },
-  { id: 3, name: 'PULSE search', body: 'Multi-source live web search. Wikipedia, Steam, Reddit, RSS — fused.', accent: '#3B82F6', viz: 'pulse' },
+  { id: 3, name: 'PULSE search', body: 'Multi-source live web search. Wikipedia, Steam, web search, RSS — fused.', accent: '#3B82F6', viz: 'pulse' },
   { id: 4, name: 'Vision GODMODE', body: 'Screenshot-grade scene understanding for builds, fits, comps.', accent: '#7C5CFC', viz: 'vision' },
   { id: 5, name: 'Persona blend', body: 'Tone, depth, voice — adapted to the player at the keyboard.', accent: '#FF2A6D', viz: 'persona' },
   { id: 6, name: 'Stream', body: 'Tokens land in <400ms. Sources, follow-ups, prices — all attached.', accent: '#FFB800', viz: 'stream' },
@@ -853,7 +853,7 @@ const ARSENAL = [
     label: 'PULSE Search',
     sub: 'LIVE WEB FUSION',
     accent: '#00E5FF',
-    desc: 'Wikipedia, Steam, Reddit, RSS — fused into one answer. Ranked, deduped, and citation-linked.',
+    desc: 'Wikipedia, Steam, web search, RSS — fused into one answer. Ranked, deduped, and citation-linked.',
     sample: [
       '↻ wiki    · 184ms · 6 hits',
       '↻ steam   · 122ms · 4 hits',
@@ -1110,7 +1110,7 @@ function ArsenalDeck({ pinned }) {
    ============================================================ */
 const FEATURES = [
   { name: 'Neural Mesh', body: '4-provider routing with self-healing fallback. No single LLM is a single point of failure.' },
-  { name: 'PULSE Web Search', body: 'Live multi-source intel — Wikipedia, Steam, Reddit, RSS — fused into your answer.' },
+  { name: 'PULSE Web Search', body: 'Live multi-source intel — Wikipedia, Steam, web search, RSS — fused into your answer.' },
   { name: 'Vision GODMODE', body: 'Screenshot-grade visual analysis for builds, kit fits, and comp reads.' },
   { name: 'Persona Engine', body: 'Tone and depth adapt to the player. Tactical, casual, or competitive — your call.' },
   { name: 'Slash Commands', body: 'Direct verbs for power users: /build, /counter, /price, /discover, and more.' },

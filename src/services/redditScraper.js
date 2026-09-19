@@ -224,11 +224,22 @@ function buildSearchUrl(query, gameSubs) {
   return `/api/reddit/search.json?q=${encodeURIComponent(enhancedQuery)}&sort=${sort}&t=${timeWindow}&limit=8&type=link`;
 }
 
+// Reddit closed off anonymous .json access — every request now comes back 403,
+// verified three times through the Vercel proxy AND directly, so this is
+// Reddit policy rather than our IP or our proxy. Left switched off instead of
+// deleted: the parsing and ranking below is still correct, and setting
+// VITE_ENABLE_REDDIT=1 turns it straight back on once OAuth credentials exist.
+//
+// While it was on, every single message paid a doomed round trip and logged a
+// 403 pair to the console.
+const REDDIT_ENABLED = import.meta.env.VITE_ENABLE_REDDIT === '1';
+
 /**
  * Search Reddit for posts related to the user's gaming query.
  * Returns a formatted string of community insights, or empty string if nothing found.
  */
 export async function searchReddit(query) {
+  if (!REDDIT_ENABLED) return '';
   const cacheKey = query.toLowerCase().trim();
   const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {

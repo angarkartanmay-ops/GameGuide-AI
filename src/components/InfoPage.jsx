@@ -39,7 +39,7 @@ function AboutContent() {
         <p>
           GameGuide-AI is a real-time, multi-source gaming companion. Drop a question,
           a screenshot, or a slash command — it routes across four AI providers, fuses
-          live web intel from Wikipedia, Steam, Reddit and RSS, and streams a complete
+          live web intel from Wikipedia, Steam, web search and RSS, and streams a complete
           answer back to you in under 400 milliseconds.
         </p>
       </header>
