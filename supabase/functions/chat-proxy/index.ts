@@ -1287,7 +1287,7 @@ function gameToSteamAppId(game: string): number | null {
 // ─── Wikipedia REST API ────────────────────────────────────────────────────
 // Tries multiple title variants (game name, "Game (video game)", "Game (game)")
 // to handle disambiguation pages. Returns the first non-disambig hit.
-async function fetchWikipedia(game: string, timeoutMs = 1200): Promise<ScrapeBlock | null> {
+async function fetchWikipedia(game: string, timeoutMs = 2600): Promise<ScrapeBlock | null> {
   const cached = omniCacheGet('wikipedia', game);
   if (cached) return cached;
 
@@ -1361,7 +1361,7 @@ async function fetchWikipedia(game: string, timeoutMs = 1200): Promise<ScrapeBlo
 }
 
 // ─── Steam News API ────────────────────────────────────────────────────────
-async function fetchSteamNews(game: string, timeoutMs = 1200): Promise<ScrapeBlock | null> {
+async function fetchSteamNews(game: string, timeoutMs = 2600): Promise<ScrapeBlock | null> {
   const appId = gameToSteamAppId(game);
   if (!appId) return null;
 
@@ -1407,7 +1407,7 @@ const INVIDIOUS_INSTANCES = [
   'https://inv.tux.pizza',
 ];
 
-async function fetchInvidious(game: string, timeoutMs = 1200): Promise<ScrapeBlock | null> {
+async function fetchInvidious(game: string, timeoutMs = 2600): Promise<ScrapeBlock | null> {
   const cached = omniCacheGet('invidious', game);
   if (cached) return cached;
 
@@ -1478,7 +1478,7 @@ function parseRSSItems(xml: string, max = 5): Array<{title: string, desc: string
   return items;
 }
 
-async function fetchGamingRSS(game: string, timeoutMs = 1100): Promise<ScrapeBlock | null> {
+async function fetchGamingRSS(game: string, timeoutMs = 2400): Promise<ScrapeBlock | null> {
   const cached = omniCacheGet('rss', game);
   if (cached) return cached;
 
@@ -1524,7 +1524,7 @@ async function fetchGamingRSS(game: string, timeoutMs = 1100): Promise<ScrapeBlo
 }
 
 // ─── Supercell official APIs (Clash Royale, Clash of Clans, Brawl Stars) ───
-async function fetchSupercellAPI(game: string, timeoutMs = 1200): Promise<ScrapeBlock | null> {
+async function fetchSupercellAPI(game: string, timeoutMs = 2600): Promise<ScrapeBlock | null> {
   const lower = game.toLowerCase();
 
   if (lower.includes('clash royale')) {
@@ -1681,7 +1681,7 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
   //
   // Web search is given the smaller of its own default and what is actually
   // left of the budget, so one slow source can no longer eat the whole window.
-  const webSearchMs = Math.max(1200, Math.min(3000, totalBudgetMs - 600));
+  const webSearchMs = Math.max(2000, Math.min(5000, totalBudgetMs - 1500));
   const allFetches = Promise.all(
     named
       ? [
@@ -2724,7 +2724,12 @@ async function runChatPipeline(
       console.log(`[PULSE] fired (${pulse.diagnostics.mode}) — sources=${pulse.sourcesUsed.join(',')} blocks=${pulse.diagnostics.blocksUsed}/${pulse.diagnostics.blocksFound}`);
     }
 
-    // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 4.5s budget) ─────
+    // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 8s ceiling) ──────
+    // A ceiling, not a delay: the fetches are raced against it and return the
+    // moment they all settle, so a warm request still finishes in ~1-2s.
+    // Measured on the deployed function, the old 4.5s/1.2s pair produced ONE
+    // Wikipedia block where local runs produced five sources — the edge pays
+    // DNS and TLS setup per host that a dev machine has already cached.
     // The comment here long claimed "1.6s" while the call passed 3000ms, and
     // web search ignored its timeout entirely and ran ~9s — so the budget
     // always expired and every block was thrown away. With web search now
@@ -2771,8 +2776,8 @@ async function runChatPipeline(
     if (!profile.game && subjects.length) profile.game = subjects[0];
     const omniBlocks = shouldScrape
       ? (subjects.length
-          ? (await Promise.all(subjects.map(s => omniScrape(s, prompt, 4500)))).flat()
-          : await omniScrape(null, prompt, 4500))
+          ? (await Promise.all(subjects.map(s => omniScrape(s, prompt, 8000)))).flat()
+          : await omniScrape(null, prompt, 8000))
       : [];
     // Cap scales with how many games are in play so a second title cannot be
     // squeezed out of the context window by the first one's research.
