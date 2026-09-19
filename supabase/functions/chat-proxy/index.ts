@@ -1781,7 +1781,14 @@ function omniBlocksToContextStrings(blocks: ScrapeBlock[]): string[] {
   return blocks.map(b => {
     const open = labels[b.source] || `=== ${b.source.toUpperCase()} INTEL ===`;
     const close = closeLabels[b.source] || `=== END ${b.source.toUpperCase()} INTEL ===`;
-    return `${open}\n${b.text}\n${close}`;
+    // Name the game each block is about. In a comparison the model receives two
+    // blocks under the identical "WIKIPEDIA INTEL" header, and it read that as
+    // one body of research about the game it had already fixed on — then told
+    // the user the OTHER title, whose block it was holding, did not exist.
+    // The subject tag makes the association impossible to miss.
+    const tag = b.subject ? ` — SUBJECT: ${b.subject}` : '';
+    const header = tag ? open.replace(/ ===$/, `${tag} ===`) : open;
+    return `${header}\n${b.text}\n${close}`;
   });
 }
 
@@ -2741,9 +2748,31 @@ async function runChatPipeline(
       }
     }
 
-    if (resolvedGame) {
+    if (resolvedGame || subjects.length) {
+      // Name EVERY game in play. This card used to announce a single "Detected
+      // game", which in a two-game comparison told the model the other title
+      // was not a game at all — it then declared a real, released title
+      // nonexistent while holding that title's Wikipedia block.
+      //
+      // Crucially, only titles that ACTUALLY came back with research are
+      // vouched for. Vouching for every requested subject would validate
+      // invented games, which is the opposite failure and just as bad.
+      const confirmed = [...new Set(
+        rankedOmni.map(b => b.subject).filter((s): s is string => !!s),
+      )];
+      let gamesLine: string;
+      if (confirmed.length > 1) {
+        gamesLine =
+          `Games researched below: ${confirmed.map(g => `**${g}**`).join(' and ')}\n`
+          + `Each of these returned live sources, so each one is REAL — answer about all of them `
+          + `and never tell the user one of these titles doesn't exist.\n`;
+      } else if (confirmed.length === 1) {
+        gamesLine = `Detected game: **${confirmed[0]}**\n`;
+      } else {
+        gamesLine = `Detected game: **${resolvedGame ?? subjects[0]}**\n`;
+      }
       contextBlocks.push(
-        `=== USER CONTEXT CARD ===\nDetected game: **${resolvedGame}**\nDetected intent: **${profile.intent}** (${profile.persona.emoji} ${profile.persona.name} mode)\nUse this to focus your answer specifically on this game and intent.\n=== END USER CONTEXT ===`
+        `=== USER CONTEXT CARD ===\n${gamesLine}Detected intent: **${profile.intent}** (${profile.persona.emoji} ${profile.persona.name} mode)\nUse this to focus your answer specifically on this game and intent.\n=== END USER CONTEXT ===`
       );
     }
     // OMNI blocks first — they have highest authority (Official API > Wikipedia > Steam News > YouTube > RSS)
