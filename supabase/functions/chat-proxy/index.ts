@@ -2344,10 +2344,15 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   if (req.method === 'GET' && url.pathname.endsWith('/health')) {
     const registry = buildRegistry();
-    const [liveState, catalog, schemaReady] = await Promise.all([
+    // webSearch.ts stays a dynamic import (it is only needed on scraped turns),
+    // so reach for it the same way here rather than pulling it to module load.
+    const [liveState, catalog, schemaReady, searchHealth] = await Promise.all([
       getMeshState(),
       getDiscoveredModels(registry),
       dbSchemaReady(),
+      import('./webSearch.ts')
+        .then(m => m.getSearchBackendHealth())
+        .catch(() => ({} as Record<string, unknown>)),
     ]);
     // Report what will ACTUALLY route, not the deploy-time list. Discovery
     // supersedes the static registry per provider, so showing `registry` here
@@ -2369,6 +2374,21 @@ Deno.serve(async (req) => {
         models: effective.filter(m => m.provider === p.name).length,
         source: catalog.models.some(m => m.provider === p.name) ? catalog.source : 'static-fallback',
       })),
+      // Web search is the only path to facts newer than the model weights, so
+      // its state belongs on the health page. `configured` is read from env;
+      // `lastSeen` is filled in by the backends themselves and carries the
+      // real reason (403 revoked key, 429 quota) instead of an empty array.
+      // Every backend quiet here means live answers silently degrade to
+      // training data, which is the failure this endpoint exists to catch.
+      search: {
+        configured: {
+          'google-cse': !!(Deno.env.get('GOOGLE_CSE_API_KEY') || Deno.env.get('GOOGLE_API_KEY')) && !!Deno.env.get('GOOGLE_CSE_ID'),
+          serper: !!Deno.env.get('SERPER_API_KEY'),
+          brave: !!Deno.env.get('BRAVE_API_KEY'),
+          searxng: !!Deno.env.get('SEARXNG_URL'),
+        },
+        lastSeen: searchHealth,
+      },
       // Which models are currently benched, and how much of today's free
       // allowance each one has already spent.
       mesh: effective.map(m => ({

@@ -56,6 +56,34 @@ async function fetchTimeout(url: string, init: RequestInit, ms: number): Promise
 }
 
 // ── Google Custom Search Engine (most reliable, 100 free queries/day) ────
+
+// ── Backend health ─────────────────────────────────────────────────────────
+// Populated on every failed call so /health can report WHY a search backend
+// is quiet. Without this, a revoked key and a query with genuinely no results
+// were the same observable event: an empty array.
+export interface BackendStatus { ok: boolean; detail: string; at: string; }
+const backendHealth = new Map<string, BackendStatus>();
+
+export function getSearchBackendHealth(): Record<string, BackendStatus> {
+  return Object.fromEntries(backendHealth);
+}
+
+function noteBackend(name: string, ok: boolean, detail: string) {
+  backendHealth.set(name, { ok, detail, at: new Date().toISOString() });
+  if (!ok) console.warn(`[WEB-SEARCH] ${name} unavailable: ${detail}`);
+}
+
+/** Read a short reason off a failed response without consuming much body. */
+async function failReason(res: Response): Promise<string> {
+  let hint = '';
+  try {
+    const body = (await res.text()).slice(0, 300);
+    const m = body.match(/"message"\s*:\s*"([^"]+)"/);
+    hint = m ? ` — ${m[1]}` : '';
+  } catch { /* body unreadable; status alone is still useful */ }
+  return `HTTP ${res.status}${hint}`;
+}
+
 export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000, recent = false): Promise<SearchHit[]> {
   const apiKey = envKey('GOOGLE_CSE_API_KEY', 'GOOGLE_API_KEY');
   const cseId = envKey('GOOGLE_CSE_ID');
@@ -70,7 +98,7 @@ export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000
     const res = await fetchTimeout(url, {
       headers: { 'Accept': 'application/json' },
     }, timeoutMs);
-    if (!res.ok) return [];
+    if (!res.ok) { noteBackend('google-cse', false, await failReason(res)); return []; }
     const data = await res.json();
     const items = data?.items || [];
     return items.slice(0, limit).map((r: any) => ({
@@ -104,7 +132,7 @@ export async function serperSearch(query: string, limit = 6, timeoutMs = 5000, r
         ...(recent ? { tbs: 'qdr:m6' } : {}),
       }),
     }, timeoutMs);
-    if (!res.ok) return [];
+    if (!res.ok) { noteBackend('serper', false, await failReason(res)); return []; }
     const data = await res.json();
 
     const hits: SearchHit[] = [];
@@ -206,7 +234,7 @@ export async function duckduckgoSearch(query: string, limit = 6, timeoutMs = 250
     const res = await fetchTimeout(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
     }, timeoutMs);
-    if (!res.ok) return [];
+    if (!res.ok) { noteBackend('duckduckgo', false, await failReason(res)); return []; }
     const html = await res.text();
 
     const hits: SearchHit[] = [];
@@ -272,7 +300,7 @@ export async function braveSearch(query: string, limit = 6, timeoutMs = 4500, re
     const res = await fetchTimeout(url, {
       headers: { 'X-Subscription-Token': key, 'Accept': 'application/json' },
     }, timeoutMs);
-    if (!res.ok) return [];
+    if (!res.ok) { noteBackend('brave', false, await failReason(res)); return []; }
     const data = await res.json();
     const results = data?.web?.results || [];
     return results.slice(0, limit).map((r: any) => ({
@@ -322,6 +350,10 @@ export async function multiWebSearch(query: string, limit = 8, recent = false): 
     ddg: ddg.status === 'fulfilled' ? ddg.value.length : 0,
   };
   console.log(`[WEB-SEARCH] Results: gcse=${counts.gcse} serper=${counts.serper} brave=${counts.brave} searxng=${counts.searxng} ddg=${counts.ddg} total=${all.length}`);
+  for (const [n, c] of [['google-cse', counts.gcse], ['serper', counts.serper], ['brave', counts.brave], ['searxng', counts.searxng], ['duckduckgo', counts.ddg]] as Array<[string, number]>) {
+    if (c > 0) noteBackend(n, true, `${c} result(s)`);
+  }
+  if (all.length === 0) console.warn('[WEB-SEARCH] every backend returned nothing — live answers will fall back to training data');
 
   const seen = new Set<string>();
   const dedup: SearchHit[] = [];
