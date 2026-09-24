@@ -27,6 +27,8 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MessageFlags,
+  PermissionFlagsBits,
 } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
 const { fetchPriceDirect } = require('./cheapshark');
@@ -150,12 +152,15 @@ async function getHistory(userId, limit = 10) {
     return cached.history.slice(-limit);
   }
   try {
-    const { data } = await supabase
+    // supabase-js reports failures in `error` and does not throw, so each call
+    // here checks it explicitly — a try/catch alone never sees a DB failure.
+    const { data, error } = await supabase
       .from('discord_chat_messages')
       .select('text, sender, created_at')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit);
+    if (error) throw new Error(error.message);
     const history = (data || []).reverse().map(r => ({ sender: r.sender, text: r.text }));
     historyCache.set(userId, { history, limit, fetchedAt: Date.now() });
     return history;
@@ -177,26 +182,36 @@ async function pushHistory(userId, guildId, sender, text) {
     return;
   }
   try {
-    await supabase.from('discord_chat_messages').insert({
+    const { error } = await supabase.from('discord_chat_messages').insert({
       user_id: userId,
       guild_id: guildId || null,
       sender,
       text: text.slice(0, 4000),
     });
+    if (error) throw new Error(error.message);
   } catch (e) {
     console.warn('[history] write failed:', e.message);
   }
 }
 
+/**
+ * @returns {'cleared'|'disabled'|'failed'}
+ *
+ * This used to return true whenever the call didn't throw — but supabase-js
+ * never throws on a failed delete, it returns `{ error }`. So a transient DB
+ * failure made /clear tell the user their history was wiped when every row was
+ * still there: a privacy promise the bot wasn't keeping.
+ */
 async function clearUserHistory(userId) {
   historyCache.delete(userId);
-  if (!supabaseHasServiceRole) return false;
+  if (!supabaseHasServiceRole) return 'disabled';
   try {
-    await supabase.from('discord_chat_messages').delete().eq('user_id', userId);
-    return true;
+    const { error } = await supabase.from('discord_chat_messages').delete().eq('user_id', userId);
+    if (error) throw new Error(error.message);
+    return 'cleared';
   } catch (e) {
     console.warn('[history] clear failed:', e.message);
-    return false;
+    return 'failed';
   }
 }
 
@@ -442,7 +457,9 @@ async function sendLongResponse(replyTarget, text, footer = '', files = []) {
   if (replyTarget.editReply) {
     await replyTarget.editReply(first);
   } else if (replyTarget.reply) {
-    await replyTarget.reply({ ...first, allowedMentions: { repliedUser: false } });
+    // A per-message allowedMentions REPLACES the client default rather than
+    // merging with it, so `parse: []` has to be restated here.
+    await replyTarget.reply({ ...first, allowedMentions: { parse: [], repliedUser: false } });
   } else {
     await replyTarget.send(first);
   }
@@ -460,10 +477,14 @@ function userFacingError(err) {
     return `⏳ **Slow down a sec${scope}.** Try again in ${wait}.`;
   }
   const msg = (err.message || String(err)).toLowerCase();
-  if (msg.includes('timeout')) return '⏱️ **The Neural Net is taking longer than expected.** Try again in a few seconds.';
-  if (msg.includes('429') || msg.includes('rate')) return '⚠️ **API rate limit reached.** Please wait 15–30 seconds.';
-  if (msg.includes('503') || msg.includes('502') || msg.includes('500')) return '🛠️ **Backend is temporarily overloaded.** Try again in 30 seconds.';
-  if (msg.includes('401') || msg.includes('403')) return '🔒 **Authentication problem.** The bot operator should check the Supabase keys.';
+  if (msg.includes('timeout')) return '⏱️ **That one took too long to research.** Try again in a few seconds.';
+  // Word-bounded: a bare includes('rate') also matched "generate", "moderate"
+  // and "accurate", labelling unrelated failures as a rate limit.
+  if (/\b429\b|rate.?limit/.test(msg)) return '⏳ **Too many requests right now.** Please try again in a minute.';
+  if (/\b50[023]\b/.test(msg)) return '🛠️ **The backend is briefly overloaded.** Try again in 30 seconds.';
+  // Server-side misconfiguration is the operator's problem, not something a
+  // member in a public server can act on — don't hand them our internals.
+  if (/\b40[13]\b/.test(msg)) return '🛠️ **Something is misconfigured on my end.** It\'s not you — please try again later.';
   return '❌ **Connection issue.** Try again shortly.';
 }
 
@@ -583,13 +604,23 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
 // ═══════════════════════════════════════════════════════════════════════════
 
 const client = new Client({
+  // No MessageContent. It is a privileged intent, and this bot never reads a
+  // message it wasn't addressed in: Discord already delivers the content of
+  // DMs and of messages that @mention the app without it. Requesting it anyway
+  // bought nothing and would have become a verification blocker at 100 guilds,
+  // where Discord only grants it for use cases slash commands can't cover.
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
   ],
   partials: [Partials.Channel],
+  // Nothing this bot sends may ping anyone. Replies carry model output, and a
+  // user can coax a model into writing "@everyone" or <@someone>; without this
+  // default, editReply/followUp/channel.send parsed those mentions as live
+  // pings. Only the /price embed opted out before. Server admins remove a bot
+  // that mass-pings their members on the first offence.
+  allowedMentions: { parse: [], repliedUser: false },
 });
 
 client.once('clientReady', async () => {
@@ -615,7 +646,37 @@ client.once('clientReady', async () => {
 // ─── Mention listener (free-form chat, mirrors /ask) ──────────────────────
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
-  if (!message.mentions.has(client.user)) return;
+
+  // DMs are a direct conversation and need no mention; the DirectMessages
+  // intent and Channel partial were declared for exactly this, but the mention
+  // gate below used to reject every DM that didn't @ the bot — i.e. all of them.
+  const isDM = !message.inGuild();
+
+  // mentions.has() counts @everyone, @here and role pings by default, so every
+  // server announcement triggered a reply to the announcement (billed to
+  // whoever posted it). Only a direct @ of the bot — or a reply to it — counts.
+  const addressed = isDM
+    || message.mentions.has(client.user, { ignoreEveryone: true, ignoreRoles: true });
+  if (!addressed) return;
+
+  // Don't take a turn we can't deliver. Quota is spent before the answer is
+  // sent, so answering in a channel the bot can't post in charged the user for
+  // nothing. ReadMessageHistory is checked separately because message.reply()
+  // fails without it (error 160002) while a plain send still works.
+  let replyTarget = message;
+  if (!isDM) {
+    const perms = message.channel.permissionsFor?.(client.user);
+    const sendFlag = message.channel.isThread?.()
+      ? PermissionFlagsBits.SendMessagesInThreads
+      : PermissionFlagsBits.SendMessages;
+    if (!perms?.has([PermissionFlagsBits.ViewChannel, sendFlag])) return;
+    if (!perms.has(PermissionFlagsBits.ReadMessageHistory)) {
+      replyTarget = {
+        channel: message.channel,
+        reply: (p) => message.channel.send(typeof p === 'string' ? { content: p } : p),
+      };
+    }
+  }
 
   const prompt = message.content.replace(/<@!?\d+>/g, '').trim();
   const hasAttachments = message.attachments.size > 0;
@@ -635,9 +696,9 @@ client.on('messageCreate', async (message) => {
   // Say why an image was dropped instead of answering blind about a picture
   // the model never received.
   if (attachmentErrors.length && attachments.length === 0) {
-    await message.reply({
+    await replyTarget.reply({
       content: `⚠️ ${attachmentErrors[0]}`,
-      allowedMentions: { repliedUser: false },
+      allowedMentions: { parse: [], repliedUser: false },
     }).catch(() => {});
     return;
   }
@@ -647,7 +708,7 @@ client.on('messageCreate', async (message) => {
     guildId: message.guildId,
     prompt: prompt || 'Analyze this image.',
     attachments,
-    replyTarget: message,
+    replyTarget,
     channel: message.channel,
   });
 });
@@ -741,32 +802,35 @@ client.on('interactionCreate', async (interaction) => {
 `## 🎮 ↑ ↑ ↓ ↓ ← → ← → B A
 **KONAMI CODE ACCEPTED. 30 LIVES GRANTED.**
 
-> *The Konami Code was created by developer Kazuhisa Hashimoto in 1986 while testing Gradius. He found the game too hard, so he added a cheat. He forgot to remove it before shipping. Players discovered it, and a legend was born.*
+> *Kazuhisa Hashimoto added the code in 1986 while porting Gradius — he found the game too hard to test without it. It stayed in the release, players found it, and a legend was born.*
 
-| Code Origin | Game | Effect |
-|-------------|------|--------|
-| 1986 | Gradius | Full power-up |
-| 1988 | Contra | 30 lives |
-| 2007 | ESPN.com | Unicorn confetti |
-| 2013 | Google | Searches in Wingdings |
+**Where it shows up**
+• **1986 · Gradius** — full power-up
+• **1988 · Contra** — 30 lives, the reason most players know it
+• **2009 · ESPN.com** — the site sprouted unicorns
+• **2009 · Facebook** — lens flares across the page
 
-**One of the most recognized button combinations in human history.** 🎖️`,
+**One of the most recognized button combinations in gaming.** 🎖️`,
         });
 
       case 'clear': {
-        const ok = await clearUserHistory(userId);
+        const outcome = await clearUserHistory(userId);
+        const CLEAR_COPY = {
+          cleared: '🗑️ **Your chat history with me has been wiped.**',
+          disabled: '🗑️ **Memory cleared.** (History isn\'t being stored at the moment, so there was nothing saved to delete.)',
+          // Never claim a wipe that didn't happen.
+          failed: '⚠️ **I couldn\'t wipe your history just now** — nothing was deleted. Please try `/clear` again in a minute.',
+        };
         return interaction.reply({
-          content: ok
-            ? '🗑️ **Your chat history with me has been wiped.**'
-            : '🗑️ **Memory cleared.** (History persistence is currently disabled — only this session\'s in-memory cache was cleared.)',
-          ephemeral: true,
+          content: CLEAR_COPY[outcome],
+          flags: MessageFlags.Ephemeral,
         });
       }
 
       case 'history': {
         const history = await getHistory(userId, MAX_HISTORY_DISPLAY);
         if (history.length === 0) {
-          return interaction.reply({ content: 'You have no chat history yet. Try `/ask` or @-mention me.', ephemeral: true });
+          return interaction.reply({ content: 'You have no chat history yet. Try `/ask` or @-mention me.', flags: MessageFlags.Ephemeral });
         }
         const lines = history.slice(-MAX_HISTORY_DISPLAY).map(m => {
           const tag = m.sender === 'user' ? '🧑' : '🤖';
@@ -777,21 +841,24 @@ client.on('interactionCreate', async (interaction) => {
           .setTitle('📚 Your Recent Chat History')
           .setDescription(lines.join('\n\n').slice(0, 4000))
           .setFooter({ text: `Showing last ${history.length} message(s) · use /clear to wipe` });
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       }
 
       case 'stats': {
+        // Aggregated in Postgres. Selecting every row and summing here was
+        // silently capped by PostgREST's max_rows (1000), so /stats would have
+        // frozen at "1,000 users" and understated every total past that point.
         let global = { total: '?', vision: '?', users: '?' };
         try {
-          const { data } = await supabase.from('discord_usage_stats').select('total_calls, vision_calls');
-          if (data) {
+          const { data, error } = await supabase.rpc('gg_discord_global_stats');
+          if (!error && data) {
             global = {
-              total: data.reduce((s, r) => s + (r.total_calls || 0), 0).toLocaleString(),
-              vision: data.reduce((s, r) => s + (r.vision_calls || 0), 0).toLocaleString(),
-              users: data.length.toLocaleString(),
+              total: Number(data.total || 0).toLocaleString(),
+              vision: Number(data.vision || 0).toLocaleString(),
+              users: Number(data.users || 0).toLocaleString(),
             };
           }
-        } catch { /* fine */ }
+        } catch { /* stats are decorative; never fail the command over them */ }
 
         let userRow = null;
         try {
@@ -823,7 +890,7 @@ client.on('interactionCreate', async (interaction) => {
         if (d.degraded) {
           return interaction.reply({
             content: '⚠️ Usage tracking is temporarily unavailable, so I can\'t show exact numbers right now. The bot still works.',
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
 
@@ -846,7 +913,7 @@ client.on('interactionCreate', async (interaction) => {
               .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })),
           ));
         }
-        return interaction.reply({ embeds: [embed], components, ephemeral: true });
+        return interaction.reply({ embeds: [embed], components, flags: MessageFlags.Ephemeral });
       }
 
       case 'premium': {
@@ -954,7 +1021,7 @@ client.on('interactionCreate', async (interaction) => {
     console.error(`[interaction] ${interaction.commandName} failed:`, err);
     const friendly = userFacingError(err);
     if (interaction.deferred) await interaction.editReply(friendly).catch(() => {});
-    else if (!interaction.replied) await interaction.reply({ content: friendly, ephemeral: true }).catch(() => {});
+    else if (!interaction.replied) await interaction.reply({ content: friendly, flags: MessageFlags.Ephemeral }).catch(() => {});
   }
 });
 

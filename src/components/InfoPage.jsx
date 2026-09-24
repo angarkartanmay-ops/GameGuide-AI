@@ -21,11 +21,14 @@ const CONTACT_LINKS = {
   email: 'gameguideai.support@gmail.com',
   linkedin: 'https://www.linkedin.com/in/tanmay-angarkar-4b8a47319/',
   github: 'https://github.com/angarkartanmay-ops',
-  // Direct OAuth invite — drops the bot into the user's chosen server with
-  // the exact permissions index.js needs (View Channel, Send Messages,
-  // Embed Links, Read Message History, Use Application Commands).
+  // Direct OAuth invite. The permission integer is the minimal set the bot
+  // actually uses: View Channel, Send Messages, Send Messages in Threads,
+  // Embed Links, Attach Files, Read Message History, Use Application Commands.
+  // Derived from discord.js PermissionFlagsBits, not by hand — the previous
+  // hand-computed value requested Mute/Deafen Members, Manage Messages and
+  // Manage Expressions while omitting Read Message History and Attach Files.
   discordBotInvite:
-    'https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=3270014976&scope=bot+applications.commands',
+    'https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=277025508352&scope=bot+applications.commands',
   // top.gg listing — discovery + upvote page. `?s=` is the referrer tag.
   discordBotTopGG: 'https://top.gg/bot/1499622566472712202?s=0c09d3395142b',
 };
@@ -90,7 +93,7 @@ function TermsContent() {
       <header className="info-hero">
         <span className="info-kicker"><Shield size={12} /> Terms &amp; Copyright</span>
         <h1>Terms of Service &amp; Copyright Protection</h1>
-        <p className="info-muted">Last updated: May 2026</p>
+        <p className="info-muted">Last updated: September 2026</p>
       </header>
 
       <section className="info-section">
@@ -150,7 +153,24 @@ function TermsContent() {
         <h2>6. Privacy</h2>
         <p>
           Sign-in is optional and handled via Supabase Auth. Conversations are stored only for your own
-          session continuity. We do not sell, share, or use your prompts to train third-party models.
+          session continuity. We do not sell your data, and we do not use your prompts to train models.
+          To answer a question, your prompt is sent to third-party AI model providers and search
+          services, which process it under their own terms.
+        </p>
+        <p><b>Discord bot.</b> When you use GameGuide-AI in Discord, the bot stores:</p>
+        <ul className="info-list">
+          <li>your Discord user ID, and the server ID when you use it in a server;</li>
+          <li>the messages you send it and its replies, so it can remember the conversation;</li>
+          <li>usage counts, to apply daily limits and show <b>/stats</b>.</li>
+        </ul>
+        <p>
+          The bot only reads messages that <b>@mention it</b>, direct messages sent to it, and its slash
+          commands — never the rest of a server&apos;s chat. Stored conversation history is kept for at most
+          <b> 90 days</b> and only your <b>50 most recent</b> messages are retained; per-message usage records
+          are deleted after 3 days. Run <b>/clear</b> in Discord to delete your stored history immediately,
+          or email{' '}
+          <a href={`mailto:${CONTACT_LINKS.email}`} className="info-link">{CONTACT_LINKS.email}</a>{' '}
+          to have any other data removed.
         </p>
       </section>
 
