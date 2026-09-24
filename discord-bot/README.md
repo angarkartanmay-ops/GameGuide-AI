@@ -6,7 +6,7 @@ Full feature parity with the GameGuide-AI web app, hardened for production and b
 
 | Web app feature | Bot equivalent |
 |---|---|
-| Chat with vision queries | `@GameGuide <text>` + image attachments, OR `/ask` |
+| Chat with vision queries | `@GameGuide <text>` + image attachments, a DM to the bot, OR `/ask` |
 | `/price`, `/discover` | same slash commands |
 | `/konami` (vibes) | same slash command |
 | Persistent chat history (Supabase) | same Supabase project, table `discord_chat_messages` |
@@ -27,7 +27,9 @@ npm install
 # 2. Copy .env.example → .env and fill it in
 cp .env.example .env
 # At minimum: DISCORD_TOKEN, DISCORD_CLIENT_ID, SUPABASE_URL,
-#             SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+#             SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, BOT_SERVICE_TOKEN
+# BOT_SERVICE_TOKEN must equal the edge function's secret of the same name.
+# Without it every Discord user in every server shares ONE rate-limit bucket.
 
 # 3. Register slash commands (one-time, or whenever you change them)
 npm run register
@@ -39,6 +41,28 @@ npm start
 ```
 
 > **Want 24/7 immediately?** Skip ahead to [Production Deploy (24/7)](#production-deploy-247) — Render and Koyeb are free and take ~5 minutes.
+
+### Inviting the bot
+
+```
+https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&permissions=277025508352&scope=bot+applications.commands
+```
+
+`277025508352` is the minimal set the code actually uses — View Channel, Send
+Messages, Send Messages in Threads, Embed Links, Attach Files, Read Message
+History, Use Application Commands. It is derived from discord.js
+`PermissionFlagsBits`; don't hand-edit it. Server admins refuse bots that ask
+for moderation powers they have no use for.
+
+**No privileged intents are required.** The bot only reads messages that
+@mention it and DMs sent to it, and Discord delivers the content of both
+without the Message Content intent. Leave it off in the Developer Portal — it
+would otherwise need approval once the bot reaches 100 servers.
+
+Existing installs: after pulling, apply
+[`migrations/20260924_chat_retention.sql`](migrations/20260924_chat_retention.sql)
+(fresh installs get it from `schema-v3.sql`). It adds the 90-day / newest-50
+chat retention the privacy policy promises.
 
 ## Slash Commands
 

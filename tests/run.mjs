@@ -26,6 +26,7 @@ const SUITES = [
   ['quota',         'quota.test.mjs'],         // Discord freemium tiers + upsell copy
   ['search-health', 'search-health.test.ts'],  // /health must not relay vendor error text
   ['billing',       'billing.test.mjs'],       // Stripe period-end + checkout ref linking
+  ['discord-launch','discord-launch.test.mjs'],// invite perms, pings, intents, command wiring
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres
   ['quota-contract','quota-contract.test.mjs'],// quota.js against that same SQL
 ];

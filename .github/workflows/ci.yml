@@ -28,21 +28,23 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
+      # The bot is a separate package with its own lockfile. Installed BEFORE
+      # the test suite because tests/discord-launch.test.mjs derives the
+      # invite permission integer from discord.js's own PermissionFlagsBits —
+      # the hand-computed value it replaces asked for Mute/Deafen Members.
+      - name: Install Bot Dependencies
+        working-directory: discord-bot
+        run: npm ci
+
       - name: Run Test Suites
         run: npm test
 
       - name: Build Web Application
         run: npm run build
 
-      # The bot is a separate package with its own lockfile, and the test suite
-      # above only reaches the three files that happen to have no load-time
-      # imports (quota, entitlements, billing-stripe). Nothing was parsing
-      # index.js — 1,200 lines behind a `require('discord.js')` — so a syntax
-      # error there could reach production untouched by a green CI run.
-      - name: Install Bot Dependencies
-        working-directory: discord-bot
-        run: npm ci
-
+      # Nothing else parses index.js — 1,200 lines behind a
+      # `require('discord.js')` — so a syntax error there could otherwise reach
+      # production untouched by a green CI run.
       - name: Syntax-Check Bot
         working-directory: discord-bot
         run: npm run syntax-check

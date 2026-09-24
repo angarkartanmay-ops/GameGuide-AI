@@ -204,5 +204,56 @@ const pruned = (await db.query('select public.gg_discord_prune() as n')).rows[0]
 check('prune removes stale events', Number(pruned) >= 1, String(pruned));
 check('prune keeps live events', await events(U) === 15);
 
+// -- Chat retention -----------------------------------------------------------
+// Messages used to be kept forever while the bot only reads the newest 50 per
+// user. The privacy policy now promises 90 days / newest 50, so pin both.
+const chats = async (user) =>
+  Number((await db.query('select count(*)::int c from discord_chat_messages where user_id=$1', [String(user)])).rows[0].c);
+const HEAVY = '456456456456456456';   // 70 recent messages -> trimmed to 50
+const OLD   = '567567567567567567';   // 5 ancient + 3 recent -> ancient gone
+const LIGHT = '678678678678678678';   // 4 recent -> untouched
+await db.exec(`insert into discord_chat_messages (user_id, sender, text, created_at)
+               select ${HEAVY}, 'user', 'msg ' || g, now() - (g || ' minutes')::interval
+                 from generate_series(1, 70) g`);
+await db.exec(`insert into discord_chat_messages (user_id, sender, text, created_at)
+               select ${OLD}, 'user', 'ancient ' || g, now() - interval '120 days'
+                 from generate_series(1, 5) g`);
+await db.exec(`insert into discord_chat_messages (user_id, sender, text, created_at)
+               select ${OLD}, 'ai', 'recent ' || g, now() - interval '2 days'
+                 from generate_series(1, 3) g`);
+await db.exec(`insert into discord_chat_messages (user_id, sender, text, created_at)
+               select ${LIGHT}, 'user', 'hi ' || g, now() - interval '1 hour'
+                 from generate_series(1, 4) g`);
+
+await db.query('select public.gg_discord_prune()');
+check('retention trims a heavy user to the newest 50', await chats(HEAVY) === 50, String(await chats(HEAVY)));
+{
+  // The survivors must be the NEWEST 50, not an arbitrary 50.
+  const oldest = (await db.query(
+    `select text from discord_chat_messages where user_id=$1 order by created_at asc limit 1`, [HEAVY])).rows[0].text;
+  check('retention keeps the newest rows, not arbitrary ones', oldest === 'msg 50', oldest);
+}
+check('retention drops messages older than 90 days', await chats(OLD) === 3, String(await chats(OLD)));
+check('retention leaves a light user untouched', await chats(LIGHT) === 4);
+await db.query('select public.gg_discord_prune()');
+check('retention is idempotent', await chats(HEAVY) === 50 && await chats(OLD) === 3 && await chats(LIGHT) === 4);
+
+// -- /stats aggregate ---------------------------------------------------------
+await db.exec(`insert into discord_usage_stats (user_id, total_calls, vision_calls)
+               select 900000000000000000 + g, 3, 1 from generate_series(1, 1200) g`);
+const gs = (await db.query('select public.gg_discord_global_stats() as s')).rows[0].s;
+// 1200 rows: past the 1000-row PostgREST cap the old client-side sum hit.
+check('global stats counts past 1000 users', Number(gs.users) >= 1200, JSON.stringify(gs));
+check('global stats sums calls server-side', Number(gs.total) >= 3600 && Number(gs.vision) >= 1200, JSON.stringify(gs));
+
+// Both functions are SECURITY DEFINER and must stay closed to the public roles.
+for (const fn of ['gg_discord_prune()', 'gg_discord_global_stats()']) {
+  const r = await db.query(
+    `select has_function_privilege('anon', 'public.${fn}', 'execute') a,
+            has_function_privilege('service_role', 'public.${fn}', 'execute') s`);
+  check(`${fn} not executable by anon`, r.rows[0].a === false);
+  check(`${fn} executable by service_role`, r.rows[0].s === true);
+}
+
 console.log(`\nSQL: ${pass} passed${fail ? `, ${fail} FAILED` : ''}`);
 process.exit(fail ? 1 : 0);

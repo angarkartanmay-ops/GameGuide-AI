@@ -5,7 +5,10 @@
 //
 //  Slash commands:    /ask /price /discover /konami /clear /history /quota
 //                     /stats /premium /help
-//  Mention chat:      @GameGuide <question> [+ image attachments]
+//  Mention chat:      @GameGuide <question> [+ image attachments], or a DM
+//  Intents:           none privileged — only reads messages addressed to it
+//  Invite perms:      277025508352 (View, Send, Send in Threads, Embed, Attach,
+//                     Read History, App Commands) — see tests/discord-launch
 //  Vision:            up to 3 images per message, GODMODE pipeline
 //  History:           per-user, persistent in Supabase (table: discord_chat_messages)
 //  Tiers:             FREE 15/day · PRO 200/day · SERVER 60/day (+800 guild pool)
