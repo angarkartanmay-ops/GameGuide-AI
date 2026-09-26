@@ -6,6 +6,7 @@ export default function UserProfile() {
   const { user, loading, signInWithGoogle, signOut, authError } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const avatarRef = useRef(null);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -20,15 +21,23 @@ export default function UserProfile() {
     };
   }, []);
 
+  // Esc closes the menu and hands focus back to the avatar.
+  useEffect(() => {
+    if (!dropdownOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') { setDropdownOpen(false); avatarRef.current?.focus(); } };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [dropdownOpen]);
+
   if (loading) {
-    return <div className="user-profile skeleton"></div>;
+    return <div className="user-profile skeleton" aria-hidden="true"></div>;
   }
 
   if (!user) {
     return (
       <div className="sign-in-wrap">
-        <button className="glass-panel sign-in-btn" onClick={signInWithGoogle}>
-          <LogIn size={16} />
+        <button type="button" className="glass-panel sign-in-btn" onClick={signInWithGoogle}>
+          <LogIn size={16} aria-hidden="true" />
           <span>Sign in</span>
         </button>
         {authError && <span className="sign-in-error" role="alert">{authError}</span>}
@@ -41,32 +50,39 @@ export default function UserProfile() {
 
   return (
     <div className="user-profile" ref={dropdownRef}>
-      <button 
-        className="avatar-btn glass-panel" 
+      <button
+        ref={avatarRef}
+        type="button"
+        className="avatar-btn glass-panel"
         onClick={() => setDropdownOpen(!dropdownOpen)}
         title={fullName}
+        aria-haspopup="menu"
+        aria-expanded={dropdownOpen}
+        aria-label={`Account: ${fullName}`}
       >
         {avatarUrl ? (
-          <img src={avatarUrl} alt="User Avatar" className="user-avatar" />
+          <img src={avatarUrl} alt="" className="user-avatar" />
         ) : (
-          <UserIcon size={18} />
+          <UserIcon size={18} aria-hidden="true" />
         )}
       </button>
 
       {dropdownOpen && (
-        <div className="user-dropdown glass-panel animate-fade-in">
+        <div className="user-dropdown glass-panel animate-fade-in" role="menu" aria-label="Account">
           <div className="dropdown-header">
             <strong>{fullName}</strong>
             <span className="user-email">{user.email}</span>
           </div>
-          <button 
-            className="dropdown-item sign-out-btn" 
+          <button
+            type="button"
+            role="menuitem"
+            className="dropdown-item sign-out-btn"
             onClick={() => {
               setDropdownOpen(false);
               signOut();
             }}
           >
-            <LogOut size={16} />
+            <LogOut size={16} aria-hidden="true" />
             <span>Sign Out</span>
           </button>
         </div>

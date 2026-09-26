@@ -18,10 +18,13 @@ html[data-theme] {
 /* Hide the OS cursor on fine pointers — the reticle takes over.
    Inputs/textareas explicitly keep the text I-beam so editing
    doesn't feel hostile. */
+/* Scoped to html[data-crosshair], which the reticle sets only while it is
+   mounted and enabled. Unscoped, this hid the cursor on every page that had
+   ever loaded the stylesheet — including the chat, which has no reticle. */
 @media (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  html, body { cursor: none; }
-  body * { cursor: inherit; }
-  input, textarea, [contenteditable="true"] { cursor: text; }
+  html[data-crosshair], html[data-crosshair] body { cursor: none; }
+  html[data-crosshair] body * { cursor: inherit; }
+  html[data-crosshair] input, html[data-crosshair] textarea, html[data-crosshair] [contenteditable="true"] { cursor: text; }
 }
 
 .gg-cursor-ring,

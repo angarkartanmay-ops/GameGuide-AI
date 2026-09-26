@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { buildFandomUrl } from './api/_wikiTarget.js'
+import { resolveSteamArt } from './api/_steamArt.js'
 
 // Custom Vite plugin to proxy Fandom wiki API requests dynamically
 // Each game has its own subdomain (e.g., zelda.fandom.com), so we
@@ -90,8 +91,25 @@ function fandomProxyPlugin() {
 }
 
 // https://vite.dev/config/
+// /api/game-art in dev — the same resolver the Vercel function uses.
+function gameArtDevPlugin() {
+  return {
+    name: 'game-art-dev',
+    configureServer(server) {
+      server.middlewares.use('/api/game-art', async (req, res) => {
+        const q = new URL(req.url, 'http://localhost').searchParams.get('q') || '';
+        const { status, body, cacheControl } = await resolveSteamArt(q);
+        res.statusCode = status;
+        res.setHeader('Content-Type', 'application/json');
+        if (cacheControl) res.setHeader('Cache-Control', cacheControl);
+        res.end(JSON.stringify(body));
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), fandomProxyPlugin()],
+  plugins: [react(), fandomProxyPlugin(), gameArtDevPlugin()],
   server: {
     proxy: {
       '/api/reddit': {

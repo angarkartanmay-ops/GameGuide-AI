@@ -1,89 +1,77 @@
-import React, { useState } from 'react';
-import { Tag, TrendingDown, ExternalLink } from 'lucide-react';
+import React, { useId, useState } from 'react';
+import { ChevronDown, ExternalLink } from 'lucide-react';
+
+const verdictFor = (i, deal, atLow) =>
+  i === 0 && atLow ? 'Buy now'
+    : i === 0 && deal.savings >= 50 ? 'Great deal'
+      : i === 0 && deal.savings >= 25 ? 'Decent'
+        : deal.savings === 0 ? 'Wait' : '—';
 
 /**
- * PriceBadge — shows a compact price card for detected games.
- * Expands on click to show full deal breakdown.
+ * Live price card from /price, docked above the command bar. Collapsed it is
+ * one line — best price, store, discount — and expands to every store.
  */
 export default function PriceBadge({ priceData }) {
   const [expanded, setExpanded] = useState(false);
-
+  const panelId = useId();
   if (!priceData || priceData.length === 0) return null;
 
-  const topGame = priceData[0];
-  const isHistoricLow = topGame.cheapestEver &&
-    parseFloat(topGame.cheapest) <= parseFloat(topGame.cheapestEver.price);
+  const top = priceData[0];
+  const best = top.deals?.[0];
+  const atLow = !!top.cheapestEver && parseFloat(top.cheapest) <= parseFloat(top.cheapestEver.price);
 
   return (
-    <div className={`price-badge-wrapper animate-fade-in ${expanded ? 'expanded' : ''}`}>
-      {/* Compact pill — always visible */}
-      <button
-        className={`price-pill glass-panel ${isHistoricLow ? 'price-pill--low' : ''}`}
-        onClick={() => setExpanded(!expanded)}
-        title="Click to see full deal breakdown"
-      >
-        {isHistoricLow
-          ? <TrendingDown size={13} className="price-pill-icon" />
-          : <Tag size={13} className="price-pill-icon" />
-        }
-        <span className="price-pill-label">
-          {isHistoricLow ? '🔥 Historic Low! ' : ''}
-          <strong>${topGame.cheapest}</strong>
-          <span className="price-pill-name"> · {topGame.title}</span>
-        </span>
-        <span className="price-pill-toggle">{expanded ? '▲' : '▼'}</span>
-      </button>
+    <section className={`cx-deal${expanded ? ' is-open' : ''}`} aria-label="Live prices">
+      <div className="cx-deal__row">
+        {top.thumb && <img className="cx-deal__thumb" src={top.thumb} alt="" />}
+        <div className="cx-deal__main">
+          <span className="cx-deal__title">{top.title} · best deal</span>
+          <span className="cx-deal__price">
+            <strong>${top.cheapest}</strong>
+            {best?.store && <span className="cx-deal__store">{best.store}</span>}
+            {best?.savings > 0 && <span className="cx-deal__off">−{best.savings}%</span>}
+            {atLow && <span className="cx-deal__low">All-time low</span>}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="cx-deal__toggle"
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          Deals <ChevronDown size={13} aria-hidden="true" className={expanded ? 'is-flipped' : undefined} />
+        </button>
+      </div>
 
-      {/* Expanded deal table */}
       {expanded && (
-        <div className="price-panel glass-panel animate-fade-in">
+        <div className="cx-deal__panel" id={panelId}>
           {priceData.map((game) => {
-            const atLow = game.cheapestEver &&
-              parseFloat(game.cheapest) <= parseFloat(game.cheapestEver.price);
+            const low = !!game.cheapestEver && parseFloat(game.cheapest) <= parseFloat(game.cheapestEver.price);
             return (
-              <div key={game.title} className="price-game-block">
-                <div className="price-game-header">
-                  {game.thumb && (
-                    <img src={game.thumb} alt={game.title} className="price-thumb" />
+              <div key={game.title} className="cx-deal__game">
+                <div className="cx-deal__game-head">
+                  <span>{game.title}</span>
+                  {game.cheapestEver && (
+                    <span className={low ? 'cx-deal__low' : 'cx-deal__hist'}>
+                      {low ? 'At its all-time low' : `All-time low $${game.cheapestEver.price}`}
+                    </span>
                   )}
-                  <div>
-                    <div className="price-game-title">{game.title}</div>
-                    {game.cheapestEver && (
-                      <div className={`price-historic ${atLow ? 'price-historic--low' : ''}`}>
-                        {atLow
-                          ? '🔥 AT HISTORIC LOW!'
-                          : `Historic low: $${game.cheapestEver.price}`}
-                      </div>
-                    )}
-                  </div>
                 </div>
-
                 {game.deals.length > 0 && (
-                  <table className="price-table">
+                  <table className="cx-deal__table">
                     <thead>
-                      <tr>
-                        <th>Store</th>
-                        <th>Price</th>
-                        <th>Discount</th>
-                        <th>Verdict</th>
-                      </tr>
+                      <tr><th scope="col">Store</th><th scope="col">Price</th><th scope="col">Discount</th><th scope="col">Verdict</th></tr>
                     </thead>
                     <tbody>
                       {game.deals.map((deal, i) => (
-                        <tr key={i} className={i === 0 ? 'price-row--best' : ''}>
-                          <td>{deal.store}</td>
-                          <td><strong>${deal.price}</strong></td>
-                          <td>
-                            {deal.savings > 0
-                              ? <span className="price-saving">−{deal.savings}%</span>
-                              : <span className="price-full">Full Price</span>}
-                          </td>
-                          <td className="price-verdict">
-                            {i === 0 && atLow ? '🔥 Buy Now' :
-                             i === 0 && deal.savings >= 50 ? '✅ Great Deal' :
-                             i === 0 && deal.savings >= 25 ? '👍 Decent' :
-                             deal.savings === 0 ? '⏳ Wait' : '—'}
-                          </td>
+                        <tr key={i} className={i === 0 ? 'is-best' : undefined}>
+                          <td>{deal.url
+                            ? <a href={deal.url} target="_blank" rel="noopener noreferrer">{deal.store}</a>
+                            : deal.store}</td>
+                          <td className="cx-num">${deal.price}</td>
+                          <td className="cx-num">{deal.savings > 0 ? `−${deal.savings}%` : 'Full price'}</td>
+                          <td>{verdictFor(i, deal, low)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -92,20 +80,11 @@ export default function PriceBadge({ priceData }) {
               </div>
             );
           })}
-          <div className="price-footer">
-            <span>Powered by </span>
-            <a
-              href="https://www.cheapshark.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="price-source-link"
-            >
-              CheapShark <ExternalLink size={10} />
-            </a>
-            <span> · Updates every 15 min</span>
+          <div className="cx-deal__foot">
+            Prices from <a href="https://www.cheapshark.com" target="_blank" rel="noopener noreferrer">CheapShark <ExternalLink size={10} aria-hidden="true" /></a> · refreshed every 15 min
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

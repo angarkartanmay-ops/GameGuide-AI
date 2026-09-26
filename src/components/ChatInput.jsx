@@ -1,32 +1,107 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { SendHorizonal, Paperclip, X, ChevronRight, Square, AlertTriangle } from 'lucide-react';
+import React, { useState, useRef, useEffect, useImperativeHandle, useId } from 'react';
+import { ArrowUp, Paperclip, X, Square, AlertTriangle } from 'lucide-react';
 import { preprocessImage } from '../utils/imagePreprocess';
+import { paletteState, nextIndex, selectionAction } from '../utils/slashPalette';
+import CommandPalette from './codex/CommandPalette';
 
 const MAX_CHARS = 1500; // warn above this threshold
+const MAX_HEIGHT = 200;
 
-export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_COMMANDS = [], stealthMode = false }) {
+/**
+ * The command bar. `ref` exposes { setDraft, focus, openFilePicker } so the
+ * empty state's starters can fill it (React 19: ref is a plain prop).
+ */
+export default function ChatInput({
+  ref, onSendMessage, onCancel, isLoading, SLASH_COMMANDS = [], stealthMode = false, gameName = null,
+}) {
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState([]);
-  const [showCommands, setShowCommands] = useState(false);
   const [showCharWarning, setShowCharWarning] = useState(false);
+  const [rejected, setRejected] = useState([]);
+  const [active, setActive] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
   const textAreaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const paletteId = useId();
 
-  const adjustTextareaHeight = () => {
-    const el = textAreaRef.current;
-    if (el) {
-      el.style.height = '56px';
-      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-    }
-  };
+  const palette = dismissed ? { mode: 'closed', items: [] } : paletteState(inputText, SLASH_COMMANDS);
+  const activeIndex = Math.min(active, Math.max(0, palette.items.length - 1));
+
+  useImperativeHandle(ref, () => ({
+    setDraft(text) {
+      setInputText(text);
+      setDismissed(false);
+      setActive(0);
+      requestAnimationFrame(() => {
+        const el = textAreaRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(text.length, text.length);
+      });
+    },
+    focus() { textAreaRef.current?.focus(); },
+    openFilePicker() { fileInputRef.current?.click(); },
+  }), []);
 
   useEffect(() => {
-    adjustTextareaHeight();
+    const el = textAreaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`;
+    // Scroll only once the box has hit its cap — before that the text fits.
+    el.style.overflowY = el.scrollHeight > MAX_HEIGHT ? 'auto' : 'hidden';
   }, [inputText]);
 
+  const reset = () => {
+    setInputText('');
+    setAttachments([]);
+    setDismissed(false);
+    setActive(0);
+  };
+
+  const handleSend = () => {
+    if (isLoading) return; // blocked while loading (use Stop instead)
+    const trimmed = inputText.trim();
+    if (!trimmed && attachments.length === 0) return;
+
+    // Long-message warning: first press warns, "Send anyway" confirms.
+    if (trimmed.length > MAX_CHARS && !showCharWarning) {
+      setShowCharWarning(true);
+      return;
+    }
+    setShowCharWarning(false);
+    const attachmentData = attachments.map(a => ({ data: a.data, mimeType: a.mimeType }));
+    onSendMessage(trimmed || 'Analyze this image', attachmentData);
+    reset();
+  };
+
+  const pick = (cmd) => {
+    const action = selectionAction(cmd, inputText);
+    if (action.type === 'send') {
+      onSendMessage(action.text, []);
+      reset();
+      return;
+    }
+    setInputText(action.text);
+    setActive(0);
+    textAreaRef.current?.focus();
+  };
+
   const handleKeyDown = (e) => {
+    if (palette.mode === 'browse') {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActive(nextIndex(activeIndex, palette.items.length, e.key === 'ArrowDown' ? 1 : -1));
+        return;
+      }
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+        e.preventDefault();
+        pick(palette.items[activeIndex]);
+        return;
+      }
+    }
     if (e.key === 'Escape') {
-      setShowCommands(false);
+      if (palette.mode !== 'closed') setDismissed(true);
       return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -36,51 +111,19 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
   };
 
   const handleInputChange = (e) => {
-    const val = e.target.value;
-    setInputText(val);
-    setShowCommands(val.startsWith('/') && SLASH_COMMANDS.length > 0);
-  };
-
-  const handleSend = () => {
-    if (isLoading) return; // blocked while loading (use Stop button instead)
-
-    const trimmed = inputText.trim();
-    if (!trimmed && attachments.length === 0) return;
-
-    // ── Long message warning ─────────────────────────────────────────────────
-    if (trimmed.length > MAX_CHARS && !showCharWarning) {
-      setShowCharWarning(true);
-      return; // show warning; user must click Send again to confirm
-    }
-
-    setShowCharWarning(false);
-    const attachmentData = attachments.map(a => ({ data: a.data, mimeType: a.mimeType }));
-    onSendMessage(trimmed || 'Analyze this image', attachmentData);
-    setInputText('');
-    setAttachments([]);
-    setShowCommands(false);
-    if (textAreaRef.current) textAreaRef.current.style.height = '56px';
-  };
-
-  const handleStop = () => {
-    if (onCancel) onCancel();
-  };
-
-  const selectCommand = (trigger) => {
-    setInputText(trigger);
-    setShowCommands(false);
-    onSendMessage(trigger, []);
-    setInputText('');
+    setInputText(e.target.value);
+    setDismissed(false);
+    setActive(0);
+    if (showCharWarning) setShowCharWarning(false);
   };
 
   const handleFileSelect = async (e) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files || []);
     if (!files.length) return;
-
+    const room = 3 - attachments.length;
     const newAttachments = [];
     const errors = [];
-
-    for (const file of files.slice(0, 3)) {
+    for (const file of files.slice(0, Math.max(0, room))) {
       try {
         const processed = await preprocessImage(file);
         newAttachments.push({
@@ -94,12 +137,9 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
         errors.push(`${file.name}: ${err.code === 'TOO_LARGE' ? 'too large after compression' : err.code === 'UNSUPPORTED' ? 'not a supported image' : 'could not read'}`);
       }
     }
-
-    if (errors.length) {
-      // Use whatever toast/banner system the app already has; if none, console.warn is OK
-      console.warn('[VISION] some files rejected:', errors);
-    }
-
+    if (files.length > room) errors.push(`Only 3 screenshots per message — ${files.length - Math.max(0, room)} skipped.`);
+    // Rejections used to be console-only, so a dropped file vanished silently.
+    setRejected(errors);
     setAttachments(prev => [...prev, ...newAttachments].slice(0, 3));
     e.target.value = '';
   };
@@ -115,142 +155,128 @@ export default function ChatInput({ onSendMessage, onCancel, isLoading, SLASH_CO
 
   const charCount = inputText.length;
   const isOverLimit = charCount > MAX_CHARS;
+  const canSend = !!(inputText.trim() || attachments.length);
+  const placeholder = isLoading
+    ? 'Researching — press Stop to cancel'
+    : attachments.length > 0
+      ? 'Describe what you need help with, or just send the screenshot'
+      : stealthMode
+        // Reinforce the incognito cue where the typing happens — the banner
+        // can scroll out of view, this never does.
+        ? 'Stealth — nothing here is saved'
+        : gameName
+          ? `Ask about ${gameName}…`
+          : 'Ask about any game — try /help';
 
   return (
-    <div className="input-area-wrapper">
-      {/* Long-message warning banner */}
+    <div className={`cx-compose${stealthMode ? ' is-stealth' : ''}`}>
+      {palette.mode !== 'closed' && (
+        <CommandPalette
+          id={paletteId}
+          mode={palette.mode}
+          items={palette.items}
+          active={activeIndex}
+          onPick={pick}
+          onHover={setActive}
+        />
+      )}
+
       {showCharWarning && (
-        <div className="char-warning animate-fade-in">
-          <AlertTriangle size={15} />
+        <div className="cx-notice" role="alert">
+          <AlertTriangle size={15} aria-hidden="true" />
           <span>
-            Your message is <strong>{charCount.toLocaleString()} characters</strong> — this uses more AI credits.
-            &nbsp;<button className="char-warning-confirm" onClick={handleSend}>Send anyway</button>
-            &nbsp;<button className="char-warning-cancel" onClick={() => setShowCharWarning(false)}>Edit</button>
+            Your message is <strong>{charCount.toLocaleString()} characters</strong> — long messages use more of your daily limit.
           </span>
+          <button type="button" className="cx-notice__action" onClick={handleSend}>Send anyway</button>
+          <button type="button" className="cx-notice__action is-quiet" onClick={() => setShowCharWarning(false)}>Edit</button>
         </div>
       )}
 
-      {/* Attachment previews */}
+      {rejected.length > 0 && (
+        <div className="cx-notice" role="alert">
+          <AlertTriangle size={15} aria-hidden="true" />
+          <span>{rejected.join(' · ')}</span>
+          <button type="button" className="cx-notice__action is-quiet" onClick={() => setRejected([])}>Dismiss</button>
+        </div>
+      )}
+
       {attachments.length > 0 && (
-        <div className="attachment-previews animate-fade-in">
+        <ul className="cx-attachments" aria-label="Attached screenshots">
           {attachments.map((attachment, index) => (
-            <div key={index} className="attachment-preview">
-              <img src={attachment.previewUrl} alt={`Attachment ${index + 1}`} />
+            <li key={attachment.previewUrl} className="cx-attachment">
+              <img src={attachment.previewUrl} alt={`Screenshot ${index + 1}`} />
               <button
                 type="button"
-                className="attachment-remove"
+                className="cx-attachment__remove"
                 onClick={() => removeAttachment(index)}
-                aria-label={`Remove attachment ${index + 1}`}
+                aria-label={`Remove screenshot ${index + 1}`}
               >
-                <X size={14} />
+                <X size={13} />
               </button>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
-      <div className="input-area">
+      <div className="cx-bar">
         <button
           type="button"
-          className="upload-btn glass-panel"
+          className="cx-bar__icon"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading || attachments.length >= 3}
-          title="Attach image"
-          aria-label="Attach image screenshot or file"
+          aria-label={attachments.length >= 3 ? 'Three screenshots attached (the maximum)' : 'Attach screenshots'}
+          title="Attach screenshots"
         >
-          <Paperclip size={20} />
+          <Paperclip size={18} />
         </button>
-
         <input
           ref={fileInputRef}
           type="file"
           accept="image/*"
           multiple
           onChange={handleFileSelect}
-          style={{ display: 'none' }}
-          aria-label="Upload image file"
+          hidden
           tabIndex={-1}
         />
 
+        <label className="sr-only" htmlFor={`${paletteId}-input`}>Message GameGuide</label>
         <textarea
+          id={`${paletteId}-input`}
           ref={textAreaRef}
-          className={`chat-input glass-panel ${isOverLimit ? 'chat-input--over-limit' : ''}`}
-          placeholder={
-            isLoading
-              ? 'Generating response... (press Stop to cancel)'
-              : attachments.length > 0
-                ? 'Describe what you need help with, or just send the image...'
-                : stealthMode
-                  // Reinforce the incognito cue at the point of typing — the
-                  // banner can scroll out of view, this never does.
-                  ? '🥷 Stealth mode — nothing here is saved...'
-                  : 'Ask anything about games, lore, or technical issues... (try /help)'
-          }
+          className={`cx-bar__input${isOverLimit ? ' is-over' : ''}`}
+          rows={1}
+          placeholder={placeholder}
           value={inputText}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           disabled={isLoading}
+          aria-autocomplete="list"
+          aria-controls={palette.mode === 'browse' ? paletteId : undefined}
+          aria-activedescendant={palette.mode === 'browse' ? `${paletteId}-${activeIndex}` : undefined}
         />
 
-        {/* Character counter — shown when approaching limit */}
         {charCount > MAX_CHARS * 0.7 && !isLoading && (
-          <div className={`char-counter ${isOverLimit ? 'char-counter--over' : ''}`}>
+          <span className={`cx-bar__count${isOverLimit ? ' is-over' : ''}`} aria-live="polite">
             {charCount}/{MAX_CHARS}
-          </div>
+          </span>
+        )}
+        {!isLoading && !inputText && (
+          <span className="cx-bar__hint" aria-hidden="true"><kbd>/</kbd>commands</span>
         )}
 
-        {/* Send / Stop button */}
         {isLoading ? (
-          <button
-            type="button"
-            className="stop-btn glass-panel animate-pulse-stop"
-            onClick={handleStop}
-            title="Stop generating response"
-            aria-label="Stop generating response"
-          >
-            <Square size={18} fill="currentColor" />
+          <button type="button" className="cx-bar__stop" onClick={onCancel} aria-label="Stop generating" title="Stop generating">
+            <Square size={15} fill="currentColor" />
           </button>
         ) : (
-          <button
-            type="button"
-            className="send-btn glass-panel"
-            onClick={handleSend}
-            disabled={(!inputText.trim() && attachments.length === 0) || isLoading}
-            aria-label="Send message"
-            title="Send message"
-          >
-            <SendHorizonal size={24} />
+          <button type="button" className="cx-bar__send" onClick={handleSend} disabled={!canSend} aria-label="Send message" title="Send">
+            <ArrowUp size={18} strokeWidth={2.4} />
           </button>
         )}
       </div>
-
-      {/* Slash Command Palette */}
-      {showCommands && (
-        <div className="command-palette glass-panel animate-fade-in">
-          <div className="command-palette-header">
-            <span>⚡ Commands</span>
-            <button className="command-palette-close" onClick={() => setShowCommands(false)}>✕</button>
-          </div>
-          {SLASH_COMMANDS
-            .filter(cmd => {
-              const typed = inputText.toLowerCase();
-              return typed === '/' || cmd.trigger.startsWith(typed);
-            })
-            .map((cmd) => (
-              <button
-                key={cmd.trigger}
-                className="command-item"
-                onMouseDown={(e) => { e.preventDefault(); selectCommand(cmd.trigger); }}
-              >
-                <span className="command-emoji">{cmd.emoji}</span>
-                <span className="command-trigger">{cmd.trigger}</span>
-                <ChevronRight size={12} className="command-arrow" />
-                <span className="command-desc">{cmd.description}</span>
-              </button>
-            ))
-          }
-        </div>
-      )}
+      <span className="sr-only" role="status" aria-live="polite">
+        {palette.mode === 'browse' ? `${palette.items.length} command${palette.items.length === 1 ? '' : 's'}` : ''}
+      </span>
     </div>
   );
 }

@@ -1,20 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import './App.css';
-import { Gamepad2, Radio, BookOpen, DollarSign, Globe } from 'lucide-react';
-import ThemeSelector, { THEME_IDS, themes as THEME_LIST } from './components/ThemeSelector';
-import UserProfile from './components/UserProfile';
-import ChatContainer from './components/ChatContainer';
-import ChatInput from './components/ChatInput';
-import PriceBadge from './components/PriceBadge';
+import './styles/chrome.css';
+import { THEME_IDS, themes as THEME_LIST } from './components/ThemeSelector';
 import useChat from './hooks/useChat';
 import useAuth from './hooks/useAuth';
-import LoadingScreen from './components/LoadingScreen';
 import LandingPage from './components/LandingPage';
 import InfoPage from './components/InfoPage';
 import ThemeTransition, { THEME_TRANSITION_DURATION, VARIANTS as FX_VARIANTS } from './components/ThemeTransition';
 import Crosshair from './components/Crosshair';
 import usePerfMode from './hooks/usePerfMode';
-import FeedbackButton from './components/FeedbackButton';
+import CodexShell from './components/codex/CodexShell';
 
 // Hash-routable static views. Anything outside this set falls back to landing
 // (so a stale or unknown hash never strands the user on a blank page).
@@ -67,7 +61,7 @@ function App() {
   // can't keep 48fps so every page can strip heavy effects via CSS.
   usePerfMode();
   const { user, loading: authLoading } = useAuth();
-  const { messages, isLoading, sendMessage, cancelRequest, redditActive, wikiActive, webActive, priceActive, priceData, SLASH_COMMANDS, stealthMode, streamStage } = useChat(user);
+  const chat = useChat(user);
 
   const [showLoader, setShowLoader] = useState(true);
   const [exitingLoader, setExitingLoader] = useState(false);
@@ -236,95 +230,24 @@ function App() {
     );
   } else {
     viewBody = (
-      <div className="app-container">
-        {showLoader && <LoadingScreen isExiting={exitingLoader} />}
-        <header className="main-header">
-        <button
-          type="button"
-          className="brand brand--button"
-          onClick={goLanding}
-          aria-label="Return to home"
-          title="Return to home"
-        >
-          <Gamepad2 className="brand-icon" size={32} />
-          <h1>GameGuide-AI</h1>
-          <div className="intel-badges">
-            {redditActive && (
-              <div className="community-badge animate-fade-in">
-                <Radio size={14} />
-                <span>Community Intel</span>
-              </div>
-            )}
-            {wikiActive && (
-              <div className="community-badge wiki-badge animate-fade-in">
-                <BookOpen size={14} />
-                <span>Wiki Intel</span>
-              </div>
-            )}
-            {webActive && (
-              <div className="community-badge web-badge animate-fade-in">
-                <Globe size={14} />
-                <span>Web Intel</span>
-              </div>
-            )}
-            {priceActive && (
-              <div className="community-badge price-badge animate-fade-in">
-                <DollarSign size={14} />
-                <span>Live Prices</span>
-              </div>
-            )}
-          </div>
-        </button>
-        <div className="header-controls">
-          <ThemeSelector currentTheme={theme} onThemeChange={handleThemeChange} />
-          <UserProfile />
-        </div>
-      </header>
-
-      <main className="chat-wrapper">
-        
-        {/* Persistent incognito cue. Must stay visible for the whole session —
-            the /stealth confirmation message scrolls away, and a user who
-            can't tell whether they're being recorded has no privacy guarantee. */}
-        {stealthMode && (
-          <div className="stealth-banner" role="status" aria-live="polite">
-            <span className="stealth-banner__icon" aria-hidden="true">🥷</span>
-            <span>
-              <strong>Stealth mode</strong> — this conversation isn&apos;t being saved.
-              Run <code>/stealth</code> to exit and discard it.
-            </span>
-          </div>
-        )}
-
-        <ChatContainer
-          messages={messages}
-          isLoading={isLoading}
-          streamStage={streamStage}
-          onFollowUpClick={(question) => sendMessage(question, [])}
-        />
-        {priceActive && <PriceBadge priceData={priceData} />}
-        <ChatInput onSendMessage={sendMessage} onCancel={cancelRequest} isLoading={isLoading} SLASH_COMMANDS={SLASH_COMMANDS} stealthMode={stealthMode} />
-      </main>
-
-      {/* Floating feedback button — fixed position, visible in the chat view */}
-      <FeedbackButton sessionId={user?.id || null} />
-
-      <footer className="chat-footer">
-        <button type="button" onClick={() => navigate('about')}>About</button>
-        <span className="chat-footer__sep">·</span>
-        <button type="button" onClick={() => navigate('terms')}>Terms</button>
-        <span className="chat-footer__sep">·</span>
-        <button type="button" onClick={() => navigate('contacts')}>Contact</button>
-        <span className="chat-footer__sep">·</span>
-        <span className="chat-footer__copy">© 2026 GameGuide-AI</span>
-      </footer>
-    </div>
+      <CodexShell
+        user={user}
+        chat={chat}
+        theme={theme}
+        onThemeChange={handleThemeChange}
+        onHome={goLanding}
+        navigate={navigate}
+        showLoader={showLoader}
+        exitingLoader={exitingLoader}
+      />
     );
   }
 
   return (
     <>
-      <Crosshair />
+      {/* The reticle suits the landing and info pages; the chat is for reading
+          and selecting text, so it keeps the normal cursor. */}
+      {view !== 'chat' && <Crosshair />}
       {viewBody}
       {fxOverlay}
     </>

@@ -4,10 +4,11 @@ import FeedbackModal from './FeedbackModal';
 
 /**
  * Floating feedback trigger button.
- * Renders a pill button fixed to the bottom-right of the viewport.
+ * A pill fixed to the bottom-right of the viewport, or (inline) a quiet link
+ * in the chat's footer row — the pill would sit on top of the command bar.
  * Clicking it opens the FeedbackModal.
  */
-export default function FeedbackButton({ sessionId }) {
+export default function FeedbackButton({ sessionId, inline = false }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -15,7 +16,7 @@ export default function FeedbackButton({ sessionId }) {
       <button
         id="feedback-trigger-btn"
         type="button"
-        className="fb-trigger-btn"
+        className={inline ? 'cx-foot__feedback' : 'fb-trigger-btn'}
         onClick={() => setOpen(true)}
         aria-label="Send feedback"
         title="Send Feedback"

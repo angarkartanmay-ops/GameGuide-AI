@@ -1,73 +1,77 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
+import ResearchBlock from './codex/ResearchBlock';
+import EmptyState from './codex/EmptyState';
 
-// Retrieval runs before the first token exists, so the wait is several seconds
-// of nothing. Naming the stage turns a blank spinner into visible progress.
-const STAGE_COPY = {
-  'searching': 'Searching live sources…',
-  'scanning-sources': 'Reading wikis, patch notes and community threads…',
-  'reading-image': 'Reading your screenshot…',
-  'identifying-game': 'Identifying the game…',
-  'generating': 'Thinking…',
-  'streaming': 'Writing…',
-};
+const NEAR_BOTTOM_PX = 140;
 
-function stageLabel(streamStage) {
-  if (!streamStage) return null;
-  // The hook encodes an optional detail as "stage:detail" (e.g. the game name).
-  const [stage, detail] = String(streamStage).split(':');
-  const base = STAGE_COPY[stage];
-  if (!base) return null;
-  return detail ? `${base.replace(/…$/, '')} (${detail})…` : base;
-}
+/**
+ * The transcript. Scroll follows new text only while the reader is already
+ * near the bottom — scrolled up to re-read something, they stay put — and
+ * always jumps down when they send. The old smooth scrollIntoView ran on every
+ * streamed token, which both fought the reader and forced a layout per token.
+ */
+export default function ChatContainer({
+  messages, isLoading, streamStage, onFollowUpClick, gameName, intel, onAsk, onDraft, onAttach, stealthMode,
+}) {
+  const scrollRef = useRef(null);
+  const stick = useRef(true);
+  const lastCount = useRef(messages.length);
 
-export default function ChatContainer({ messages, isLoading, streamStage, onFollowUpClick }) {
-  const endOfMessagesRef = useRef(null);
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+  };
 
-  useEffect(() => {
-    endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  const last = messages[messages.length - 1];
+  const streaming = messages.some((m) => m.streaming);
+  // Research shows only between the question and the first token — never
+  // while history loads (isLoading is also true then) or once text streams.
+  const researching = isLoading && !streaming && last?.sender === 'user';
+  const loadingHistory = isLoading && messages.length === 0;
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const sentNew = messages.length > lastCount.current && last?.sender === 'user';
+    lastCount.current = messages.length;
+    if (sentNew) stick.current = true;
+    if (stick.current) el.scrollTop = el.scrollHeight;
+  }, [messages, researching, last?.sender]);
 
   return (
-    <div className="messages-area glass-panel">
-      {messages.length === 0 ? (
-        <div style={{ textAlign: 'center', color: 'var(--text-secondary)', marginTop: '2rem' }}>
-          <h2>Welcome to GameGuide-AI</h2>
-          <p>The ultimate gamers support system. Ask your query below!</p>
-        </div>
-      ) : (
-        messages.map((msg) => (
+    <div className="cx-scroll" ref={scrollRef} onScroll={onScroll}>
+      <div
+        className="cx-column"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        aria-busy={streaming || undefined}
+        aria-label="Conversation"
+      >
+        {messages.length === 0 && !isLoading && (
+          <EmptyState onAsk={onAsk} onDraft={onDraft} onAttach={onAttach} stealthMode={stealthMode} />
+        )}
+        {loadingHistory && (
+          <div className="cx-skeleton cx-skeleton--history" aria-label="Loading your conversation">
+            <span style={{ width: '40%', marginLeft: 'auto' }} />
+            <span style={{ width: '92%' }} />
+            <span style={{ width: '76%' }} />
+          </div>
+        )}
+        {messages.map((msg) => (
           <MessageBubble
             key={msg.id}
             message={msg}
             onFollowUpClick={onFollowUpClick}
+            followUpsDisabled={isLoading}
           />
-        ))
-      )}
-      
-      {/* isLoading stays true for the whole request, including while tokens are
-          streaming — so once a streaming message exists this indicator would
-          render a second time underneath the partial answer. Suppress it as
-          soon as the first delta lands. */}
-      {isLoading && !messages.some((m) => m.streaming) && (
-        <div className="message-bubble-container ai animate-fade-in">
-          <div className="message-bubble ai glass-panel">
-            <div className="message-avatar">...</div>
-            <div className="loading-indicator">
-              <div className="loading-dot"></div>
-              <div className="loading-dot"></div>
-              <div className="loading-dot"></div>
-            </div>
-            {stageLabel(streamStage) && (
-              <span className="loading-stage" aria-live="polite">
-                {stageLabel(streamStage)}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-      
-      <div ref={endOfMessagesRef} />
+        ))}
+        {researching && (
+          <ResearchBlock streamStage={streamStage} game={gameName} {...intel} />
+        )}
+      </div>
     </div>
   );
 }

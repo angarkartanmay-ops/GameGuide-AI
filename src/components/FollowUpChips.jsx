@@ -1,5 +1,5 @@
 import React from 'react';
-import { HelpCircle } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 /**
  * Parses [?] follow-up questions from AI response text.
@@ -54,26 +54,27 @@ export function parseFollowUps(text) {
   return { cleanText, followUps };
 }
 
-export default function FollowUpChips({ followUps, onChipClick }) {
+/**
+ * "Ask next" — the answer's follow-up questions as quiet links. Disabled while
+ * a request is running: useChat has no concurrency guard, so a click
+ * mid-stream would start a second request on top of the first.
+ */
+export default function FollowUpChips({ followUps, onChipClick, disabled = false }) {
   if (!followUps || followUps.length === 0) return null;
 
   return (
-    <div className="followup-chips">
-      <div className="followup-label">
-        <HelpCircle size={14} />
-        <span>You might also want to ask:</span>
-      </div>
-      <div className="followup-list">
+    <div className="cx-next">
+      <span className="cx-label">Ask next</span>
+      <ul>
         {followUps.map((question, index) => (
-          <button
-            key={index}
-            className="followup-chip glass-panel"
-            onClick={() => onChipClick(question)}
-          >
-            {question}
-          </button>
+          <li key={index}>
+            <button type="button" className="cx-next__link" onClick={() => onChipClick(question)} disabled={disabled}>
+              <ArrowRight size={15} aria-hidden="true" />
+              <span>{question}</span>
+            </button>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }

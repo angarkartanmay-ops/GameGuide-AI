@@ -34,6 +34,15 @@ export default function ThemeSelector({ currentTheme, onThemeChange }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Esc closes the menu and hands focus back to the trigger.
+  const triggerRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') { setOpen(false); triggerRef.current?.focus(); } };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
   // Forward the pointer event so the parent can radiate the transition from
   // the actual click point. Keyboard / programmatic selection falls back to
   // viewport center in App.jsx.
@@ -45,19 +54,27 @@ export default function ThemeSelector({ currentTheme, onThemeChange }) {
   return (
     <div className="theme-dropdown" ref={dropdownRef}>
       <button
+        ref={triggerRef}
+        type="button"
         className="theme-dropdown-trigger glass-panel"
         onClick={() => setOpen(!open)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Theme: ${currentLabel}`}
       >
-        <Palette size={16} />
+        <Palette size={16} aria-hidden="true" />
         <span className="theme-dropdown-trigger__label">{currentLabel}</span>
         <ChevronDown size={14} className={`dropdown-chevron ${open ? 'rotated' : ''}`} />
       </button>
 
       {open && (
-        <div className="theme-dropdown-menu glass-panel animate-fade-in">
+        <div className="theme-dropdown-menu glass-panel animate-fade-in" role="menu" aria-label="Themes">
           {themes.map((theme) => (
             <button
               key={theme.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={currentTheme === theme.id}
               className={`theme-dropdown-item ${currentTheme === theme.id ? 'active' : ''}`}
               onClick={(e) => handleSelect(theme.id, e)}
               style={{ '--theme-accent': theme.accent, '--theme-accent-2': theme.accent2 }}
