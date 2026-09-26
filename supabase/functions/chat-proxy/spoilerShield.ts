@@ -196,32 +196,27 @@ export function extractProgress(text: string, game: string | null): string | nul
   return null;
 }
 
-// Loose on purpose: used only to separate cache entries, where a false positive
-// costs a cache miss and a false negative serves someone else's spoiler state.
-const PROGRESS_HINT_RX = /\b(?:just\s+(?:beat|defeated|reached|got|cleared|finished)|i'?m\s+(?:at|on|in|up\s+to|stuck)|stuck\s+(?:on|at|in)|chapter|act\s+\w+|mission|episode|%\s+through|spoil\w*|playthrough|ng\s?\+|finished|beat\s+the\s+game|rolled\s+credits)\b/i;
-
-/**
- * The user turns that could change what the shield hides. Folded into the
- * shared response cache key: the key only covers the last two messages, so a
- * progress statement three turns back would otherwise let two players with
- * different positions share one cached answer.
- */
-export function progressFingerprint(history: ShieldInput['history']): string {
-  return (history || [])
-    .filter((m): m is { sender?: string; text?: string } => !!m && typeof m.text === 'string')
-    .filter(m => (!m.sender || m.sender === 'user') && PROGRESS_HINT_RX.test(m.text as string))
-    .slice(-8)
-    .map(m => (m.text as string).slice(0, 160))
-    .join('|');
-}
-
 // ── Resolution ─────────────────────────────────────────────────────────────
 
+const normTitle = (s: string) => s.toLowerCase().replace(/['’]/g, '').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/** Same title, or one is a whole-word part of the other ("witcher 3" / "the witcher 3"). */
 function sameGame(a: string | undefined | null, b: string | null): boolean {
   if (!a || !b) return false;
-  const x = a.toLowerCase().trim();
-  const y = b.toLowerCase().trim();
-  return x === y || x.includes(y) || y.includes(x);
+  const x = normTitle(a);
+  const y = normTitle(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const [short, long] = x.length < y.length ? [x, y] : [y, x];
+  // A substring match let a stored key like "ring" claim every game with
+  // "ring" in its name. Only a multi-word title may match as a whole-word part.
+  return short.includes(' ') && ` ${long} `.includes(` ${short} `);
+}
+
+/** Does this text name the game? Whole words, punctuation-insensitive. */
+function mentionsGame(text: string, game: string): boolean {
+  const g = normTitle(game);
+  return !!g && ` ${normTitle(text)} `.includes(` ${g} `);
 }
 
 export function resolveShield(input: ShieldInput): ShieldState {
@@ -243,8 +238,22 @@ export function resolveShield(input: ShieldInput): ShieldState {
   const fromPrompt = extractProgress(prompt, game);
   if (fromPrompt) { progress = fromPrompt; source = 'prompt'; }
 
-  const userTurns = (input.history || [])
-    .filter((m): m is { sender?: string; text?: string } => !!m && typeof m.text === 'string')
+  // History only speaks for THIS game from the point the conversation reached
+  // it. Before, "I finished the game" about Elden Ring switched the shield OFF
+  // when the next question was about Dark Souls 3, and "I just beat Margit"
+  // became the player's position in it.
+  const turns = (input.history || [])
+    .filter((m): m is { sender?: string; text?: string } => !!m && typeof m.text === 'string');
+  let from = 0;
+  if (game) {
+    const first = turns.findIndex(m => mentionsGame(m.text as string, game));
+    if (first >= 0) from = first;
+    else if (mentionsGame(prompt, game)) from = turns.length;   // named for the first time now
+    // ponytail: earliest mention, not last switch — ER → DS3 → ER still lets
+    // the DS3 turns in between count. Needs per-turn game attribution to fix.
+  }
+  const userTurns = turns
+    .slice(from)
     .filter(m => !m.sender || m.sender === 'user')
     .slice(-8)
     .reverse();

@@ -4,7 +4,7 @@
 // streaming (the answer is on screen before the closing "||" arrives) and
 // markdown that legitimately contains "||" (code, table rows).
 
-import { toSpoilerMarkdown, hasSpoilers, SPOILER_HREF } from '../src/utils/spoilerText.js';
+import { toSpoilerMarkdown, SPOILER_HREF } from '../src/utils/spoilerText.js';
 
 let passed = 0;
 let failed = 0;
@@ -75,8 +75,11 @@ eq('line starting with a spoiler is not a table row',
 }
 
 // ── detection ──────────────────────────────────────────────────────────────
-check('hasSpoilers true', hasSpoilers('x ||y||'));
-check('hasSpoilers false', !hasSpoilers('x | y'));
+
+{
+  const out = toSpoilerMarkdown('x ||**Radagon** [wiki](https://w.com/Radagon)|| y');
+  check('a link inside a spoiler is flattened, not left as raw markdown', out.includes('wiki (https://w.com/Radagon)') && !out.includes('](https://w.com'), out);
+}
 
 console.log(`spoiler-text: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

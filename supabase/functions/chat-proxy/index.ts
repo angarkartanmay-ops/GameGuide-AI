@@ -14,7 +14,7 @@ import {
 import { corroborate, CorroborationInput } from './corroboration.ts';
 import { stripReasoning, createReasoningFilter } from './reasoning.ts';
 import {
-  resolveShield, buildShieldDirective, buildShieldReminder, buildSpoilItNote, shieldChips, progressFingerprint,
+  resolveShield, buildShieldDirective, buildShieldReminder, buildSpoilItNote, shieldChips,
   shieldPersonaOverlay,
   ClientSpoilerContext, ShieldState,
 } from './spoilerShield.ts';
@@ -987,7 +987,12 @@ async function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs: numbe
 //  CACHE LAYER (in-memory per Deno isolate, 5-min TTL)
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface CacheEntry { text: string; provider: string; model: string; persona: string; ts: number; sources: string[]; }
+interface CacheEntry {
+  text: string; provider: string; model: string; persona: string; ts: number; sources: string[];
+  // Replayed on a hit: without it a cached answer lost its shield chip, the
+  // Discord 🛡️ footer, and the "learned" progress the client should save.
+  spoiler?: { mode: string; active: boolean; game: string | null; progress: string | null; learned: boolean };
+}
 const responseCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -2593,8 +2598,11 @@ async function runChatPipeline(
             progress: body.spoiler.progress && typeof body.spoiler.progress === 'object'
               ? Object.fromEntries(
                   Object.entries(body.spoiler.progress)
-                    .filter(([k, v]) => typeof k === 'string' && typeof v === 'string')
-                    .slice(0, 50),
+                    .filter(([k, v]) => typeof k === 'string' && typeof v === 'string' && k.trim().length >= 2)
+                    .slice(0, 50)
+                    // Bounded before it is hashed into the cache key and matched
+                    // against game names; sanitizeProgress trims values again.
+                    .map(([k, v]) => [k.slice(0, 120), (v as string).slice(0, 200)]),
                 ) as Record<string, string>
               : {},
           }
@@ -2716,7 +2724,11 @@ async function runChatPipeline(
     const personalization = JSON.stringify({
       profile: playerProfile ?? null,
       spoiler: clientSpoiler,
-      progress: progressFingerprint(boundedHistory),
+      // The whole conversation, not a fingerprint of "progress-looking" turns:
+      // the shield depends on which turn first named the game, so two chats
+      // with the same last two turns could need opposite shields — and share
+      // one cached answer. Hashed, so length is no concern.
+      history: boundedHistory.map(m => [m?.sender ?? '', String(m?.text ?? '')]),
     });
     const earlyCacheKey = await cacheKey(prompt, boundedHistory, redditContext, wikiContext, priceContext, cleanAttachments, personalization);
     const earlyCached = responseCache.get(earlyCacheKey);
@@ -2733,6 +2745,7 @@ async function runChatPipeline(
           cached: true,
           latencyMs: Date.now() - startTime,
           cortex: 'v4.2-vision-refusal',
+          ...(earlyCached.spoiler ? { spoiler: { ...earlyCached.spoiler, learned: earlyCached.spoiler.learned && !ephemeral } } : {}),
         },
       });
     }
@@ -3028,6 +3041,7 @@ async function runChatPipeline(
           sources: cached.sources || [],
           cached: true,
           latencyMs: Date.now() - startTime,
+          ...(cached.spoiler ? { spoiler: { ...cached.spoiler, learned: cached.spoiler.learned && !ephemeral } } : {}),
         },
       });
     }
@@ -3187,6 +3201,7 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
       persona: profile.persona.name,
       ts: Date.now(),
       sources: sourcesList,
+      spoiler: { mode: shield.mode, active: shield.active, game: shield.game, progress: shield.progress, learned: shield.learned },
     });
 
     // Durable trace so "why did it answer that?" stays answerable after the

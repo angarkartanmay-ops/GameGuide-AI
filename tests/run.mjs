@@ -24,6 +24,7 @@ const SUITES = [
   ['spoiler-text',  'spoiler-text.test.mjs'],  // web ||spoiler|| rendering incl. streaming
   ['textsplit',     'textsplit.test.mjs'],     // Discord chunking never exposes a spoiler
   ['watchtower',    'watchtower.test.mjs'],    // patch/deal alerts: once per channel, no backfill
+  ['watch-command', 'watch-command.test.mjs'], // the real /watch handler, fake Discord
   ['corroboration', 'corroboration.test.ts'],  // source-agreement scoring
   ['ssrf',          'ssrf.test.mjs'],          // wiki-proxy subdomain validation
   ['eval',          'eval/pipeline.test.mjs'], // golden-set retrieval + routing accuracy

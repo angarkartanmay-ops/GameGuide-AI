@@ -713,8 +713,11 @@ async function summarizeForWatch(gameName, item) {
     // Billed to the bot's own bucket, never to a member's quota.
     discordUserId: client.user?.id,
     tier: 'free',
-    // Posted in a shared channel: story DLC reveals stay behind bars.
-    spoiler: { mode: 'shield', progress: {}, publicChannel: true },
+    // Posted in a shared channel: story DLC reveals stay behind bars. Mode
+    // 'off' + publicChannel is the "full answer, reveals barred" shield — with
+    // 'shield', notes that merely mention a story quest or an ending made the
+    // post close with "Tell me where you are…", addressed to nobody.
+    spoiler: { mode: 'off', progress: {}, publicChannel: true },
     stateless: true,
   });
   return data?._meta?.error ? null : data.text;
@@ -1106,9 +1109,20 @@ client.on('interactionCreate', async (interaction) => {
         if (sub === 'remove') {
           const q = cleanField(interaction.options.getString('game', true), 80).toLowerCase();
           const rows = await watchRepo.listGuildWatches(guildId);
-          const hits = rows.filter(w => w.game_name.toLowerCase().includes(q) || String(w.steam_appid) === q);
+          // Exact name (or app id) first; a partial match only when it names a
+          // single game. `includes` alone let "e" delete every watch with an e.
+          const exact = rows.filter(w => w.game_name.toLowerCase() === q || String(w.steam_appid) === q);
+          const partial = rows.filter(w => w.game_name.toLowerCase().includes(q));
+          const hits = exact.length ? exact
+            : new Set(partial.map(w => w.steam_appid)).size === 1 ? partial : [];
           if (!hits.length) {
-            return interaction.reply({ content: `📡 Nothing here matches **${q}**. See what's watched with \`/watch list\`.`, flags: MessageFlags.Ephemeral });
+            const names = [...new Set(partial.map(w => w.game_name))];
+            return interaction.reply({
+              content: names.length > 1
+                ? `📡 **${q}** matches ${names.map(n => `**${n}**`).join(', ')} — use the full name.`
+                : `📡 Nothing here matches **${q}**. See what's watched with \`/watch list\`.`,
+              flags: MessageFlags.Ephemeral,
+            });
           }
           await watchRepo.deleteWatches(hits.map(w => w.id));
           return interaction.reply({
@@ -1121,6 +1135,12 @@ client.on('interactionCreate', async (interaction) => {
         const target = interaction.options.getChannel('channel') || interaction.channel;
         if (!target || ![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(target.type)) {
           return interaction.reply({ content: '📡 Pick a text or announcement channel (use the `channel` option), not a thread or voice chat.', flags: MessageFlags.Ephemeral });
+        }
+        // /watch can be granted to a mod role, so the channel option must not
+        // let someone point the bot at a channel they couldn't post in.
+        const own = target.permissionsFor?.(interaction.member);
+        if (!own?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
+          return interaction.reply({ content: `⚠️ You can't post in <#${target.id}> yourself, so I won't post there for you.`, flags: MessageFlags.Ephemeral });
         }
         const perms = target.permissionsFor?.(client.user);
         const missing = WATCH_POST_PERMS.filter(p => !perms?.has(p));

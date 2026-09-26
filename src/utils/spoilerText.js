@@ -53,6 +53,9 @@ function wrap(content) {
     .split(/\n[ \t]*\n/)
     .map(p => p.trim())
     .filter(Boolean)
+    // A spoiler is itself a link, and markdown links cannot nest: an inner
+    // [text](url) rendered as raw brackets once revealed. Keep it readable.
+    .map(p => p.replace(/\[([^\]\n]*)\]\(([^)\s]+)\)/g, '$1 ($2)'))
     .map(p => `[${escapeLinkText(p)}](${SPOILER_HREF})`)
     .join('\n\n');
 }
@@ -128,9 +131,4 @@ export function toSpoilerMarkdown(text) {
   }
   flush();
   return out.join('\n');
-}
-
-/** True when the text contains at least one spoiler span. */
-export function hasSpoilers(text) {
-  return !!text && /\|\|[^|]/.test(text);
 }

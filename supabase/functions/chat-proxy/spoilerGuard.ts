@@ -19,7 +19,7 @@
 //  the web client runs barEchoes while a reply is still streaming.
 // ═══════════════════════════════════════════════════════════════════════════
 
-type SegKind = 'text' | 'bar' | 'code' | 'link' | 'table';
+type SegKind = 'text' | 'bar' | 'code' | 'link' | 'url' | 'table';
 interface Seg { kind: SegKind; s: string }
 
 // Capitalised words and multi-word names ("Elden Beast", "Age of the Stars").
@@ -65,6 +65,12 @@ function segment(text: string): Seg[] {
         i = j;
         continue;
       }
+      // Not a table: take the whole run as text. Rescanning it from the next
+      // line made a reply of many "||…||" lines quadratic (15s at 20k lines,
+      // run on every streamed token in the browser).
+      buf.push(...block);
+      i = j;
+      continue;
     }
     buf.push(lines[i]);
     i++;
@@ -75,7 +81,9 @@ function segment(text: string): Seg[] {
 
 // Order matters: code first, so bars inside code are not bars. An unclosed
 // trailing "||" (a reply still streaming) counts as a bar to the end.
-const INLINE_RX = /```[\s\S]*?(?:```|$)|`[^`\n]*`|\|\|[\s\S]*?\|\||\|\|[\s\S]*$|\[[^\]\n]*\]\([^)\s]*\)/g;
+// Bare URLs are their own segment: rewriting a name inside one broke the link
+// ("…/||Malenia||+Blade") and still left the name readable in the address.
+const INLINE_RX = /```[\s\S]*?(?:```|$)|`[^`\n]*`|\|\|[\s\S]*?\|\||\|\|[\s\S]*$|\[[^\]\n]*\]\([^)\s]*\)|<https?:\/\/[^\s>]+>|https?:\/\/[^\s<>()\]|]+/g;
 
 function segmentInline(text: string): Seg[] {
   const out: Seg[] = [];
@@ -84,7 +92,7 @@ function segmentInline(text: string): Seg[] {
     const i = m.index ?? 0;
     if (i > last) out.push({ kind: 'text', s: text.slice(last, i) });
     const s = m[0];
-    const kind: SegKind = s.startsWith('`') ? 'code' : s.startsWith('||') ? 'bar' : 'link';
+    const kind: SegKind = s.startsWith('`') ? 'code' : s.startsWith('||') ? 'bar' : /^<?https?:/.test(s) ? 'url' : 'link';
     out.push({ kind, s });
     last = i + s.length;
   }
@@ -163,8 +171,12 @@ export function barEchoes(text: string, known: Array<string | null | undefined> 
   const names = barredNames(text, known);
   if (!names.length) return text;
   const rx = nameRx(names);
+  const hit = nameRx(names, 'iu');
   return segment(text)
-    .map(seg => (seg.kind === 'text' ? seg.s.replace(rx, '||$1||') : seg.s))
+    .map(seg => seg.kind === 'text' ? seg.s.replace(rx, '||$1||')
+      // A URL naming a hidden thing is hidden whole, still a working link.
+      : seg.kind === 'url' && hit.test(seg.s) ? `||${seg.s.replace(/^<|>$/g, '')}||`
+      : seg.s)
     .join('');
 }
 

@@ -150,6 +150,24 @@ eq('no game in context -> nothing to attach progress to', extractProgress('I jus
   check('"no spoilers" in the message beats a stored off setting', s.active && s.mode === 'progress');
 }
 
+// ── history belongs to the game it was about ───────────────────────────────
+{
+  const DS3 = 'dark souls 3';
+  const a = resolveShield({ prompt: 'who is the final boss of dark souls 3?', game: DS3,
+    history: [{ sender: 'user', text: 'I just beat Margit in Elden Ring' }] });
+  check('progress from another game is not carried over', a.progress === null && a.mode === 'unknown', JSON.stringify([a.mode, a.progress]));
+  const b = resolveShield({ prompt: 'who is the final boss of dark souls 3?', game: DS3,
+    history: [{ sender: 'user', text: 'I finished the game yesterday, Elden Ring was great' }] });
+  check('finishing another game does not switch the shield off', b.mode === 'unknown' && b.active, b.reason);
+  const c = resolveShield({ prompt: 'who is the final boss?', game: ER,
+    history: [{ sender: 'user', text: 'playing elden ring' }, { sender: 'user', text: 'I just beat Margit' }] });
+  check('same game later in the chat still counts', c.progress === 'beat Margit', String(c.progress));
+  const d = resolveShield({ prompt: 'best armor?', game: ER, client: { progress: { ring: 'chapter 9' } } });
+  check('a one-word key does not claim every title containing it', d.progress === null);
+  const e = resolveShield({ prompt: 'best armor?', game: 'the witcher 3', client: { progress: { 'Witcher 3': 'act 2' } } });
+  check('whole multi-word title still matches', e.progress === 'act 2', String(e.progress));
+}
+
 // ── directives ─────────────────────────────────────────────────────────────
 {
   const d = buildShieldDirective(resolveShield({ prompt: 'I just beat Margit, best weapon?', game: ER }));

@@ -38,11 +38,11 @@ function splitRaw(text, max) {
  * Spoiler bars that Discord will actually honour: code (inline or fenced)
  * shows "||" literally, so bars inside it don't count.
  */
-function countBars(text, inFence) {
+function countBars(text, opener) {
   let n = 0;
-  let fence = inFence;
+  let fence = opener;   // the ``` line that opened the current code block, or null
   for (const line of text.split('\n')) {
-    if (/^\s*```/.test(line)) { fence = !fence; continue; }
+    if (/^\s*```/.test(line)) { fence = fence ? null : line.trim(); continue; }
     if (fence) continue;
     const outsideCode = line.replace(/`+[^`]*`+/g, '');
     const m = outsideCode.match(/\|\|/g);
@@ -54,20 +54,25 @@ function countBars(text, inFence) {
 /**
  * @param {string} text
  * @param {number} [max=1900]  leaves room under Discord's 2000 for the bars
- *                             added here and for a footer line.
+ *                             and fences added here and for a footer line.
  * @returns {string[]}
  */
 function splitForDiscord(text, max = 1900) {
   if (!text) return [];
   const raw = splitRaw(text, max);
   let open = false;
-  let inFence = false;
+  let fence = null;
   return raw.map((chunk) => {
-    const reopened = open ? `||${chunk}` : chunk;
-    const { n, fence } = countBars(chunk, inFence);
-    inFence = fence;
-    if (n % 2 === 1) open = !open;
-    return open ? `${reopened}||` : reopened;
+    // A code block cut in two is closed at the end of one message and reopened
+    // (same language tag) at the start of the next — otherwise the second half
+    // arrived as loose text and every later "*" and "_" became formatting.
+    const startFence = fence;
+    const counted = countBars(chunk, fence);
+    fence = counted.fence;
+    const wasOpen = open;
+    if (counted.n % 2 === 1) open = !open;
+    return (wasOpen ? '||' : '') + (startFence ? `${startFence}\n` : '') + chunk
+      + (fence ? '\n```' : '') + (open ? '||' : '');
   });
 }
 

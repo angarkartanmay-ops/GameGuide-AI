@@ -71,5 +71,16 @@ check('empty input', splitForDiscord('').length === 0);
   check('no bars were invented around code', !chunks[0].startsWith('||'));
 }
 
+// A code block cut across messages is closed and reopened with its language.
+{
+  const code = Array.from({ length: 120 }, (_, i) => `const line${i} = compute(${i});`).join('\n');
+  const chunks = splitForDiscord(`Config:\n\`\`\`js\n${code}\n\`\`\`\nDone.`);
+  check('long code block needs two messages', chunks.length === 2, String(chunks.length));
+  const balanced = chunks.every(c => (c.match(/^\s*```/gm) || []).length % 2 === 0);
+  check('every message has balanced code fences', balanced, chunks.map(c => (c.match(/^\s*```/gm) || []).length).join());
+  check('the continuation keeps the language tag', chunks[1].startsWith('```js\n'));
+  check('every message fits Discord', chunks.every(c => c.length <= 2000));
+}
+
 console.log(`textsplit: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

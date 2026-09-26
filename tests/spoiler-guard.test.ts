@@ -96,6 +96,15 @@ const KNOWN = ['who is the final boss?', 'I just beat Margit in Elden Ring!', 'b
   check('text after a table still guarded', !shows(out.split(table)[1], 'Morgott'), out);
 }
 
+// ── URLs: never rewritten inside; hidden whole when they name a hidden thing ──
+{
+  const out = barEchoes('||Malenia is optional.||\n\nGuide: https://wiki.example.com/Malenia+Blade and <https://x.com/Malenia> and https://x.com/Godrick', KNOWN);
+  check('a URL naming a hidden thing is barred whole', out.includes('||https://wiki.example.com/Malenia+Blade||'), out);
+  check('autolink form barred whole, brackets dropped', out.includes('||https://x.com/Malenia||'), out);
+  check('a URL naming nothing hidden is untouched', out.includes(' https://x.com/Godrick'), out);
+  check('no bars inside a URL', !/\/\|\|/.test(out), out);
+}
+
 // ── word boundaries ──
 {
   const out = barEchoes('||Mohg is a late boss.||\n\nMohgwyn Palace is a place name, and so is Mohg.', KNOWN);
@@ -141,6 +150,16 @@ const KNOWN = ['who is the final boss?', 'I just beat Margit in Elden Ring!', 'b
   check('all chips dropped → no [?] left (caller appends safe ones)', !out.includes('[?]'), out);
 }
 check('no chips → unchanged', filterChips('Just text.', KNOWN) === 'Just text.');
+
+// ── linear time: the web client runs this on every streamed token ──
+{
+  const big = "That's past where you are.\n" + 'x\n'.repeat(20000);
+  const t = performance.now();
+  const out = guardShieldedReply(big, KNOWN);
+  const ms = performance.now() - t;
+  check('20k hidden lines guarded in well under a second', ms < 500, `${ms.toFixed(0)}ms`);
+  check('…and every line is still hidden', !/^x$/m.test(out));
+}
 
 // ── heads-up, then the answer in plain text, then a bar (seen live) ──
 {

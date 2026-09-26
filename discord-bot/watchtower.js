@@ -43,7 +43,6 @@ const POST_RETENTION_MS = 60 * 24 * 60 * 60_000;
 // every 15 minutes forever would only fill the logs.
 const PERMANENT_SEND_ERRORS = new Set([10003 /* unknown channel */, 50001 /* missing access */, 50013 /* missing permissions */]);
 
-const NEWS_MODES = new Set(['patches', 'all', 'none']);
 
 // ─── Steam ─────────────────────────────────────────────────────────────────
 
@@ -146,9 +145,20 @@ function buildSummaryPrompt(gameName, item) {
   ].join('\n');
 }
 
-/** Model output → something fit for an embed: no chips, no source footers, bounded. */
+// Links are dropped from summaries: the post carries exactly one, to the
+// official notes. A link the model copied out of the notes — or was coaxed
+// into writing by text planted in them — would otherwise go out under the
+// bot's name into every server watching the game.
+function stripLinks(s) {
+  return s
+    .replace(/\[([^\]\n]*)\]\((?:[^()\s]|\([^()\s]*\))*\)/g, '$1')
+    .replace(/<?\b(?:https?:\/\/|www\.)[^\s<>]*>?/gi, '')
+    .replace(/[ \t]{2,}/g, ' ');
+}
+
+/** Model output → something fit for an embed: no chips, no source footers, no links, bounded. */
 function cleanSummary(text) {
-  const lines = String(text || '')
+  const lines = stripLinks(String(text || ''))
     .split('\n')
     .filter(l => !/^\s*\[\?\]/.test(l))
     .filter(l => !/^\s*[*_]*\s*(?:—\s*)?(?:📡|sources?:)/i.test(l))
@@ -163,7 +173,7 @@ function cleanSummary(text) {
 
 /** When the model is unavailable, the notes themselves — trimmed — still beat silence. */
 function fallbackSummary(item) {
-  const body = cleanSteamText(item.contents);
+  const body = stripLinks(cleanSteamText(item.contents)).trim();
   if (!body) return '';
   const cut = body.slice(0, 420);
   return (body.length > 420 ? cut.slice(0, cut.lastIndexOf(' ')) + '…' : cut);
@@ -280,11 +290,13 @@ async function runCycle(deps) {
       return true;
     } catch (e) {
       if (PERMANENT_SEND_ERRORS.has(e?.code)) {
-        await repo.pauseWatch(watch.id, `can't post in that channel (Discord error ${e.code})`);
+        await quietly(() => repo.pauseWatch(watch.id, `can't post in that channel (Discord error ${e.code})`));
         report.paused++;
         watch.paused = true;
       } else {
-        await repo.releasePost(watch.id, key);  // transient: try again next cycle
+        // Transient: release the claim so the next cycle retries. If even
+        // that fails the claim stands and this one item is skipped — logged.
+        await quietly(() => repo.releasePost(watch.id, key));
         report.failed++;
       }
       log.warn?.(`[watchtower] send failed watch=${watch.id} key=${key}: ${e?.message || e}`);
@@ -294,9 +306,20 @@ async function runCycle(deps) {
 
   for (const [appid, group] of byApp) {
     report.apps++;
+    try {
+      await runApp(appid, group);
+    } catch (e) {
+      // A database blip or bad response for one game must not stop every
+      // other game's posts this cycle.
+      report.failed++;
+      log.warn?.(`[watchtower] app ${appid} failed: ${e?.message || e}`);
+    }
+  }
 
+  // Hoisted: one game's news, then its deals.
+  async function runApp(appid, group) {
     // ── news ──
-    const newsWatchers = group.filter(w => NEWS_MODES.has(w.news) && w.news !== 'none');
+    const newsWatchers = group.filter(w => w.news !== 'none');   // CHECK constraint bounds the rest
     if (newsWatchers.length) {
       const light = await fetchSteamNews(appid, fetchJson);
       const candidates = light ? newsWatchers.map(w => ({ w, items: eligibleItems(w, light, now) })) : [];
@@ -456,7 +479,7 @@ function describeAlerts(w) {
 }
 
 module.exports = {
-  WATCH_LIMITS, POLL_INTERVAL_MS, DEAL_INTERVAL_MS, DEAL_MIN_SAVINGS, PERMANENT_SEND_ERRORS,
+  WATCH_LIMITS, POLL_INTERVAL_MS, DEAL_MIN_SAVINGS,
   cleanSteamText, isOfficial, isPatchNote, eligibleItems, resolveSteamGame, fetchSteamNews,
   buildSummaryPrompt, cleanSummary, fallbackSummary, newsPost, dealDecision, dealPost,
   runCycle, supabaseRepo, parseAlerts, describeAlerts,
