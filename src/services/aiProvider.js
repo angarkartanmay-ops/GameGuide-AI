@@ -29,6 +29,8 @@ export const streamChatResponse = async (
     attachments = [],
     signal = null,
     ephemeral = false,
+    // Spoiler Shield context ({ mode, progress }) — see utils/spoilerPrefs.js.
+    spoiler = null,
     onStage = () => {},
     onDelta = () => {},
     onFinal = () => {},
@@ -67,6 +69,7 @@ export const streamChatResponse = async (
         attachments,
         stream: true,
         ephemeral,
+        spoiler,
       }),
     });
 
@@ -131,8 +134,12 @@ export const streamChatResponse = async (
     if (sawToken) throw error;
 
     console.warn('[stream] falling back to non-streaming:', error.message);
+    // `ephemeral` must survive the fallback: it used to be dropped here, so a
+    // stealth turn whose stream failed was retried as a normal turn and the
+    // server remembered it. Same for the Spoiler Shield context.
     const res = await generateChatResponse(
       null, prompt, chatHistory, redditContext, wikiContext, attachments, priceContext, signal,
+      { ephemeral, spoiler },
     );
     onFinal(res.text, res.meta);
     return res;
@@ -152,7 +159,8 @@ export const generateChatResponse = async (
   wikiContext = '',
   attachments = [],
   priceContext = '',
-  signal = null   // ← AbortSignal for cancellation
+  signal = null,  // ← AbortSignal for cancellation
+  { ephemeral = false, spoiler = null } = {},
 ) => {
   try {
     // ── Context trimming: only send last 12 message pairs to save tokens ──────
@@ -167,6 +175,8 @@ export const generateChatResponse = async (
         wikiContext,
         attachments,
         priceContext,
+        ephemeral,
+        spoiler,
       },
       headers: {
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`

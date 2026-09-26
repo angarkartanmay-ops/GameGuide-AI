@@ -2229,4 +2229,68 @@ html[data-low-power] .fb-overlay {
 }
 html[data-low-power] .fb-modal {
   background: color-mix(in srgb, var(--bg-color) 92%, transparent);
+}
+/* ── Spoiler Shield ─────────────────────────────────────────────────────────
+   Hidden spans come from the server's ||spoiler|| syntax (see
+   utils/spoilerText.js). The text is present but unreadable until the reader
+   reveals it on purpose — the same contract as Discord's spoiler bars. */
+.spoiler {
+  position: relative;
+  display: inline;
+  padding: 0 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--text-secondary, #7898b8);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background-color 0.18s ease;
+}
+.spoiler .spoiler__text {
+  /* Transparent text on a solid bar: not readable, not selectable-by-accident,
+     and it keeps the line length so revealing doesn't reflow the answer. */
+  color: transparent;
+  user-select: none;
+  transition: color 0.18s ease;
+}
+.spoiler:hover,
+.spoiler:focus-visible {
+  background: var(--text-primary, #e0eef8);
+}
+.spoiler:focus-visible {
+  outline: 2px solid var(--accent-glow, rgba(14, 165, 233, 0.42));
+  outline-offset: 2px;
+}
+.spoiler.is-revealed {
+  cursor: auto;
+  background: rgba(127, 127, 127, 0.18);
+}
+.spoiler.is-revealed .spoiler__text {
+  color: inherit;
+  user-select: text;
+}
+/* Links, code and bold inside a hidden spoiler must not show through. */
+.spoiler:not(.is-revealed) .spoiler__text * {
+  color: transparent !important;
+  background: transparent !important;
+  text-shadow: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spoiler, .spoiler .spoiler__text { transition: none; }
+}
+
+.shield-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--text-primary, #e0eef8);
+  background: rgba(127, 127, 127, 0.12);
+  border: 1px solid var(--panel-border, rgba(255, 255, 255, 0.1));
+  border-radius: 999px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

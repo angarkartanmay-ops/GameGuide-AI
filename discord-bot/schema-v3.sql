@@ -142,6 +142,21 @@ CREATE INDEX IF NOT EXISTS discord_usage_time_idx
 
 
 -- ---------------------------------------------------------------------------
+--  SPOILER SHIELD - where each player is in each game, and whether they want
+--  the shield at all. Sent to chat-proxy as prompt context on every turn so a
+--  player says "I just beat Margit" once and stays shielded across sessions.
+--  progress: {"elden ring": "beat Margit", ...}  (lower-cased game keys)
+--  /clear deletes the row along with chat history.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.discord_spoiler_prefs (
+  user_id     BIGINT PRIMARY KEY,
+  mode        TEXT NOT NULL DEFAULT 'shield' CHECK (mode IN ('shield', 'off')),
+  progress    JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+-- ---------------------------------------------------------------------------
 --  ROW LEVEL SECURITY
 --  Every table here is written by the bot with the service role, which bypasses
 --  RLS. Enabling it with no policies therefore denies everyone else by default.
@@ -152,6 +167,7 @@ ALTER TABLE public.discord_quota_tiers   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discord_entitlements  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discord_bonus_credits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discord_usage_events  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.discord_spoiler_prefs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public can read tier pricing" ON public.discord_quota_tiers;
 CREATE POLICY "Public can read tier pricing"

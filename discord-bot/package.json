@@ -10,7 +10,7 @@
     "start": "node index.js",
     "register": "node register-commands.js",
     "register:guild": "node register-commands.js",
-    "syntax-check": "node --check index.js && node --check register-commands.js && node --check quota.js && node --check entitlements.js && node --check billing-stripe.js",
+    "syntax-check": "node --check index.js && node --check register-commands.js && node --check quota.js && node --check entitlements.js && node --check billing-stripe.js && node --check textsplit.js",
     "pm2:start": "pm2 start ecosystem.config.js && pm2 save",
     "pm2:stop": "pm2 stop gameguide-bot",
     "pm2:logs": "pm2 logs gameguide-bot",

@@ -428,7 +428,7 @@ export function recordUsage(provider: string, model: string, tokensIn = 0, token
 
 export interface PlayerProfile {
   platform?: string; gpu?: string; cpu?: string; ram?: string; display?: string;
-  games?: Array<{ name: string; hours?: number; rank?: string; status?: string; note?: string }>;
+  games?: Array<{ name: string; hours?: number; rank?: string; status?: string; note?: string; progress?: string }>;
   prefs?: Record<string, unknown>;
   notes?: string;
 }

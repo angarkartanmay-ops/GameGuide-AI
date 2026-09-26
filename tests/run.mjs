@@ -19,6 +19,10 @@ const SUITES = [
   ['behaviour',     'behaviour.test.ts'],      // correction detection + follow-up suppression
   ['gemini',        'gemini.test.ts'],         // multi-model quota rotation
   ['reasoning',     'reasoning.test.ts'],      // strip <think> scratchpad from replies
+  ['spoiler',       'spoiler.test.ts'],        // Spoiler Shield: progress, resolution, directives
+  ['spoiler-guard', 'spoiler-guard.test.ts'],  // echo + chip backstop behind the shield
+  ['spoiler-text',  'spoiler-text.test.mjs'],  // web ||spoiler|| rendering incl. streaming
+  ['textsplit',     'textsplit.test.mjs'],     // Discord chunking never exposes a spoiler
   ['corroboration', 'corroboration.test.ts'],  // source-agreement scoring
   ['ssrf',          'ssrf.test.mjs'],          // wiki-proxy subdomain validation
   ['eval',          'eval/pipeline.test.mjs'], // golden-set retrieval + routing accuracy

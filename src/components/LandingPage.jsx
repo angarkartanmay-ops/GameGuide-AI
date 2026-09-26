@@ -1109,11 +1109,11 @@ function ArsenalDeck({ pinned }) {
    SECTION: Feature grid
    ============================================================ */
 const FEATURES = [
+  { name: 'Spoiler Shield', body: 'Tell it where you are — “just beat Margit” — and answers stay on your side of that line. Anything past it goes behind a click-to-reveal bar; in Discord servers, reveals are always tagged.' },
   { name: 'Neural Mesh', body: '4-provider routing with self-healing fallback. No single LLM is a single point of failure.' },
   { name: 'PULSE Web Search', body: 'Live multi-source intel — Wikipedia, Steam, web search, RSS — fused into your answer.' },
   { name: 'Vision GODMODE', body: 'Screenshot-grade visual analysis for builds, kit fits, and comp reads.' },
-  { name: 'Persona Engine', body: 'Tone and depth adapt to the player. Tactical, casual, or competitive — your call.' },
-  { name: 'Slash Commands', body: 'Direct verbs for power users: /build, /counter, /price, /discover, and more.' },
+  { name: 'Persona Engine', body: 'Tone and depth adapt to the player. Tactical, casual, or competitive — plus direct verbs for power users: /build, /counter, /price, /progress.' },
   { name: 'Discord Bot', body: 'Same brain, in your server. Voice, threads, and inline price + discovery lookups.' },
 ];
 

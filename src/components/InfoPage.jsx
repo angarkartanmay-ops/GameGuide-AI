@@ -43,7 +43,8 @@ function AboutContent() {
           GameGuide-AI is a real-time, multi-source gaming companion. Drop a question,
           a screenshot, or a slash command — it routes across four AI providers, fuses
           live web intel from Wikipedia, Steam, web search and RSS, and streams a complete
-          answer back to you in under 400 milliseconds.
+          answer back to you in under 400 milliseconds. And it won&apos;t spoil your game: tell it
+          where you are, and anything past that point goes behind a click-to-reveal bar.
         </p>
       </header>
 
@@ -72,6 +73,7 @@ function AboutContent() {
           <li><b>/discover</b> — Random pro tip, hidden industry secret, or lore drop — spoiler-aware, live + curated.</li>
           <li><b>/build</b> — Endgame builds with stat trade-offs, gear pillars, and patch-current notes.</li>
           <li><b>/counter</b> — Matchup analysis with comp synergies and meta context.</li>
+          <li><b>/progress</b> — Tell it where you are (<i>Elden Ring : just beat Margit</i>). Story answers stay behind that line; <b>/spoilers off</b> once you&apos;ve finished.</li>
           <li><b>Vision</b> — Upload a screenshot, get build/kit/comp reads in seconds.</li>
         </ul>
       </section>
@@ -153,7 +155,9 @@ function TermsContent() {
         <h2>6. Privacy</h2>
         <p>
           Sign-in is optional and handled via Supabase Auth. Conversations are stored only for your own
-          session continuity. We do not sell your data, and we do not use your prompts to train models.
+          session continuity. Spoiler Shield keeps the game progress you tell it (for example
+          “Elden Ring: beat Margit”) in your browser, and in your profile if you are signed in, so
+          later answers stay spoiler-safe. We do not sell your data, and we do not use your prompts to train models.
           To answer a question, your prompt is sent to third-party AI model providers and search
           services, which process it under their own terms.
         </p>
@@ -161,13 +165,14 @@ function TermsContent() {
         <ul className="info-list">
           <li>your Discord user ID, and the server ID when you use it in a server;</li>
           <li>the messages you send it and its replies, so it can remember the conversation;</li>
-          <li>usage counts, to apply daily limits and show <b>/stats</b>.</li>
+          <li>usage counts, to apply daily limits and show <b>/stats</b>;</li>
+          <li>your Spoiler Shield setting and the game progress you tell it, so answers stay spoiler-safe.</li>
         </ul>
         <p>
           The bot only reads messages that <b>@mention it</b>, direct messages sent to it, and its slash
           commands — never the rest of a server&apos;s chat. Stored conversation history is kept for at most
           <b> 90 days</b> and only your <b>50 most recent</b> messages are retained; per-message usage records
-          are deleted after 3 days. Run <b>/clear</b> in Discord to delete your stored history immediately,
+          are deleted after 3 days. Run <b>/clear</b> in Discord to delete your stored history and saved progress immediately,
           or email{' '}
           <a href={`mailto:${CONTACT_LINKS.email}`} className="info-link">{CONTACT_LINKS.email}</a>{' '}
           to have any other data removed.

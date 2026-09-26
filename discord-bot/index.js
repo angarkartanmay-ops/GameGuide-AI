@@ -38,6 +38,7 @@ const { fetchPriceDirect } = require('./cheapshark');
 const quota = require('./quota');
 const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
 const { mountStripeWebhook, buildCheckoutUrl, stripeConfigured } = require('./billing-stripe');
+const { splitForDiscord } = require('./textsplit');
 
 // ─── Native fetch sanity ───────────────────────────────────────────────────
 if (typeof fetch !== 'function') {
@@ -207,15 +208,84 @@ async function pushHistory(userId, guildId, sender, text) {
  */
 async function clearUserHistory(userId) {
   historyCache.delete(userId);
+  spoilerCache.delete(userId);
   if (!supabaseHasServiceRole) return 'disabled';
   try {
-    const { error } = await supabase.from('discord_chat_messages').delete().eq('user_id', userId);
-    if (error) throw new Error(error.message);
+    // One promise to the user: /clear forgets everything the bot stored about
+    // them — the conversation AND where they are in each game.
+    const [chat, prefs] = await Promise.all([
+      supabase.from('discord_chat_messages').delete().eq('user_id', userId),
+      supabase.from('discord_spoiler_prefs').delete().eq('user_id', userId),
+    ]);
+    if (chat.error) throw new Error(chat.error.message);
+    if (prefs.error) throw new Error(prefs.error.message);
     return 'cleared';
   } catch (e) {
     console.warn('[history] clear failed:', e.message);
     return 'failed';
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Spoiler Shield — per-player progress (table: discord_spoiler_prefs)
+//  Sent to chat-proxy as prompt context each turn; the server decides what to
+//  hide. See supabase/functions/chat-proxy/spoilerShield.ts.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const spoilerCache = new Map();         // userId → { prefs, fetchedAt }
+const SPOILER_CACHE_MS = 60_000;
+const SPOILER_MAX_GAMES = 30;
+const DEFAULT_SPOILER = Object.freeze({ mode: 'shield', progress: {} });
+
+function cleanField(s, max = 60) {
+  return String(s ?? '').replace(/[\r\n\t|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+async function getSpoilerPrefs(userId) {
+  const hit = spoilerCache.get(userId);
+  if (hit && Date.now() - hit.fetchedAt < SPOILER_CACHE_MS) return hit.prefs;
+  if (!supabaseHasServiceRole) return { ...DEFAULT_SPOILER, progress: {} };
+  try {
+    const { data, error } = await supabase
+      .from('discord_spoiler_prefs')
+      .select('mode, progress')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const prefs = {
+      mode: data?.mode === 'off' ? 'off' : 'shield',
+      progress: data?.progress && typeof data.progress === 'object' ? data.progress : {},
+    };
+    spoilerCache.set(userId, { prefs, fetchedAt: Date.now() });
+    return prefs;
+  } catch (e) {
+    // Fail safe: an unreadable setting means the shield stays ON.
+    console.warn('[spoiler] read failed:', e.message);
+    return { ...DEFAULT_SPOILER, progress: {} };
+  }
+}
+
+async function saveSpoilerPrefs(userId, prefs) {
+  spoilerCache.set(userId, { prefs, fetchedAt: Date.now() });
+  if (!supabaseHasServiceRole) return false;
+  const { error } = await supabase.from('discord_spoiler_prefs').upsert({
+    user_id: userId,
+    mode: prefs.mode === 'off' ? 'off' : 'shield',
+    progress: prefs.progress,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: 'user_id' });
+  if (error) { console.warn('[spoiler] write failed:', error.message); return false; }
+  return true;
+}
+
+async function setSpoilerProgress(userId, game, where) {
+  const g = cleanField(game).toLowerCase();
+  const w = cleanField(where);
+  if (!g || !w) return false;
+  const prefs = await getSpoilerPrefs(userId);
+  const { [g]: _prev, ...rest } = prefs.progress;
+  const kept = Object.entries(rest).slice(-(SPOILER_MAX_GAMES - 1));
+  return saveSpoilerPrefs(userId, { ...prefs, progress: Object.fromEntries([...kept, [g, w]]) });
 }
 
 async function bumpStats(userId, vision) {
@@ -250,27 +320,10 @@ async function bumpStats(userId, vision) {
 //  Helpers — formatting
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Cap each Discord message at 1900 chars (under the 2000 limit, leaves room for source line).
-function splitForDiscord(text, max = 1900) {
-  if (!text) return [];
-  const chunks = [];
-  let buf = '';
-  for (const line of text.split('\n')) {
-    if ((buf + line + '\n').length > max) {
-      if (buf) chunks.push(buf.trimEnd());
-      if (line.length > max) {
-        for (let i = 0; i < line.length; i += max) chunks.push(line.slice(i, i + max));
-        buf = '';
-      } else {
-        buf = line + '\n';
-      }
-    } else {
-      buf += line + '\n';
-    }
-  }
-  if (buf.trim()) chunks.push(buf.trimEnd());
-  return chunks;
-}
+// splitForDiscord lives in textsplit.js: it must keep ||spoiler|| spans intact
+// across message boundaries, and a split inside one would post the rest of the
+// secret unhidden. The old inline version did exactly that in 277 of 300
+// randomised multi-message answers — see tests/textsplit.test.mjs.
 
 // ─── CheapShark /price embed formatter ────────────────────────────────────
 // Mirrors the web app's PriceBadge: thumb + title + historic-low chip +
@@ -368,7 +421,7 @@ async function fetchAttachmentAsBase64(att) {
   }
 }
 
-async function callChatProxy({ prompt, history, attachments, discordUserId, tier, softCapped }) {
+async function callChatProxy({ prompt, history, attachments, discordUserId, tier, softCapped, spoiler }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PROXY_TIMEOUT_MS);
   try {
@@ -399,6 +452,10 @@ async function callChatProxy({ prompt, history, attachments, discordUserId, tier
         prompt,
         chatHistory: history,
         attachments: attachments || [],
+        // Spoiler Shield context — where this player is, and whether the reply
+        // lands in a shared server channel (reveals then stay barred even if
+        // the asker said "spoil it": bystanders never agreed).
+        spoiler: spoiler || undefined,
       }),
     });
 
@@ -550,7 +607,10 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
   }
 
   try {
-    const history = await getHistory(userId, tierLimits.history_len || 10);
+    const [history, spoilerPrefs] = await Promise.all([
+      getHistory(userId, tierLimits.history_len || 10),
+      getSpoilerPrefs(userId),
+    ]);
     const data = await callChatProxy({
       prompt: cleaned,
       history: history.slice(-(tierLimits.context_turns || 6)),
@@ -558,12 +618,22 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
       discordUserId: userId,
       tier: decision.tier,
       softCapped: !!tierLimits.soft_capped,
+      // A reply in a server is read by everyone in the channel; a DM only by
+      // the asker. The shield keeps reveals barred in the first case always.
+      spoiler: { ...spoilerPrefs, publicChannel: !!guildId },
     });
 
     // Persist history + bump stats (fire-and-forget)
     pushHistory(userId, guildId, 'user', cleaned).catch(() => {});
     pushHistory(userId, guildId, 'ai', data.text).catch(() => {});
     bumpStats(userId, !!attachments?.length).catch(() => {});
+
+    // The server heard "I just beat Margit" in this turn — remember it, so the
+    // next question about that game is shielded without being told again.
+    const shield = data._meta?.spoiler;
+    if (shield?.learned && shield.game && shield.progress) {
+      setSpoilerProgress(userId, shield.game, shield.progress).catch(() => {});
+    }
 
     // Build telemetry footer (no model/provider leak — server already redacts).
     const sources = (data._meta?.sources || []).filter(Boolean);
@@ -576,7 +646,14 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
     // One quiet line once they are ~80% through the day, at most hourly.
     // Nothing at all for a paying user, and nothing while running degraded.
     const nudge = quota.quotaFooter(decision, { userId });
-    const footer = [sourceLine, nudge].filter(Boolean).join('\n');
+    // Make the shield visible — it is the reason to ask here and not a search
+    // engine. Sanitised on the server, so it cannot carry markup or a ping.
+    const shieldLine = shield?.active && shield.mode === 'progress' && shield.progress
+      ? `-# 🛡️ Spoilers hidden past: ${shield.progress}`
+      : shield?.active && shield.mode === 'unknown'
+        ? '-# 🛡️ Spoiler Shield on — tell me where you are with `/progress`'
+        : '';
+    const footer = [sourceLine, shieldLine, nudge].filter(Boolean).join('\n');
 
     // Apply affiliate decoration when CheapShark / store URLs appear
     const decorated = decorateWithAffiliate(data.text);
@@ -799,6 +876,62 @@ client.on('interactionCreate', async (interaction) => {
         });
       }
 
+      case 'spoilers': {
+        const choice = interaction.options.getString('mode');
+        const prefs = await getSpoilerPrefs(userId);
+        if (choice === 'on' || choice === 'off') {
+          const ok = await saveSpoilerPrefs(userId, { ...prefs, mode: choice === 'on' ? 'shield' : 'off' });
+          const content = !ok
+            ? '⚠️ **I couldn\'t save that right now.** The shield stays **on** — try again in a minute.'
+            : choice === 'on'
+              ? '🛡️ **Spoiler Shield: ON.** Tell me where you are (`/progress`, or just say *"I just beat Margit"*) and nothing past that point shows unless you click it.'
+              : '🛡️ **Spoiler Shield: OFF** for you. Full answers from now on.\n-# In server channels, big reveals are still put behind spoiler bars so other members don\'t get spoiled.';
+          return interaction.reply({ content, flags: MessageFlags.Ephemeral });
+        }
+        return interaction.reply({
+          content: `🛡️ **Spoiler Shield is ${prefs.mode === 'off' ? 'OFF' : 'ON'}** for you.\n` +
+            'I answer everything up to where you are and hide what comes after behind ||spoiler bars||.\n' +
+            '• `/spoilers mode:off` · `/spoilers mode:on`\n' +
+            '• `/progress` — tell me where you are in a game\n' +
+            '• Or just say it: *"I\'m on chapter 4"*, *"I just beat Margit"* — I\'ll remember.',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
+      case 'progress': {
+        const game = interaction.options.getString('game');
+        const at = interaction.options.getString('at');
+        const prefs = await getSpoilerPrefs(userId);
+
+        if (game && at) {
+          const clear = /^clear$/i.test(at.trim());
+          if (clear) {
+            const g = cleanField(game).toLowerCase();
+            const { [g]: _drop, ...rest } = prefs.progress;
+            const ok = await saveSpoilerPrefs(userId, { ...prefs, progress: rest });
+            return interaction.reply({
+              content: ok ? `📍 Forgot where you were in **${cleanField(game)}**.` : '⚠️ Couldn\'t save that — try again in a minute.',
+              flags: MessageFlags.Ephemeral,
+            });
+          }
+          const ok = await setSpoilerProgress(userId, game, at);
+          return interaction.reply({
+            content: ok
+              ? `📍 **${cleanField(game)}** — up to: **${cleanField(at)}**. I'll keep everything past that hidden.`
+              : '⚠️ Couldn\'t save that — try again in a minute.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        const rows = Object.entries(prefs.progress || {});
+        return interaction.reply({
+          content: '📍 **Where you are**\n' +
+            (rows.length ? rows.map(([g, w]) => `• **${g}** — ${w}`).join('\n') : '*Nothing saved yet.*') +
+            '\n\nSet it: `/progress game:Elden Ring at:beat Margit` · forget one: `at:clear` · forget everything: `/clear`',
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+
       case 'konami':
         return interaction.reply({
           content:
@@ -819,7 +952,7 @@ client.on('interactionCreate', async (interaction) => {
       case 'clear': {
         const outcome = await clearUserHistory(userId);
         const CLEAR_COPY = {
-          cleared: '🗑️ **Your chat history with me has been wiped.**',
+          cleared: '🗑️ **Wiped.** Your chat history and your saved game progress are gone.',
           disabled: '🗑️ **Memory cleared.** (History isn\'t being stored at the moment, so there was nothing saved to delete.)',
           // Never claim a wipe that didn't happen.
           failed: '⚠️ **I couldn\'t wipe your history just now** — nothing was deleted. Please try `/clear` again in a minute.',
@@ -1007,6 +1140,10 @@ client.on('interactionCreate', async (interaction) => {
                 '`/ask <question> [image]` — ask anything\n' +
                 '`/price <game>` — live multi-store prices\n' +
                 '`/discover [category] [game]` — pro tip, industry secret, or lore drop', inline: false },
+            { name: '🛡️ Spoiler Shield', value:
+                'I answer up to where you are and hide the rest behind ||spoiler bars||.\n' +
+                '`/progress [game] [at]` — tell me where you are in a game\n' +
+                '`/spoilers [mode]` — turn the shield on or off for you', inline: false },
             { name: '🛠️ Utility', value:
                 '`/quota` — how much you have left today\n' +
                 '`/history` — show your recent chat with me\n' +

@@ -13,6 +13,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { PlayerProfile } from './meshDb.ts';
+import { extractProgress, saysFinished } from './spoilerShield.ts';
 
 // ── Hardware ───────────────────────────────────────────────────────────────
 const GPU_RX = /\b(?:(?:rtx|gtx)\s?\d{3,4}\s?(?:ti|super|xt)?|rx\s?\d{3,4}\s?(?:xt|xtx)?|arc\s?a\d{3,4}|radeon\s+rx\s?\d{3,4})\b/i;
@@ -32,7 +33,10 @@ const PLATFORM_PATTERNS: Array<[RegExp, string]> = [
 
 // ── Status of a game ───────────────────────────────────────────────────────
 const STUCK_RX = /\b(?:i'?m\s+)?(?:stuck|hardstuck|can'?t\s+beat|struggling)\s+(?:on|at|with)\b/i;
-const FINISHED_RX = /\b(?:i\s+)?(?:just\s+)?(?:finished|beat|completed|100%'?ed)\b/i;
+// Finishing the GAME, not beating a boss. This matched "I just beat Margit" as
+// "finished" — which, once the Spoiler Shield read status, would have switched
+// the shield off after the first boss. spoilerShield.saysFinished requires the
+// object to be the game itself ("beat the game", "rolled credits", "NG+").
 const DROPPED_RX = /\b(?:i\s+)?(?:dropped|quit|uninstalled|gave\s+up\s+on|bounced\s+off)\b/i;
 const RANK_RX = /\b(?:i'?m|i\s+am|currently)\s+(bronze|silver|gold|platinum|plat|diamond|emerald|ascendant|immortal|radiant|master|grandmaster|challenger|champion|legend|mythic|iron|obsidian)\s?(\d|i{1,3}|iv|v)?\b/i;
 
@@ -73,12 +77,22 @@ export function extractProfileFacts(prompt: string, detectedGame: string | null)
     let meaningful = false;
 
     if (STUCK_RX.test(prompt))         { entry.status = 'stuck';    meaningful = true; }
-    else if (FINISHED_RX.test(prompt)) { entry.status = 'finished'; meaningful = true; }
+    else if (saysFinished(prompt))     { entry.status = 'finished'; meaningful = true; }
     else if (DROPPED_RX.test(prompt))  { entry.status = 'dropped';  meaningful = true; }
 
     const rank = RANK_RX.exec(prompt);
     if (rank) {
       entry.rank = normalizeSpaces([rank[1], rank[2]].filter(Boolean).join(' '));
+      meaningful = true;
+    }
+
+    // Where they are in the game — the Spoiler Shield's line. Remembered so a
+    // signed-in player says "I just beat Margit" once, not every session.
+    const progress = extractProgress(prompt, detectedGame);
+    if (progress) {
+      // Status is left alone: gg_merge_games merges key by key, and forcing
+      // 'playing' here would overwrite a stored 'finished' for a replay.
+      entry.progress = progress;
       meaningful = true;
     }
 
@@ -130,15 +144,22 @@ export function buildProfileBlock(profile: PlayerProfile | null, currentGame: st
         g.rank && `rank ${g.rank}`,
         g.hours && `${g.hours}h`,
         g.status && g.status,
+        g.progress && `up to: ${g.progress}`,
         g.note,
       ].filter(Boolean).join(', ');
       lines.push(`  - **${g.name}**${bits ? ` — ${bits}` : ''}`);
     }
   }
 
-  if (profile.prefs && Object.keys(profile.prefs).length) {
-    lines.push(`- Preferences: ${JSON.stringify(profile.prefs)}`);
-  }
+  // Rendered field by field, never as raw JSON: prefs is a free-form object,
+  // and dumping it verbatim into the prompt put whatever keys it held in front
+  // of the model. Only the documented preferences are shown.
+  const prefs = (profile.prefs || {}) as Record<string, unknown>;
+  const prefBits = [
+    typeof prefs.difficulty === 'string' && `prefers ${prefs.difficulty} difficulty`,
+    typeof prefs.tone === 'string' && `likes a ${prefs.tone} tone`,
+  ].filter(Boolean);
+  if (prefBits.length) lines.push(`- Preferences: ${prefBits.join(', ')}`);
   if (profile.notes) lines.push(`- Notes: ${profile.notes}`);
 
   if (!lines.length) return '';

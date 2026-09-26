@@ -56,6 +56,28 @@ const commands = [
       ))
     .addStringOption(o => o.setName('game').setDescription('Pin a lore drop to a specific game (optional)').setRequired(false)),
 
+  // ─── Spoiler Shield ─────────────────────────────────────────────────────
+  // Answers stop at where the player is; anything past it goes behind
+  // ||spoiler bars||. Progress is also picked up from plain speech ("I just
+  // beat Margit"), so these commands are for setting or checking it directly.
+  new SlashCommandBuilder()
+    .setName('progress')
+    .setDescription('Tell me where you are in a game, so I never spoil past it')
+    .addStringOption(o => o.setName('game').setDescription('e.g. Elden Ring').setRequired(false).setMaxLength(60))
+    .addStringOption(o => o.setName('at').setDescription('e.g. "beat Margit" or "chapter 4" — or "clear" to forget').setRequired(false).setMaxLength(60)),
+
+  new SlashCommandBuilder()
+    .setName('spoilers')
+    .setDescription('Turn the Spoiler Shield on or off for you')
+    .addStringOption(o => o
+      .setName('mode')
+      .setDescription('Leave empty to see your current setting')
+      .setRequired(false)
+      .addChoices(
+        { name: '🛡️ On — hide what comes after where I am', value: 'on' },
+        { name: 'Off — full answers (server channels still bar big reveals)', value: 'off' },
+      )),
+
   // ─── Utility ────────────────────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName('history')

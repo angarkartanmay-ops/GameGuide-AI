@@ -179,6 +179,8 @@ Type `/` in the chat input or Discord to trigger power-user actions:
 |---|---|
 | `/price <game>` | Fetches live multi-store price comparisons and historic lows via CheapShark. |
 | `/discover` | A pro gameplay tip, a little-known industry secret, or a deep lore drop — blended from live community data and curated knowledge. |
+| `/progress <game> : <where>` | 🛡️ Spoiler Shield: tell it where you are (`/progress Elden Ring : beat Margit`). Story answers stay behind that point; anything past it goes behind a click-to-reveal bar. `/progress clear` forgets it. |
+| `/spoilers on` · `/spoilers off` | Turns Spoiler Shield on or off. |
 | `/stealth` | Activates incognito mode — conversations are never stored or logged. |
 | `/clear` | Wipes the active conversation viewport. |
 | `/help` | Displays the complete command reference palette. |

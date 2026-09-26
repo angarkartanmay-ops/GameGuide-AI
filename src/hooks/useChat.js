@@ -4,6 +4,9 @@ import { streamChatResponse } from '../services/aiProvider';
 import { searchReddit } from '../services/redditScraper';
 import { searchWikis } from '../services/wikiScraper';
 import { fetchPriceDirect, fetchPriceSummaryDirect } from '../services/priceScraper';
+import {
+  loadSpoilerPrefs, setSpoilerMode, setGameProgress, clearGameProgress, parseProgressArgs,
+} from '../utils/spoilerPrefs';
 
 export default function useChat(user) {
   const [messages, setMessages] = useState([]);
@@ -406,10 +409,80 @@ export default function useChat(user) {
       description: 'List all available commands',
       emoji: '📖',
       action: async () => ({
-        text: `## 📖 GameGuide-AI Command Reference\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | 🗑️ Wipe your entire chat history |\n| \`/stealth\` | 🥷 Incognito mode — nothing saved, nothing learned |\n| \`/help\` | 📖 Show this command list |\n| \`/discover\` | 🎲 Random gaming tip, secret, or lore drop (live + curated) |\n| \`/price <game>\` | 💰 Get live multi-store prices via CheapShark |\n| \`/konami\` | 🎮 Unlock the legendary Konami Easter Egg |`,
+        text: `## 📖 GameGuide-AI Command Reference\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | 🗑️ Wipe your entire chat history |\n| \`/stealth\` | 🥷 Incognito mode — nothing saved, nothing learned |\n| \`/help\` | 📖 Show this command list |\n| \`/discover\` | 🎲 Random gaming tip, secret, or lore drop (live + curated) |\n| \`/spoilers on\` · \`/spoilers off\` | 🛡️ Spoiler Shield — hides story reveals past where you are |\n| \`/progress <game> : <where>\` | 📍 Tell me where you are in a game |\n| \`/price <game>\` | 💰 Get live multi-store prices via CheapShark |\n| \`/konami\` | 🎮 Unlock the legendary Konami Easter Egg |`,
         images: [],
         isCommand: true,
       }),
+    },
+    {
+      trigger: '/spoilers',
+      description: 'Spoiler Shield on or off (e.g. /spoilers off)',
+      emoji: '🛡️',
+      action: async (args) => {
+        const arg = (args || '').trim().toLowerCase();
+        if (arg === 'on' || arg === 'off') {
+          const saved = setSpoilerMode(arg === 'on' ? 'shield' : 'off');
+          return {
+            text: !saved
+              ? '## 🛡️ Spoiler Shield\n\nI couldn\'t save that setting in this browser (storage is blocked). The shield stays **on**.'
+              : arg === 'on'
+                ? '## 🛡️ Spoiler Shield: ON\n\nI\'ll keep story reveals hidden. Tell me where you are in a game (*"I just beat Margit"*) and nothing past that point will show unless you click to reveal it.'
+                : '## 🛡️ Spoiler Shield: OFF\n\nFull answers from now on, reveals included. Say *"no spoilers"* in any message to shield just that one, or `/spoilers on` to turn it back on.',
+            images: [],
+            isCommand: true,
+          };
+        }
+        const prefs = loadSpoilerPrefs();
+        return {
+          text: `## 🛡️ Spoiler Shield: ${prefs.mode === 'off' ? 'OFF' : 'ON'}\n\n` +
+            'The shield answers everything up to where you are and hides anything past it behind click-to-reveal bars.\n\n' +
+            '- `/spoilers on` · `/spoilers off`\n' +
+            '- `/progress` — see or set where you are in each game\n' +
+            '- Or just say it: *"I\'m on chapter 4"*, *"I just beat Margit"* — I\'ll remember.',
+          images: [],
+          isCommand: true,
+        };
+      },
+    },
+    {
+      trigger: '/progress',
+      description: 'Where you are in a game (e.g. /progress elden ring : beat Margit)',
+      emoji: '📍',
+      action: async (args) => {
+        const raw = (args || '').trim();
+        if (raw.toLowerCase() === 'clear') {
+          clearGameProgress();
+          return { text: '## 📍 Progress cleared\n\nI\'ve forgotten where you were in every game.', images: [], isCommand: true };
+        }
+        const parsed = parseProgressArgs(raw);
+        if (parsed && parsed.where.toLowerCase() === 'clear') {
+          clearGameProgress(parsed.game);
+          return { text: `## 📍 Progress cleared\n\nI've forgotten where you were in **${parsed.game}**.`, images: [], isCommand: true };
+        }
+        if (parsed) {
+          const saved = setGameProgress(parsed.game, parsed.where);
+          return {
+            text: saved
+              ? `## 📍 Got it\n\n**${parsed.game}** — up to: **${parsed.where}**. I'll keep everything past that hidden.`
+              : '## 📍 Couldn\'t save that\n\nThis browser is blocking storage, so I can\'t remember it between messages. Mention where you are in your question instead.',
+            images: [],
+            isCommand: true,
+          };
+        }
+        const { progress } = loadSpoilerPrefs();
+        const rows = Object.entries(progress);
+        return {
+          text: '## 📍 Where you are\n\n' +
+            (rows.length
+              ? rows.map(([g, w]) => `- **${g.replace(/\b[a-z]/g, c => c.toUpperCase())}** — ${w}`).join('\n') + '\n\n'
+              : 'Nothing saved yet.\n\n') +
+            '**Set it:** `/progress elden ring : beat Margit`\n\n' +
+            '**Clear one:** `/progress elden ring : clear` · **Clear all:** `/progress clear`\n\n' +
+            '*Stored only in this browser.*',
+          images: [],
+          isCommand: true,
+        };
+      },
     },
     {
       trigger: '/price',
@@ -823,6 +896,7 @@ export default function useChat(user) {
         attachments,
         signal: controller.signal,
         ephemeral: stealthMode,
+        spoiler: loadSpoilerPrefs(),
         onStage: (stageName, detail) => {
           setStreamStage(detail ? `${stageName}:${detail}` : stageName);
         },
@@ -852,6 +926,18 @@ export default function useChat(user) {
       if (aiResponse.meta?.sources?.includes?.('web-search')) {
         setWebActive(true);
       }
+
+      // Spoiler Shield: the server spotted "I just beat Margit" in this turn.
+      // Remember it on this device so the next session starts shielded too.
+      // Never in stealth — the server marks those turns unlearned anyway.
+      const learned = aiResponse.meta?.spoiler;
+      if (!stealthMode && learned?.learned && learned.game && learned.progress) {
+        setGameProgress(learned.game, learned.progress);
+      }
+
+      // "Give it a minute" invites the user to send the same question again;
+      // the duplicate guard would otherwise swallow that retry without a word.
+      if (aiResponse.meta?.rateLimited || aiResponse.meta?.error) lastMessageRef.current = '';
 
       const aiImages = (aiResponse.images || []).map(img => ({
         previewUrl: `data:${img.mimeType};base64,${img.data}`,
@@ -890,6 +976,7 @@ export default function useChat(user) {
         return;
       }
       console.error(error);
+      lastMessageRef.current = ''; // let the user retry the same message
       const errorMessage = {
         id: (Date.now() + 1).toString(),
         text: "System Error: Unable to fetch protocol response.",

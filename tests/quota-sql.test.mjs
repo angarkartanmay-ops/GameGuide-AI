@@ -255,5 +255,24 @@ for (const fn of ['gg_discord_prune()', 'gg_discord_global_stats()']) {
   check(`${fn} executable by service_role`, r.rows[0].s === true);
 }
 
+// -- Spoiler Shield storage ---------------------------------------------------
+// Where someone is in a game is personal; the public anon key must not see it.
+{
+  const r = await db.query(`select relrowsecurity from pg_class where relname = 'discord_spoiler_prefs'`);
+  check('discord_spoiler_prefs has RLS enabled', r.rows[0]?.relrowsecurity === true);
+  const pol = await db.query(`select count(*)::int c from pg_policies where tablename = 'discord_spoiler_prefs'`);
+  check('discord_spoiler_prefs has no policies (service role only)', pol.rows[0].c === 0);
+  await db.exec(`insert into discord_spoiler_prefs (user_id, progress) values (111, '{"elden ring":"beat Margit"}')`);
+  let rejected = false;
+  try { await db.exec(`insert into discord_spoiler_prefs (user_id, mode) values (222, 'maybe')`); }
+  catch { rejected = true; }
+  check('mode is constrained to shield/off', rejected);
+  const d = await db.query(`select mode from discord_spoiler_prefs where user_id = 111`);
+  check('mode defaults to shield', d.rows[0]?.mode === 'shield');
+}
+// The standalone migration must apply cleanly on top of the full schema.
+await db.exec(readFileSync(`${ROOT}/migrations/20260926_spoiler_prefs.sql`, 'utf8'));
+check('spoiler migration is idempotent over schema-v3', true);
+
 console.log(`\nSQL: ${pass} passed${fail ? `, ${fail} FAILED` : ''}`);
 process.exit(fail ? 1 : 0);

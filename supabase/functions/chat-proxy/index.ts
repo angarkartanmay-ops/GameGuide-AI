@@ -14,6 +14,12 @@ import {
 import { corroborate, CorroborationInput } from './corroboration.ts';
 import { stripReasoning, createReasoningFilter } from './reasoning.ts';
 import {
+  resolveShield, buildShieldDirective, buildShieldReminder, buildSpoilItNote, shieldChips, progressFingerprint,
+  shieldPersonaOverlay,
+  ClientSpoilerContext, ShieldState,
+} from './spoilerShield.ts';
+import { guardShieldedReply } from './spoilerGuard.ts';
+import {
   checkRateLimit, anonBucket, userIdFromAuthHeader, botCallerFromHeaders,
   LIMITS_AUTHED, LIMITS_ANON, LIMITS_BOT, LIMITS_BOT_GLOBAL,
   getMeshState, reportProvider, recordUsage, noteLocalFailure,
@@ -998,6 +1004,7 @@ async function cacheKey(
   wiki: string,
   price: string,
   attachments: any[],
+  personalization = '',
 ): Promise<string> {
   const histTail = hist.slice(-2).map(m => `${m.sender}:${(m.text || '').slice(0, 80)}`).join('|');
   // Full SHA-256 per attachment so two visually-different but similar-byte-
@@ -1006,7 +1013,12 @@ async function cacheKey(
     attachments.map(async a => `${a.mimeType}:${await sha256((a.data || ''))}`)
   );
   const attFingerprint = attHashes.join('|');
-  const raw = `${prompt}|${histTail}|R${reddit.length}|W${wiki.length}|P${price.length}|A${attachments.length}|${attFingerprint}`;
+  // `personalization` covers everything that makes an answer specific to ONE
+  // player: their stored profile (hardware, games) and their spoiler context.
+  // The cache is shared across users, and without this a Spoiler-Shielded
+  // answer and an unshielded one for the same question were interchangeable —
+  // as were "best settings for my 3060" answers across different rigs.
+  const raw = `${prompt}|${histTail}|R${reddit.length}|W${wiki.length}|P${price.length}|A${attachments.length}|${attFingerprint}|U${personalization}`;
   return await sha256(raw);
 }
 
@@ -2290,9 +2302,12 @@ function shouldSkipAutoFollowUps(prompt: string, replyText: string, isCorrection
   return false;
 }
 
-function ensureFollowUps(text: string, profile: QueryProfile, skipAutoAppend = false): string {
+function ensureFollowUps(text: string, profile: QueryProfile, skipAutoAppend = false, shielded = false): string {
   if (text.includes('[?]')) return text;
   if (skipAutoAppend) return text;
+  // The stock lore chips include "What's the canonical ending of X?" — an
+  // invitation to spoil the very game the shield is protecting.
+  if (shielded) return text.trim() + '\n\n' + shieldChips(profile.game).join('\n');
   // Auto-append generic follow-ups so the FollowUpChips parser always finds something
   const game = profile.game ? profile.game : 'this game';
   const follows: Record<Intent, string[]> = {
@@ -2566,6 +2581,25 @@ async function runChatPipeline(
     const ephemeral = body?.ephemeral === true;
     if (ephemeral) console.log('[STEALTH] ephemeral turn — no memory, no trace, no cache write');
 
+    // Spoiler Shield context supplied by the client: the Discord bot's stored
+    // progress + whether the reply lands in a shared server channel, or the web
+    // client's local progress. Prompt context only — never security-bearing —
+    // and every string in it is sanitized before it reaches a prompt.
+    const clientSpoiler: ClientSpoilerContext | null =
+      body?.spoiler && typeof body.spoiler === 'object'
+        ? {
+            mode: body.spoiler.mode === 'off' ? 'off' : 'shield',
+            publicChannel: body.spoiler.publicChannel === true,
+            progress: body.spoiler.progress && typeof body.spoiler.progress === 'object'
+              ? Object.fromEntries(
+                  Object.entries(body.spoiler.progress)
+                    .filter(([k, v]) => typeof k === 'string' && typeof v === 'string')
+                    .slice(0, 50),
+                ) as Record<string, string>
+              : {},
+          }
+        : null;
+
     // ── Payload sanity limits ───────────────────────────────────────────
     // Cheap structural rejects before anything expensive runs. A caller that
     // sends 2MB of "history" should not get to spend our scrape + LLM budget.
@@ -2678,7 +2712,13 @@ async function runChatPipeline(
     // We hash on the inputs we already have: the user's prompt + any client-
     // provided contexts + last 2 messages of history + attachment fingerprints.
     // If hit, return immediately — skip omni-scrape AND the mesh.
-    const earlyCacheKey = await cacheKey(prompt, boundedHistory, redditContext, wikiContext, priceContext, cleanAttachments);
+    // Everything that makes this answer specific to this player — see cacheKey.
+    const personalization = JSON.stringify({
+      profile: playerProfile ?? null,
+      spoiler: clientSpoiler,
+      progress: progressFingerprint(boundedHistory),
+    });
+    const earlyCacheKey = await cacheKey(prompt, boundedHistory, redditContext, wikiContext, priceContext, cleanAttachments, personalization);
     const earlyCached = responseCache.get(earlyCacheKey);
     if (earlyCached && (Date.now() - earlyCached.ts) < CACHE_TTL_MS) {
       console.log(`[CACHE-EARLY] HIT ${earlyCacheKey} (${earlyCached.provider}/${earlyCached.model}) — skipping scrape + mesh`);
@@ -2798,6 +2838,28 @@ async function runChatPipeline(
     // blank and the follow-up chips reading "tips for this game". The
     // conversation plainly is about the carried title, so adopt it.
     if (!profile.game && subjects.length) profile.game = subjects[0];
+
+    // ── SPOILER SHIELD ──────────────────────────────────────────────────
+    // Resolved once the game is known (including a game carried over from
+    // an earlier turn, so "who dies at the end?" after "I just beat Margit"
+    // is still shielded). See spoilerShield.ts.
+    const shield: ShieldState = resolveShield({
+      prompt,
+      history: boundedHistory,
+      game: resolvedGame || subjects[0] || profile.game || null,
+      intent: profile.intent,
+      client: clientSpoiler,
+      profileGames: Array.isArray(playerProfile?.games) ? playerProfile!.games as any[] : null,
+    });
+    if (shield.active) {
+      console.log(`[SHIELD] ${shield.mode} game=${shield.game} progress=${shield.progress ?? '-'} source=${shield.source ?? '-'} public=${shield.publicChannel} risk=${shield.risk}`);
+      // Holding back what the live INTEL says, while still answering, is a
+      // harder instruction than most; prefer the flagship tier for it. Only
+      // for story questions: once progress is known every question about the
+      // game carries the directive, and "best settings for my 3060" should
+      // not spend the scarcer flagship quota.
+      if (shield.risk || shield.mode === 'unknown') profile.complexity = 'deep';
+    }
     const omniBlocks = shouldScrape
       ? (subjects.length
           ? (await Promise.all(subjects.map(s => omniScrape(s, prompt, 8000)))).flat()
@@ -2917,6 +2979,11 @@ async function runChatPipeline(
       contextBlocks.push(corro.block);
     }
 
+    // Spoiler Shield reminder goes LAST — after the INTEL, which is otherwise
+    // the final thing the model reads and is full of late-game names.
+    const shieldReminder = buildShieldReminder(shield);
+    if (shieldReminder) contextBlocks.push(shieldReminder);
+
     const augmentedPrompt = contextBlocks.length > 0
       ? `${prompt}\n\n${contextBlocks.join('\n\n')}`
       : prompt;
@@ -2946,7 +3013,7 @@ async function runChatPipeline(
     }
 
     // ── LAYER 5 (early): cache check ──
-    const cKey = await cacheKey(prompt, boundedHistory, redditContext, wikiContext, priceContext, cleanAttachments);
+    const cKey = await cacheKey(prompt, boundedHistory, redditContext, wikiContext, priceContext, cleanAttachments, personalization);
     const cached = responseCache.get(cKey);
     if (cached && (Date.now() - cached.ts) < CACHE_TTL_MS) {
       console.log(`[CACHE] HIT ${cKey} (${cached.provider}/${cached.model})`);
@@ -2993,7 +3060,11 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
     const correctionBlock = userIsCorrecting
       ? '\n\n' + buildCorrectionDirective(prompt, resolvedGame)
       : '';
-    const systemInstruction = BASE_SYSTEM + dateGroundingBlock + visionBlock + pulse.contextBlock + (profile.persona.overlay || '') + correctionBlock;
+    // The shield sits just before the correction block: both need to be near
+    // the user turn to outrank the persona overlay and the raw INTEL above.
+    const shieldBlock = buildShieldDirective(shield) + buildSpoilItNote(shield);
+    const personaOverlay = shieldPersonaOverlay(profile.persona.id, profile.persona.overlay || '', shield);
+    const systemInstruction = BASE_SYSTEM + dateGroundingBlock + visionBlock + pulse.contextBlock + personaOverlay + shieldBlock + correctionBlock;
 
     // ── LAYER 3 + 4: route + run mesh ──
     // effectiveAttachments = original images + HUD strip crop (when vision pipe ran).
@@ -3090,7 +3161,24 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
         .trim();
     }
 
-    const polishedText = ensureFollowUps(finalText, profile, skipFollowUps);
+    // Spoiler Shield backstop: the model's instruction-following is the first
+    // line, this is the second. It bars later echoes of names the reply itself
+    // hid, and drops chips naming anything the reader can't already see —
+    // "known" is what the player said, plus earlier replies minus their bars.
+    if (shield.active) {
+      finalText = guardShieldedReply(finalText, [
+        prompt, shield.progress, shield.game,
+        ...boundedHistory.slice(-8).map(m => {
+          const t = String(m?.text ?? '');
+          return m?.sender === 'user' ? t : t.replace(/\|\|[\s\S]*?\|\|/g, ' ');
+        }),
+      ]);
+    }
+
+    const polishedText = ensureFollowUps(
+      finalText, profile, skipFollowUps,
+      shield.active && (shield.mode === 'progress' || shield.mode === 'unknown'),
+    );
 
     if (!ephemeral) responseCache.set(cKey, {
       text: polishedText,
@@ -3146,6 +3234,15 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
         latencyMs: Date.now() - startTime,
         cortex: 'v4.2-vision-refusal',
         sources: sourcesList,
+        // What the shield did, so clients can show it and persist `learned`
+        // progress (the Discord bot to its table, the web to local storage).
+        spoiler: {
+          mode: shield.mode,
+          active: shield.active,
+          game: shield.game,
+          progress: shield.progress,
+          learned: shield.learned && !ephemeral,
+        },
         gameResolved: resolvedGame !== profile.game ? false : !!resolvedGame,
         pulse: pulse.fired ? {
           sourcesUsed: pulse.sourcesUsed,

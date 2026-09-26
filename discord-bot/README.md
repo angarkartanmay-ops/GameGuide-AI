@@ -62,7 +62,9 @@ would otherwise need approval once the bot reaches 100 servers.
 Existing installs: after pulling, apply
 [`migrations/20260924_chat_retention.sql`](migrations/20260924_chat_retention.sql)
 (fresh installs get it from `schema-v3.sql`). It adds the 90-day / newest-50
-chat retention the privacy policy promises.
+chat retention the privacy policy promises. Then apply
+[`migrations/20260926_spoiler_prefs.sql`](migrations/20260926_spoiler_prefs.sql)
+for Spoiler Shield (`/progress`, `/spoilers`).
 
 ## Slash Commands
 
@@ -72,7 +74,9 @@ chat retention the privacy policy promises.
 | `/price <game>` | Live multi-store prices via CheapShark |
 | `/discover [category] [game]` | Pro tip, industry secret, or lore drop — random unless you pick |
 | `/history` | Show your last messages with the bot (ephemeral) |
-| `/clear` | Wipe your chat history |
+| `/progress [game] [at]` | 🛡️ Tell the bot where you are in a game; story answers stay behind that point (`at:clear` forgets it) |
+| `/spoilers <on|off>` | 🛡️ Spoiler Shield for your DMs. In server channels reveals are always in spoiler bars |
+| `/clear` | Wipe your chat history and saved game progress |
 | `/quota` | Messages and screenshots you have left today |
 | `/stats` | Global + your usage stats |
 | `/premium` | Compare plans and upgrade |
