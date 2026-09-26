@@ -274,5 +274,47 @@ for (const fn of ['gg_discord_prune()', 'gg_discord_global_stats()']) {
 await db.exec(readFileSync(`${ROOT}/migrations/20260926_spoiler_prefs.sql`, 'utf8'));
 check('spoiler migration is idempotent over schema-v3', true);
 
+// -- Watchtower ---------------------------------------------------------------
+// The claim table's primary key IS the exactly-once guarantee: the bot inserts
+// before it posts, and a second insert for the same (watch, item) must fail
+// with 23505 — which watchtower.js reads as "already posted".
+{
+  for (const t of ['discord_watches', 'discord_watch_posts']) {
+    const r = await db.query(`select relrowsecurity from pg_class where relname = $1`, [t]);
+    check(`${t} has RLS enabled`, r.rows[0]?.relrowsecurity === true);
+    const pol = await db.query(`select count(*)::int c from pg_policies where tablename = $1`, [t]);
+    check(`${t} has no policies (service role only)`, pol.rows[0].c === 0);
+  }
+  const G = '1400000000000000001', C = '1400000000000000002';
+  const w = await db.query(
+    `insert into discord_watches (guild_id, channel_id, steam_appid, game_name) values ($1, $2, 1245620, 'ELDEN RING') returning id, news, deals, since`,
+    [G, C]);
+  const id = w.rows[0].id;
+  check('defaults: patch notes, no deals', w.rows[0].news === 'patches' && w.rows[0].deals === false);
+  check('since defaults to creation time (no backfill)', w.rows[0].since instanceof Date);
+  // Snowflakes above 2^53 survive the round trip as text.
+  const back = await db.query(`select channel_id::text c from discord_watches where id = $1`, [id]);
+  check('snowflake channel id round-trips exactly', back.rows[0].c === C, back.rows[0].c);
+
+  const rejects = async (sql, params = []) => { try { await db.query(sql, params); return null; } catch (e) { return e.code || 'err'; } };
+  check('same game twice in one channel is rejected',
+    await rejects(`insert into discord_watches (guild_id, channel_id, steam_appid, game_name) values ($1, $2, 1245620, 'x')`, [G, C]) === '23505');
+  check('unknown news mode rejected',
+    await rejects(`insert into discord_watches (guild_id, channel_id, steam_appid, game_name, news) values ($1, 3, 1, 'x', 'sometimes')`, [G]) !== null);
+  check('a watch that posts nothing is rejected',
+    await rejects(`insert into discord_watches (guild_id, channel_id, steam_appid, game_name, news, deals) values ($1, 4, 1, 'x', 'none', false)`, [G]) !== null);
+  check('deals-only watch allowed',
+    await rejects(`insert into discord_watches (guild_id, channel_id, steam_appid, game_name, news, deals) values ($1, 5, 1, 'x', 'none', true)`, [G]) === null);
+
+  check('first claim succeeds', await rejects(`insert into discord_watch_posts (watch_id, item_key) values ($1, 'news:123')`, [id]) === null);
+  check('second claim of the same item fails with 23505',
+    await rejects(`insert into discord_watch_posts (watch_id, item_key) values ($1, 'news:123')`, [id]) === '23505');
+  await db.query(`delete from discord_watches where id = $1`, [id]);
+  const left = await db.query(`select count(*)::int c from discord_watch_posts where watch_id = $1`, [id]);
+  check('removing a watch removes its post records', left.rows[0].c === 0);
+}
+await db.exec(readFileSync(`${ROOT}/migrations/20260926_watchtower.sql`, 'utf8'));
+check('watchtower migration is idempotent over schema-v3', true);
+
 console.log(`\nSQL: ${pass} passed${fail ? `, ${fail} FAILED` : ''}`);
 process.exit(fail ? 1 : 0);

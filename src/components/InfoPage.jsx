@@ -166,7 +166,8 @@ function TermsContent() {
           <li>your Discord user ID, and the server ID when you use it in a server;</li>
           <li>the messages you send it and its replies, so it can remember the conversation;</li>
           <li>usage counts, to apply daily limits and show <b>/stats</b>;</li>
-          <li>your Spoiler Shield setting and the game progress you tell it, so answers stay spoiler-safe.</li>
+          <li>your Spoiler Shield setting and the game progress you tell it, so answers stay spoiler-safe;</li>
+          <li>for servers using <b>/watch</b>: the server and channel IDs and the games to post patch notes or deals for — no user IDs. These are deleted with <b>/watch remove</b>, when the channel is deleted, or when the bot is removed from the server.</li>
         </ul>
         <p>
           The bot only reads messages that <b>@mention it</b>, direct messages sent to it, and its slash

@@ -13,7 +13,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 require('dotenv').config({ quiet: true });
-const { SlashCommandBuilder, REST, Routes } = require('discord.js');
+const {
+  SlashCommandBuilder, REST, Routes, PermissionFlagsBits, InteractionContextType, ChannelType,
+} = require('discord.js');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
@@ -77,6 +79,41 @@ const commands = [
         { name: '🛡️ On — hide what comes after where I am', value: 'on' },
         { name: 'Off — full answers (server channels still bar big reveals)', value: 'off' },
       )),
+
+  // ─── Watchtower (server admins) ─────────────────────────────────────────
+  // Manage Server by default; admins can grant it to a mod role under
+  // Server Settings → Integrations without any change here. Servers only.
+  new SlashCommandBuilder()
+    .setName('watch')
+    .setDescription('Post patch notes and deals for a game into a channel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setContexts(InteractionContextType.Guild)
+    .addSubcommand(s => s
+      .setName('add')
+      .setDescription('Start posting a game\'s patch notes (and deals) in a channel')
+      .addStringOption(o => o.setName('game').setDescription('Game on Steam, e.g. Elden Ring').setRequired(true).setMaxLength(80))
+      .addStringOption(o => o
+        .setName('alerts')
+        .setDescription('What to post (default: patch notes)')
+        .setRequired(false)
+        .addChoices(
+          { name: '🛠️ Patch notes', value: 'patches' },
+          { name: '🛠️ Patch notes + 💸 deals', value: 'patches+deals' },
+          { name: '📣 All official news', value: 'news' },
+          { name: '💸 Deals only', value: 'deals' },
+        ))
+      .addChannelOption(o => o
+        .setName('channel')
+        .setDescription('Where to post (default: this channel)')
+        .setRequired(false)
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
+    .addSubcommand(s => s
+      .setName('remove')
+      .setDescription('Stop posting a game')
+      .addStringOption(o => o.setName('game').setDescription('The game to stop watching').setRequired(true).setMaxLength(80)))
+    .addSubcommand(s => s
+      .setName('list')
+      .setDescription('Show what this server is watching')),
 
   // ─── Utility ────────────────────────────────────────────────────────────
   new SlashCommandBuilder()

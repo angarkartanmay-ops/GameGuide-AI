@@ -115,5 +115,17 @@ check('/stats aggregates server-side', /rpc\('gg_discord_global_stats'\)/.test(I
   }
 }
 
+// ── Watchtower is an admin tool ────────────────────────────────────────────
+// /watch posts into channels on the server's behalf. Visible to every member,
+// anyone could point patch spam at #general.
+{
+  const def = REGISTER.slice(REGISTER.indexOf(".setName('watch')"), REGISTER.indexOf(".setName('watch')") + 600);
+  check('/watch defaults to Manage Server', def.includes('.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)'));
+  check('/watch is server-only', def.includes('.setContexts(InteractionContextType.Guild)'));
+  check('/watch checks the bot can post before saving', INDEX.includes('WATCH_POST_PERMS.filter'));
+  check('leaving a server deletes its watches', INDEX.includes("client.on('guildDelete'") && INDEX.includes('deleteGuild('));
+  check('deleting a channel deletes its watches', INDEX.includes("client.on('channelDelete'") && INDEX.includes('deleteChannel('));
+}
+
 console.log(`discord-launch: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

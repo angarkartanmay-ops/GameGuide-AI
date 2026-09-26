@@ -4,7 +4,9 @@
 //  Full feature-parity with the web app + monetization hooks.
 //
 //  Slash commands:    /ask /price /discover /konami /clear /history /quota
-//                     /stats /premium /help
+//                     /stats /premium /help /progress /spoilers /watch
+//  Watchtower:        patch-note + deal alerts posted into server channels
+//                     (watchtower.js; polled from this process every 15 min)
 //  Mention chat:      @GameGuide <question> [+ image attachments], or a DM
 //  Intents:           none privileged — only reads messages addressed to it
 //  Invite perms:      277025508352 (View, Send, Send in Threads, Embed, Attach,
@@ -28,13 +30,15 @@ const {
   Partials,
   EmbedBuilder,
   ActionRowBuilder,
+  ChannelType,
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
   PermissionFlagsBits,
 } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
-const { fetchPriceDirect } = require('./cheapshark');
+const { fetchPriceDirect, fetchJson } = require('./cheapshark');
+const watchtower = require('./watchtower');
 const quota = require('./quota');
 const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
 const { mountStripeWebhook, buildCheckoutUrl, stripeConfigured } = require('./billing-stripe');
@@ -421,7 +425,7 @@ async function fetchAttachmentAsBase64(att) {
   }
 }
 
-async function callChatProxy({ prompt, history, attachments, discordUserId, tier, softCapped, spoiler }) {
+async function callChatProxy({ prompt, history, attachments, discordUserId, tier, softCapped, spoiler, stateless }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PROXY_TIMEOUT_MS);
   try {
@@ -456,6 +460,8 @@ async function callChatProxy({ prompt, history, attachments, discordUserId, tier
         // lands in a shared server channel (reveals then stay barred even if
         // the asker said "spoil it": bystanders never agreed).
         spoiler: spoiler || undefined,
+        // Watchtower summaries: no memory, no trace — nobody asked a question.
+        ephemeral: stateless === true,
       }),
     });
 
@@ -680,6 +686,124 @@ async function handleChatRequest({ userId, guildId, prompt, attachments, replyTa
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  WATCHTOWER — runtime wiring (the logic lives in watchtower.js)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const watchRepo = watchtower.supabaseRepo(supabase);
+const WATCHTOWER_ENABLED = process.env.WATCHTOWER_ENABLED !== '0';
+const WATCH_POST_PERMS = [
+  PermissionFlagsBits.ViewChannel,
+  PermissionFlagsBits.SendMessages,
+  PermissionFlagsBits.EmbedLinks,
+];
+const WATCH_PERM_NAMES = new Map([
+  [PermissionFlagsBits.ViewChannel, 'View Channel'],
+  [PermissionFlagsBits.SendMessages, 'Send Messages'],
+  [PermissionFlagsBits.EmbedLinks, 'Embed Links'],
+]);
+const watchtowerState = {};
+let watchtowerRunning = false;
+
+/** One summary per Steam item, written by the same model mesh as every answer. */
+async function summarizeForWatch(gameName, item) {
+  const data = await callChatProxy({
+    prompt: watchtower.buildSummaryPrompt(gameName, item),
+    history: [],
+    attachments: [],
+    // Billed to the bot's own bucket, never to a member's quota.
+    discordUserId: client.user?.id,
+    tier: 'free',
+    // Posted in a shared channel: story DLC reveals stay behind bars.
+    spoiler: { mode: 'shield', progress: {}, publicChannel: true },
+    stateless: true,
+  });
+  return data?._meta?.error ? null : data.text;
+}
+
+/** Rejects with a Discord error code the cycle understands (10003/50001/50013). */
+async function sendToWatchChannel(channelId, payload) {
+  const channel = await client.channels.fetch(String(channelId));
+  if (!channel?.isTextBased?.() || typeof channel.send !== 'function') {
+    throw Object.assign(new Error('not a text channel'), { code: 10003 });
+  }
+  const perms = channel.permissionsFor?.(client.user);
+  if (perms && !perms.has(WATCH_POST_PERMS)) {
+    throw Object.assign(new Error('missing permissions'), { code: 50013 });
+  }
+  await channel.send(payload);
+}
+
+async function watchtowerTick() {
+  if (watchtowerRunning || shuttingDown || !client.isReady()) return;
+  watchtowerRunning = true;
+  try {
+    const r = await watchtower.runCycle({
+      repo: watchRepo,
+      fetchJson,
+      summarize: summarizeForWatch,
+      send: sendToWatchChannel,
+      state: watchtowerState,
+      log: console,
+    });
+    if (r.posted || r.paused || r.failed) console.log(`[watchtower] ${JSON.stringify(r)}`);
+  } catch (e) {
+    console.warn('[watchtower] cycle failed:', e.message);
+  } finally {
+    watchtowerRunning = false;
+  }
+}
+
+/** The body of `/watch add`, after the permission and channel checks. */
+async function addWatch(interaction, target) {
+  const query = interaction.options.getString('game', true);
+  const alerts = watchtower.parseAlerts(interaction.options.getString('alerts'));
+  const [existing, premium, game] = await Promise.all([
+    watchRepo.listGuildWatches(interaction.guildId),
+    watchRepo.guildIsPremium(interaction.guildId).catch(() => false),
+    watchtower.resolveSteamGame(query, fetchJson),
+  ]);
+  if (!game) {
+    return interaction.editReply(`🔎 I couldn't find **${cleanField(query, 80)}** on Steam. Watchtower follows Steam games — try the name exactly as the Steam store shows it.`);
+  }
+  const limit = premium ? watchtower.WATCH_LIMITS.server : watchtower.WATCH_LIMITS.free;
+  const already = existing.find(w => w.channel_id === target.id && w.steam_appid === game.appid);
+  if (!already && existing.length >= limit) {
+    return interaction.editReply(
+      `📡 This server already watches **${existing.length}/${limit}** games${premium ? '' : ' (the free limit)'}. ` +
+      `Free one up with \`/watch remove\`` +
+      (premium ? '.' : `, or upgrade the server with \`/premium\` to watch up to ${watchtower.WATCH_LIMITS.server}.`));
+  }
+  await watchRepo.upsertWatch({
+    guild_id: interaction.guildId,
+    channel_id: target.id,
+    steam_appid: game.appid,
+    game_name: game.name,
+    news: alerts.news,
+    deals: alerts.deals,
+  });
+
+  // Show the most recent matching post as proof it's wired to the right game.
+  let latestLine = '';
+  if (alerts.news !== 'none') {
+    const items = await watchtower.fetchSteamNews(game.appid, fetchJson).catch(() => null);
+    const kind = alerts.news === 'all' ? 'announcement' : 'patch notes';
+    const latest = (items || [])
+      .filter(i => (alerts.news === 'all' ? watchtower.isOfficial(i) : watchtower.isPatchNote(i)))
+      .sort((a, b) => b.date - a.date)[0];
+    latestLine = latest
+      ? `Latest ${kind}: **${cleanField(latest.title, 120)}** (<t:${latest.date}:R>). The next one gets posted here.`
+      : items ? `No ${kind} on Steam yet — the first one will be posted here.` : '';
+  }
+  const dealLine = alerts.deals
+    ? `Deals: posted when it hits its all-time low or ${watchtower.DEAL_MIN_SAVINGS}%+ off.`
+    : '';
+  return interaction.editReply(
+    `📡 **${already ? 'Updated' : 'Watching'} ${game.name}** in <#${target.id}> — ${watchtower.describeAlerts(alerts)}.\n` +
+    [latestLine, dealLine].filter(Boolean).join('\n') +
+    '\n-# Manage with `/watch list` · `/watch remove`');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  CLIENT
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -721,6 +845,30 @@ client.once('clientReady', async () => {
   }
 
   client.user.setActivity('🎮 /help · @ me with anything', { type: 0 });
+
+  // Watchtower polls from this process: the bot is already always-on, and
+  // posting needs the gateway connection anyway. First pass after a minute so
+  // a restart loop can't hammer Steam; `once` means a re-login never stacks a
+  // second timer.
+  if (WATCHTOWER_ENABLED && supabaseHasServiceRole) {
+    setTimeout(watchtowerTick, 60_000);
+    setInterval(watchtowerTick, watchtower.POLL_INTERVAL_MS);
+    console.log(`   Watchtower: polling every ${watchtower.POLL_INTERVAL_MS / 60_000} min`);
+  } else {
+    console.log(`   Watchtower: off (${supabaseHasServiceRole ? 'WATCHTOWER_ENABLED=0' : 'no service role key'})`);
+  }
+});
+
+// A server that removes the bot, or deletes a watched channel, leaves nothing
+// behind — no orphaned rows to poll for, no stored config for a server we
+// are no longer in. An outage (guild unavailable) is not a removal.
+client.on('guildDelete', (guild) => {
+  if (!supabaseHasServiceRole || guild.available === false) return;
+  watchRepo.deleteGuild(guild.id).catch(e => console.warn('[watchtower] guild cleanup failed:', e.message));
+});
+client.on('channelDelete', (channel) => {
+  if (!supabaseHasServiceRole || !channel.guildId) return;
+  watchRepo.deleteChannel(channel.id).catch(e => console.warn('[watchtower] channel cleanup failed:', e.message));
 });
 
 // ─── Mention listener (free-form chat, mirrors /ask) ──────────────────────
@@ -930,6 +1078,60 @@ client.on('interactionCreate', async (interaction) => {
             '\n\nSet it: `/progress game:Elden Ring at:beat Margit` · forget one: `at:clear` · forget everything: `/clear`',
           flags: MessageFlags.Ephemeral,
         });
+      }
+
+      // Watchtower. Discord hides the command from members without Manage
+      // Server unless an admin grants it (Server Settings → Integrations), so
+      // there is deliberately no second permission check here to fight that.
+      case 'watch': {
+        const sub = interaction.options.getSubcommand();
+        if (!interaction.inGuild()) {
+          return interaction.reply({ content: '📡 Watchtower posts into server channels — run `/watch` inside a server.', flags: MessageFlags.Ephemeral });
+        }
+        if (!supabaseHasServiceRole) {
+          return interaction.reply({ content: '⚠️ Watchtower isn\'t available on this deployment (no database connection).', flags: MessageFlags.Ephemeral });
+        }
+
+        if (sub === 'list') {
+          const rows = await watchRepo.listGuildWatches(guildId);
+          const content = rows.length
+            ? '📡 **Watchtower — this server**\n' + rows.map(w =>
+                `• **${w.game_name}** → <#${w.channel_id}> · ${watchtower.describeAlerts(w)}` +
+                (w.paused_reason ? `\n  ⏸️ Paused: ${w.paused_reason}. Fix the channel permissions, then \`/watch add\` again to resume.` : '')
+              ).join('\n')
+            : '📡 This server isn\'t watching anything yet. Try `/watch add game:Elden Ring` in your patch-notes channel.';
+          return interaction.reply({ content: content.slice(0, 2000), flags: MessageFlags.Ephemeral });
+        }
+
+        if (sub === 'remove') {
+          const q = cleanField(interaction.options.getString('game', true), 80).toLowerCase();
+          const rows = await watchRepo.listGuildWatches(guildId);
+          const hits = rows.filter(w => w.game_name.toLowerCase().includes(q) || String(w.steam_appid) === q);
+          if (!hits.length) {
+            return interaction.reply({ content: `📡 Nothing here matches **${q}**. See what's watched with \`/watch list\`.`, flags: MessageFlags.Ephemeral });
+          }
+          await watchRepo.deleteWatches(hits.map(w => w.id));
+          return interaction.reply({
+            content: `📡 Stopped: ${hits.map(w => `**${w.game_name}** in <#${w.channel_id}>`).join(', ')}.`,
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+
+        // add
+        const target = interaction.options.getChannel('channel') || interaction.channel;
+        if (!target || ![ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(target.type)) {
+          return interaction.reply({ content: '📡 Pick a text or announcement channel (use the `channel` option), not a thread or voice chat.', flags: MessageFlags.Ephemeral });
+        }
+        const perms = target.permissionsFor?.(client.user);
+        const missing = WATCH_POST_PERMS.filter(p => !perms?.has(p));
+        if (missing.length) {
+          return interaction.reply({
+            content: `⚠️ I can't post in <#${target.id}> — I'm missing **${missing.map(p => WATCH_PERM_NAMES.get(p)).join(', ')}** there. Allow that in the channel's permissions, then run this again.`,
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        return addWatch(interaction, target);
       }
 
       case 'konami':
@@ -1144,6 +1346,9 @@ client.on('interactionCreate', async (interaction) => {
                 'I answer up to where you are and hide the rest behind ||spoiler bars||.\n' +
                 '`/progress [game] [at]` — tell me where you are in a game\n' +
                 '`/spoilers [mode]` — turn the shield on or off for you', inline: false },
+            { name: '📡 Watchtower (server admins)', value:
+                '`/watch add <game>` — post its patch notes (and deals) in a channel\n' +
+                '`/watch list` · `/watch remove <game>`', inline: false },
             { name: '🛠️ Utility', value:
                 '`/quota` — how much you have left today\n' +
                 '`/history` — show your recent chat with me\n' +

@@ -64,7 +64,20 @@ Existing installs: after pulling, apply
 (fresh installs get it from `schema-v3.sql`). It adds the 90-day / newest-50
 chat retention the privacy policy promises. Then apply
 [`migrations/20260926_spoiler_prefs.sql`](migrations/20260926_spoiler_prefs.sql)
-for Spoiler Shield (`/progress`, `/spoilers`).
+for Spoiler Shield (`/progress`, `/spoilers`), and
+[`migrations/20260926_watchtower.sql`](migrations/20260926_watchtower.sql)
+for Watchtower (`/watch`).
+
+### Watchtower
+
+The bot polls Steam every 15 minutes for games that servers watch (from this
+process; set `WATCHTOWER_ENABLED=0` to turn it off). New official patch notes
+are summarised once by the chat proxy and posted to every watching channel —
+one model call per patch, however many servers follow the game. Deal alerts
+check CheapShark every 6 hours and post at an all-time low or 50%+ off.
+Free servers can watch 3 games, Server-plan servers 25. A post is claimed in
+`discord_watch_posts` before it is sent, so restarts never double-post; a
+channel the bot can no longer post in is paused (shown in `/watch list`).
 
 ## Slash Commands
 
@@ -77,6 +90,8 @@ for Spoiler Shield (`/progress`, `/spoilers`).
 | `/progress [game] [at]` | 🛡️ Tell the bot where you are in a game; story answers stay behind that point (`at:clear` forgets it) |
 | `/spoilers <on|off>` | 🛡️ Spoiler Shield for your DMs. In server channels reveals are always in spoiler bars |
 | `/clear` | Wipe your chat history and saved game progress |
+| `/watch add <game> [alerts] [channel]` | 📡 Watchtower (Manage Server): post the game's Steam patch notes, summarised, and optionally its deals into a channel |
+| `/watch list` · `/watch remove <game>` | See or stop what this server watches |
 | `/quota` | Messages and screenshots you have left today |
 | `/stats` | Global + your usage stats |
 | `/premium` | Compare plans and upgrade |

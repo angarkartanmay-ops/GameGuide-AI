@@ -163,5 +163,7 @@ async function fetchPriceDirect(gameTitle) {
 
 module.exports = {
   fetchPriceDirect,
+  fetchJson,
+  scoreTitleMatch,
   STORE_NAMES,
 };
