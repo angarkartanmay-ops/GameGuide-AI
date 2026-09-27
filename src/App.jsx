@@ -1,14 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import './styles/chrome.css';
 import { THEME_IDS, themes as THEME_LIST } from './components/ThemeSelector';
 import useChat from './hooks/useChat';
 import useAuth from './hooks/useAuth';
-import LandingPage from './components/LandingPage';
-import InfoPage from './components/InfoPage';
 import ThemeTransition, { THEME_TRANSITION_DURATION, VARIANTS as FX_VARIANTS } from './components/ThemeTransition';
-import Crosshair from './components/Crosshair';
 import usePerfMode from './hooks/usePerfMode';
-import CodexShell from './components/codex/CodexShell';
+
+// Each view is its own chunk: the landing no longer ships the chat's markdown
+// and streaming code, and the chat no longer ships GSAP.
+const LandingPage = lazy(() => import('./components/LandingPage'));
+const InfoPage = lazy(() => import('./components/InfoPage'));
+const CodexShell = lazy(() => import('./components/codex/CodexShell'));
+// The reticle (and framer-motion with it) only ever shows on the landing,
+// and only for a mouse — touch devices never download it.
+const Crosshair = lazy(() => import('./components/Crosshair'));
+const FINE_POINTER = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
 
 // Hash-routable static views. Anything outside this set falls back to landing
 // (so a stale or unknown hash never strands the user on a blank page).
@@ -152,15 +158,18 @@ function App() {
     };
   }, []);
 
+  // The push happens outside setView: React may run an updater twice
+  // (StrictMode does), which pushed duplicate entries and made Back look
+  // like it did nothing.
+  const viewRef = useRef(view);
+  useEffect(() => { viewRef.current = view; }, [view]);
   const navigate = useCallback((next) => {
-    if (!ALL_VIEWS.has(next)) return;
-    setView((prev) => {
-      if (prev === next) return prev;
-      const hash = next === 'landing' ? '' : `#${next}`;
-      const url = `${window.location.pathname}${window.location.search}${hash}`;
-      window.history.pushState({ view: next }, '', url);
-      return next;
-    });
+    if (!ALL_VIEWS.has(next) || viewRef.current === next) return;
+    const hash = next === 'landing' ? '' : `#${next}`;
+    const url = `${window.location.pathname}${window.location.search}${hash}`;
+    window.history.pushState({ view: next }, '', url);
+    viewRef.current = next;
+    setView(next);
   }, []);
 
   const goLanding = useCallback(() => {
@@ -219,9 +228,10 @@ function App() {
         kind={view}
         onBack={() => {
           // Prefer real history (back-from-info returns to chat or landing,
-          // whichever the user came from). Fall back to landing if history
-          // is empty (e.g. direct deep link).
-          if (window.history.length > 1) window.history.back();
+          // whichever the user came from) — but only when the previous entry
+          // is ours. navigate() stamps its entries with { view }; a deep link
+          // has no stamp, and history.back() there would leave the site.
+          if (window.history.state?.view) window.history.back();
           else goLanding();
         }}
         onLogo={goLanding}
@@ -245,10 +255,12 @@ function App() {
 
   return (
     <>
-      {/* The reticle suits the landing and info pages; the chat is for reading
-          and selecting text, so it keeps the normal cursor. */}
-      {view !== 'chat' && <Crosshair />}
-      {viewBody}
+      {/* The reticle suits the landing; the chat and the info pages are for
+          reading and selecting text, so they keep the normal cursor. */}
+      {view === 'landing' && FINE_POINTER && <Suspense fallback={null}><Crosshair /></Suspense>}
+      <Suspense fallback={<div className="route-fallback" aria-hidden="true" />}>
+        {viewBody}
+      </Suspense>
       {fxOverlay}
     </>
   );

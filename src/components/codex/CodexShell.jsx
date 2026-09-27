@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import ThemeSelector from '../ThemeSelector';
 import UserProfile from '../UserProfile';
 import ChatContainer from '../ChatContainer';
@@ -37,6 +37,17 @@ export default function CodexShell({
   const ask = useCallback((q) => sendRef.current(q, []), []);
   const draft = useCallback((t) => inputRef.current?.setDraft(t), []);
   const attach = useCallback(() => inputRef.current?.openFilePicker(), []);
+
+  // A cover picked on the landing arrives as a one-shot draft: typed into the
+  // bar for the player to edit or send, never sent on their behalf.
+  useEffect(() => {
+    let text = null;
+    try {
+      text = sessionStorage.getItem('gg.startDraft');
+      sessionStorage.removeItem('gg.startDraft');
+    } catch { /* storage blocked: nothing was stashed either */ }
+    if (text && text.length <= 200) inputRef.current?.setDraft(text);
+  }, []);
 
   const style = ambience.accent ? { '--codex-accent': ambience.accent } : undefined;
 

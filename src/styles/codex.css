@@ -49,11 +49,6 @@
 
 .codex :focus-visible { outline: 2px solid var(--cx-accent); outline-offset: 2px; }
 
-.sr-only {
-  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
-
 /* ── Backdrop ─────────────────────────────────────────────────────────── */
 .cx-backdrop { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
 .cx-backdrop__ambient {

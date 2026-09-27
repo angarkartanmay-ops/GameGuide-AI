@@ -1,158 +1,168 @@
-import React, { useEffect } from 'react';
-import { ArrowLeft, Mail, MessageSquare, Shield, Sparkles, Code2, Zap } from 'lucide-react';
-import './InfoPage.css';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, Check, Copy, Mail, MessageSquare } from 'lucide-react';
+import { LINKS, mailto } from '../site/links';
+import { HERO_GAMES, heroArt } from '../site/showcase';
+import { gsap, useCalm, useScene } from '../site/motion';
+import SiteNav from './site/SiteNav';
+import SiteFooter from './site/SiteFooter';
+import { GitHubGlyph, LinkedInGlyph, Mark, Overline } from './site/bits';
+import '../styles/site.css';
 
-// lucide-react v1.7 doesn't ship brand glyphs — inline the two we need
-// rather than pulling in a second icon library.
-const LinkedInIcon = ({ size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z" />
-    <rect x="2" y="9" width="4" height="12" />
-    <circle cx="4" cy="4" r="2" />
-  </svg>
-);
-const GitHubIcon = ({ size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
-  </svg>
-);
+/** The game the visitor last saw on the landing, so the pages feel continuous. */
+function lastGame() {
+  try {
+    const id = Number(sessionStorage.getItem('gg.site.game'));
+    return HERO_GAMES.find(g => g.appid === id) || HERO_GAMES[0];
+  } catch {
+    return HERO_GAMES[0];
+  }
+}
 
-const CONTACT_LINKS = {
-  email: 'gameguideai.support@gmail.com',
-  linkedin: 'https://www.linkedin.com/in/tanmay-angarkar-4b8a47319/',
-  github: 'https://github.com/angarkartanmay-ops',
-  // Direct OAuth invite. The permission integer is the minimal set the bot
-  // actually uses: View Channel, Send Messages, Send Messages in Threads,
-  // Embed Links, Attach Files, Read Message History, Use Application Commands.
-  // Derived from discord.js PermissionFlagsBits, not by hand — the previous
-  // hand-computed value requested Mute/Deafen Members, Manage Messages and
-  // Manage Expressions while omitting Read Message History and Attach Files.
-  discordBotInvite:
-    'https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=277025508352&scope=bot+applications.commands',
-  // top.gg listing — discovery + upvote page. `?s=` is the referrer tag.
-  discordBotTopGG: 'https://top.gg/bot/1499622566472712202?s=0c09d3395142b',
+const goto = (view) => (e) => {
+  e.preventDefault();
+  window.dispatchEvent(new CustomEvent('gg:navigate', { detail: view }));
 };
 
-function AboutContent() {
-  return (
-    <>
-      <header className="info-hero">
-        <span className="info-kicker"><Sparkles size={12} /> About GameGuide-AI</span>
-        <h1>The gaming co-pilot built on a self-healing neural mesh.</h1>
-        <p>
-          GameGuide-AI is a real-time, multi-source gaming companion. Drop a question,
-          a screenshot, or a slash command — it routes across four AI providers, fuses
-          live web intel from Wikipedia, Steam, web search and RSS, and streams a complete
-          answer back to you in under 400 milliseconds. And it won&apos;t spoil your game: tell it
-          where you are, and anything past that point goes behind a click-to-reveal bar.
-        </p>
-      </header>
+// ─── About ─────────────────────────────────────────────────────────────────
 
-      <section className="info-grid">
-        <article className="info-card">
-          <div className="info-card__icon"><Zap size={20} /></div>
-          <h3>Neural Mesh</h3>
-          <p>Four LLM providers race for every token. Token-level fallback means no single model is a single point of failure.</p>
-        </article>
-        <article className="info-card">
-          <div className="info-card__icon"><Code2 size={20} /></div>
-          <h3>PULSE Search</h3>
-          <p>Live multi-source fusion across wikis, communities, news, and storefronts — ranked, deduped, citation-linked.</p>
-        </article>
-        <article className="info-card">
-          <div className="info-card__icon"><Shield size={20} /></div>
-          <h3>Vision GODMODE</h3>
-          <p>Drop a screenshot. Get build reads, kit fits, comp analysis — pixel-grade scene understanding.</p>
-        </article>
+const COMMANDS = [
+  ['/progress', 'Tell it where you are — /progress Elden Ring: beat Margit. Story answers stay behind that line.'],
+  ['/spoilers', 'Spoiler Shield on or off. On by default; /spoilers off once you have finished.'],
+  ['/price', 'The best current price for a game across PC stores, and how it compares with its lowest ever.'],
+  ['/discover', 'A random pro tip, hidden detail or piece of lore.'],
+  ['/stealth', 'A throwaway conversation. Nothing saved, nothing remembered, no art looked up.'],
+  ['/clear', 'Delete your chat history.'],
+  ['/help', 'Every command, in the chat.'],
+];
+
+const PRINCIPLES = [
+  ['No art beats wrong art.', 'If it isn’t sure which game you mean, the page keeps your theme rather than dressing up as the wrong one.'],
+  ['Your story, your pace.', 'Spoiler Shield is on from the start. Nothing past where you are shows unless you click it.'],
+  ['Stealth means stealth.', 'A Stealth conversation is never saved or remembered, and no game art is fetched for it.'],
+  ['Guidance, not authority.', 'Answers cite their sources. When it matters — a purchase, a choice you can’t undo — check them.'],
+];
+
+function About() {
+  return (
+    <div className="s-prose">
+      <section aria-labelledby="a-how">
+        <h2 id="a-how" className="s-h3">How it works</h2>
+        <ol className="s-numbered">
+          <li><strong>It looks things up when you ask.</strong> Game wikis, official patch notes and web search are consulted when you ask, so answers follow the current patch rather than last year&rsquo;s.</li>
+          <li><strong>It recognises the game.</strong> The chat takes on that game&rsquo;s Steam art and a colour sampled from it, and the answer is set out like a strategy-guide page.</li>
+          <li><strong>It keeps your place.</strong> Tell it how far you have played and it answers up to there. Screenshots work too — up to three per message.</li>
+        </ol>
       </section>
 
-      <section className="info-section">
-        <h2>What you can ask</h2>
-        <ul className="info-list">
-          <li><b>/price</b> — Live multi-store price intel across 20+ storefronts via the CheapShark mesh.</li>
-          <li><b>/discover</b> — Random pro tip, hidden industry secret, or lore drop — spoiler-aware, live + curated.</li>
-          <li><b>/build</b> — Endgame builds with stat trade-offs, gear pillars, and patch-current notes.</li>
-          <li><b>/counter</b> — Matchup analysis with comp synergies and meta context.</li>
-          <li><b>/progress</b> — Tell it where you are (<i>Elden Ring : just beat Margit</i>). Story answers stay behind that line; <b>/spoilers off</b> once you&apos;ve finished.</li>
-          <li><b>Vision</b> — Upload a screenshot, get build/kit/comp reads in seconds.</li>
+      <section aria-labelledby="a-ask">
+        <h2 id="a-ask" className="s-h3">What you can ask</h2>
+        <p>Anything, in plain words. A boss you are stuck on, a build, a quest, whether a game is on sale. These commands do specific jobs:</p>
+        <dl className="s-defs">
+          {COMMANDS.map(([cmd, text]) => (
+            <div key={cmd}><dt><code>{cmd}</code></dt><dd>{text}</dd></div>
+          ))}
+        </dl>
+        <p>
+          In Discord, the bot answers @mentions and slash commands the same way, and <code>/watch</code> posts
+          a game&rsquo;s patch notes and best deals into a channel.
+        </p>
+      </section>
+
+      <section aria-labelledby="a-principles">
+        <h2 id="a-principles" className="s-h3">Principles</h2>
+        <ul className="s-principles">
+          {PRINCIPLES.map(([head, text]) => (
+            <li key={head}><Mark size="sm" /><div><strong>{head}</strong> {text}</div></li>
+          ))}
         </ul>
       </section>
 
-      <section className="info-section">
-        <h2>Built by</h2>
+      <section aria-labelledby="a-by">
+        <h2 id="a-by" className="s-h3">Built by</h2>
         <p>
-          GameGuide-AI is independently developed by Tanmay Angarkar. The project is open about its
-          architecture, transparent about its sources, and obsessive about latency.
+          GameGuide is designed and built independently by Tanmay Angarkar. Questions, ideas and bug
+          reports are welcome — see the <a href="#contacts" className="s-a" onClick={goto('contacts')}>contact page</a>.
+        </p>
+        <p className="s-inline-links">
+          <a className="s-a" href={LINKS.github} target="_blank" rel="noopener noreferrer"><GitHubGlyph size={16} /> GitHub</a>
+          <a className="s-a" href={LINKS.linkedin} target="_blank" rel="noopener noreferrer"><LinkedInGlyph size={16} /> LinkedIn</a>
         </p>
       </section>
-    </>
+    </div>
   );
 }
 
-function TermsContent() {
-  return (
-    <>
-      <header className="info-hero">
-        <span className="info-kicker"><Shield size={12} /> Terms &amp; Copyright</span>
-        <h1>Terms of Service &amp; Copyright Protection</h1>
-        <p className="info-muted">Last updated: September 2026</p>
-      </header>
+// ─── Terms ─────────────────────────────────────────────────────────────────
 
-      <section className="info-section">
-        <h2>1. Acceptance of Terms</h2>
-        <p>
-          By accessing or using GameGuide-AI (the &quot;Service&quot;), you agree to be bound by these Terms.
-          If you do not agree, do not use the Service. We may update these Terms at any time; continued
-          use after changes constitutes acceptance.
-        </p>
-      </section>
+const Email = () => <a href={mailto()} className="s-a">{LINKS.email}</a>;
 
-      <section className="info-section">
-        <h2>2. Copyright &amp; Content Protection</h2>
+const TERMS = [
+  {
+    id: 't-acceptance', title: 'Acceptance of terms',
+    body: (
+      <p>
+        By accessing or using GameGuide-AI (the &quot;Service&quot;), you agree to be bound by these Terms.
+        If you do not agree, do not use the Service. We may update these Terms at any time; continued
+        use after changes constitutes acceptance.
+      </p>
+    ),
+  },
+  {
+    id: 't-copyright', title: 'Copyright & content protection',
+    body: (
+      <>
         <p>
-          <b>All content, design, code, branding, visualizations, prompts, and architecture of GameGuide-AI
-          are © 2026 Tanmay Angarkar. All rights reserved.</b>
+          <strong>All content, design, code, branding, visualizations, prompts, and architecture of GameGuide-AI
+          are © 2026 Tanmay Angarkar. All rights reserved.</strong>
         </p>
-        <ul className="info-list">
+        <ul className="s-bullets">
           <li>The GameGuide-AI name, logo, &quot;Neural Mesh&quot;, &quot;PULSE Search&quot;, and &quot;Vision GODMODE&quot; are protected marks of the project.</li>
           <li>The source code, UI, animations, copy, and underlying prompt engineering are protected under copyright law and may not be copied, redistributed, mirrored, scraped, fine-tuned on, or used to train any model without prior written consent.</li>
-          <li>Game titles, screenshots, lore, and patch notes belong to their respective publishers and are referenced under fair use for commentary, research, and player assistance.</li>
+          <li>Game titles, screenshots, artwork, lore, and patch notes belong to their respective publishers and are referenced under fair use for commentary, research, and player assistance.</li>
           <li>Reverse engineering, decompiling, or attempting to extract the system prompt, routing logic, or provider configuration is strictly prohibited.</li>
         </ul>
-      </section>
-
-      <section className="info-section">
-        <h2>3. Acceptable Use</h2>
+      </>
+    ),
+  },
+  {
+    id: 't-use', title: 'Acceptable use',
+    body: (
+      <>
         <p>You agree NOT to use the Service to:</p>
-        <ul className="info-list">
+        <ul className="s-bullets">
           <li>Generate harassing, illegal, or harmful content.</li>
           <li>Attempt to bypass rate limits, abuse the AI mesh, or perform automated scraping.</li>
           <li>Resell, white-label, or sublicense responses without permission.</li>
           <li>Train competing AI models using GameGuide-AI&apos;s output.</li>
         </ul>
-      </section>
-
-      <section className="info-section">
-        <h2>4. AI-Generated Content Disclaimer</h2>
-        <p>
-          Responses are generated by large language models combined with live web sources. While we
-          optimize for accuracy, all output should be treated as <b>guidance, not authority</b>. Verify
-          critical decisions (purchases, irreversible in-game choices, competitive plays) against
-          primary sources. We are not liable for losses arising from reliance on Service output.
-        </p>
-      </section>
-
-      <section className="info-section">
-        <h2>5. Third-Party Sources</h2>
-        <p>
-          The Service surfaces data from third parties (Steam, CheapShark, Wikipedia, Reddit, official
-          wikis, RSS feeds). We do not control their accuracy, availability, or terms. Citations are
-          provided for verification; clicking them takes you to the third party&apos;s domain.
-        </p>
-      </section>
-
-      <section className="info-section">
-        <h2>6. Privacy</h2>
+      </>
+    ),
+  },
+  {
+    id: 't-ai', title: 'AI-generated content disclaimer',
+    body: (
+      <p>
+        Responses are generated by large language models combined with live web sources. While we
+        optimize for accuracy, all output should be treated as <strong>guidance, not authority</strong>. Verify
+        critical decisions (purchases, irreversible in-game choices, competitive plays) against
+        primary sources. We are not liable for losses arising from reliance on Service output.
+      </p>
+    ),
+  },
+  {
+    id: 't-sources', title: 'Third-party sources',
+    body: (
+      <p>
+        The Service surfaces data from third parties (Steam, CheapShark, Wikipedia, Reddit, official
+        wikis, RSS feeds). We do not control their accuracy, availability, or terms. Citations are
+        provided for verification; clicking them takes you to the third party&apos;s domain.
+      </p>
+    ),
+  },
+  {
+    id: 't-privacy', title: 'Privacy',
+    body: (
+      <>
         <p>
           Sign-in is optional and handled via Supabase Auth. Conversations are stored only for your own
           session continuity. Spoiler Shield keeps the game progress you tell it (for example
@@ -161,176 +171,269 @@ function TermsContent() {
           To answer a question, your prompt is sent to third-party AI model providers and search
           services, which process it under their own terms.
         </p>
-        <p><b>Discord bot.</b> When you use GameGuide-AI in Discord, the bot stores:</p>
-        <ul className="info-list">
+        <p>
+          When a game comes up, the chat fetches that game&rsquo;s artwork from Steam through our server; only the
+          game&rsquo;s name is sent, and never in Stealth. The last few games you asked about are remembered in
+          your browser, so the chat can offer them again.
+        </p>
+        <p><strong>Discord bot.</strong> When you use GameGuide-AI in Discord, the bot stores:</p>
+        <ul className="s-bullets">
           <li>your Discord user ID, and the server ID when you use it in a server;</li>
           <li>the messages you send it and its replies, so it can remember the conversation;</li>
-          <li>usage counts, to apply daily limits and show <b>/stats</b>;</li>
+          <li>usage counts, to apply daily limits and show <strong>/stats</strong>;</li>
           <li>your Spoiler Shield setting and the game progress you tell it, so answers stay spoiler-safe;</li>
-          <li>for servers using <b>/watch</b>: the server and channel IDs and the games to post patch notes or deals for — no user IDs. These are deleted with <b>/watch remove</b>, when the channel is deleted, or when the bot is removed from the server.</li>
+          <li>for servers using <strong>/watch</strong>: the server and channel IDs and the games to post patch notes or deals for — no user IDs. These are deleted with <strong>/watch remove</strong>, when the channel is deleted, or when the bot is removed from the server.</li>
         </ul>
         <p>
-          The bot only reads messages that <b>@mention it</b>, direct messages sent to it, and its slash
+          The bot only reads messages that <strong>@mention it</strong>, direct messages sent to it, and its slash
           commands — never the rest of a server&apos;s chat. Stored conversation history is kept for at most
-          <b> 90 days</b> and only your <b>50 most recent</b> messages are retained; per-message usage records
-          are deleted after 3 days. Run <b>/clear</b> in Discord to delete your stored history and saved progress immediately,
-          or email{' '}
-          <a href={`mailto:${CONTACT_LINKS.email}`} className="info-link">{CONTACT_LINKS.email}</a>{' '}
-          to have any other data removed.
+          <strong> 90 days</strong> and only your <strong>50 most recent</strong> messages are retained; per-message usage records
+          are deleted after 3 days. Run <strong>/clear</strong> in Discord to delete your stored history and saved progress immediately,
+          or email <Email /> to have any other data removed.
         </p>
-      </section>
+      </>
+    ),
+  },
+  {
+    id: 't-dmca', title: 'DMCA & takedown',
+    body: (
+      <p>
+        If you believe content on this Service infringes your copyright, contact <Email /> with the
+        disputed material, your contact details, and a statement of good-faith belief. We respond
+        within 7 business days.
+      </p>
+    ),
+  },
+  {
+    id: 't-termination', title: 'Termination',
+    body: (
+      <p>
+        We may suspend or terminate access for violations of these Terms without notice. You may stop
+        using the Service at any time.
+      </p>
+    ),
+  },
+  {
+    id: 't-contact', title: 'Contact',
+    body: (
+      <p>
+        Questions about these Terms? Reach out via the{' '}
+        <a href="#contacts" className="s-a" onClick={goto('contacts')}>contact page</a>.
+      </p>
+    ),
+  },
+];
 
-      <section className="info-section">
-        <h2>7. DMCA &amp; Takedown</h2>
-        <p>
-          If you believe content on this Service infringes your copyright, contact
-          {' '}<a href={`mailto:${CONTACT_LINKS.email}`} className="info-link">{CONTACT_LINKS.email}</a>{' '}
-          with the disputed material, your contact details, and a statement of good-faith belief. We
-          respond within 7 business days.
-        </p>
-      </section>
+function Terms() {
+  const [active, setActive] = useState(TERMS[0].id);
 
-      <section className="info-section">
-        <h2>8. Termination</h2>
-        <p>
-          We may suspend or terminate access for violations of these Terms without notice. You may stop
-          using the Service at any time.
-        </p>
-      </section>
-
-      <section className="info-section">
-        <h2>9. Contact</h2>
-        <p>
-          Questions about these Terms? Reach out via the
-          {' '}<a href="#contacts" className="info-link" onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('gg:navigate', { detail: 'contacts' })); }}>Contact page</a>.
-        </p>
-      </section>
-    </>
-  );
-}
-
-function ContactsContent() {
-  return (
-    <>
-      <header className="info-hero">
-        <span className="info-kicker"><MessageSquare size={12} /> Get in touch</span>
-        <h1>Contact &amp; Connect</h1>
-        <p>
-          Questions, partnerships, bug reports, or copyright concerns — pick a channel below.
-          For DMCA requests, please use email.
-        </p>
-      </header>
-
-      <section className="info-channels">
-        <a href={`mailto:${CONTACT_LINKS.email}`} className="info-channel">
-          <div className="info-channel__icon"><Mail size={24} /></div>
-          <div className="info-channel__body">
-            <span className="info-channel__sub">EMAIL · SUPPORT</span>
-            <h3>{CONTACT_LINKS.email}</h3>
-            <p>For support, partnerships, takedowns, and general inquiries. Replies within 24h.</p>
-          </div>
-        </a>
-
-        <a href={CONTACT_LINKS.linkedin} target="_blank" rel="noopener noreferrer" className="info-channel">
-          <div className="info-channel__icon"><LinkedInIcon size={24} /></div>
-          <div className="info-channel__body">
-            <span className="info-channel__sub">LINKEDIN · CONNECT</span>
-            <h3>Tanmay Angarkar</h3>
-            <p>Professional connect — open to collaboration, hiring conversations, and engineering chats.</p>
-          </div>
-        </a>
-
-        <a href={CONTACT_LINKS.github} target="_blank" rel="noopener noreferrer" className="info-channel">
-          <div className="info-channel__icon"><GitHubIcon size={24} /></div>
-          <div className="info-channel__body">
-            <span className="info-channel__sub">GITHUB · CODE</span>
-            <h3>@angarkartanmay-ops</h3>
-            <p>Star the repo, file issues, send PRs. All source is on GitHub.</p>
-          </div>
-        </a>
-
-        <a href={CONTACT_LINKS.discordBotInvite} target="_blank" rel="noopener noreferrer" className="info-channel info-channel--accent">
-          <div className="info-channel__icon"><MessageSquare size={24} /></div>
-          <div className="info-channel__body">
-            <span className="info-channel__sub">DISCORD BOT · ADD TO SERVER</span>
-            <h3>GameGuide bot</h3>
-            <p>The same brain, in your server. Slash commands, thread-aware replies, inline price + lore lookups. Setup &amp; invite instructions on GitHub.</p>
-          </div>
-        </a>
-      </section>
-
-      <section className="info-section info-section--quiet">
-        <p className="info-muted">
-          Response times: support email ~24h · LinkedIn ~3 days · GitHub issues triaged weekly.
-        </p>
-      </section>
-    </>
-  );
-}
-
-const CONTENT = {
-  about: { title: 'About', body: AboutContent },
-  terms: { title: 'Terms', body: TermsContent },
-  contacts: { title: 'Contacts', body: ContactsContent },
-};
-
-export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
-  const entry = CONTENT[kind] || CONTENT.about;
-  const Body = entry.body;
-
+  // Scroll-spy: the section crossing the upper third of the screen is "here".
   useEffect(() => {
-    document.title = `GameGuide-AI · ${entry.title}`;
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  }, [kind, entry.title]);
+    if (typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver((entries) => {
+      const hit = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (hit) setActive(hit.target.id);
+    }, { rootMargin: '-25% 0px -65% 0px' });
+    TERMS.forEach(t => { const el = document.getElementById(t.id); if (el) io.observe(el); });
+    return () => io.disconnect();
+  }, []);
 
-  useEffect(() => {
-    const handler = (e) => {
-      const target = e.detail;
-      if (target && CONTENT[target] && onNavigate) onNavigate(target);
-    };
-    window.addEventListener('gg:navigate', handler);
-    return () => window.removeEventListener('gg:navigate', handler);
-  }, [onNavigate]);
+  const jump = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.focus({ preventScroll: true });
+    setActive(id);
+  };
+  const n = TERMS.findIndex(t => t.id === active) + 1;
 
   return (
-    <div className="info-root">
-      <div className="info-bg" aria-hidden="true">
-        <div className="info-bg__blob info-bg__blob--1" />
-        <div className="info-bg__blob info-bg__blob--2" />
-        <div className="info-bg__grid" />
+    <div className="s-terms">
+      <nav className="s-toc" aria-label="Terms sections">
+        <p className="s-toc__head">
+          <span>Contents</span>
+          <span className="s-toc__count" aria-hidden="true">§ {n} / {TERMS.length}</span>
+        </p>
+        <ol className="s-toc__list">
+          {TERMS.map((t, i) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                className={`s-toc__link${t.id === active ? ' is-on' : ''}`}
+                aria-current={t.id === active ? 'location' : undefined}
+                onClick={() => jump(t.id)}
+              >
+                <span className="s-toc__num">{String(i + 1).padStart(2, '0')}</span>{t.title}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <div className="s-prose">
+        {TERMS.map((t, i) => (
+          <section key={t.id} id={t.id} className="s-term" tabIndex={-1} aria-labelledby={`${t.id}-h`}>
+            <h2 id={`${t.id}-h`} className="s-h3"><span className="s-term__num">{i + 1}.</span> {t.title}</h2>
+            {t.body}
+          </section>
+        ))}
       </div>
-
-      <header className="info-nav">
-        <button type="button" className="info-back" onClick={onBack} aria-label="Back">
-          <ArrowLeft size={16} /> <span>Back</span>
-        </button>
-        <button type="button" className="info-logo" onClick={onLogo} aria-label="GameGuide-AI home">
-          <span className="info-logo__mark" /> <span>GameGuide-AI</span>
-        </button>
-        <div className="info-nav__right">
-          <nav className="info-nav__links" aria-label="Info pages">
-            <button type="button" className={kind === 'about' ? 'is-active' : ''} onClick={() => onNavigate('about')}>About</button>
-            <button type="button" className={kind === 'terms' ? 'is-active' : ''} onClick={() => onNavigate('terms')}>Terms</button>
-            <button type="button" className={kind === 'contacts' ? 'is-active' : ''} onClick={() => onNavigate('contacts')}>Contact</button>
-          </nav>
-        </div>
-      </header>
-
-      <main className="info-main">
-        <Body />
-      </main>
-
-      <footer className="info-footer">
-        <span>GameGuide-AI · © 2026 Tanmay Angarkar — all rights reserved.</span>
-        <div className="info-footer__links">
-          <button type="button" onClick={() => onNavigate('about')}>About</button>
-          <button type="button" onClick={() => onNavigate('terms')}>Terms</button>
-          <button type="button" onClick={() => onNavigate('contacts')}>Contact</button>
-          <a href={CONTACT_LINKS.discordBotTopGG} target="_blank" rel="noopener noreferrer">Discord bot</a>
-        </div>
-      </footer>
     </div>
   );
 }
 
-export { CONTACT_LINKS };
+// ─── Contact ───────────────────────────────────────────────────────────────
+
+function Contact() {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(LINKS.email);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch { /* clipboard blocked: the mailto link still works */ }
+  };
+
+  const rows = [
+    {
+      key: 'email', icon: <Mail size={22} />, label: 'Email · support', value: LINKS.email, href: mailto(),
+      text: 'Support, partnerships, takedowns and anything else. Replies within about a day.',
+      extra: (
+        <button type="button" className="s-copy" onClick={copy} aria-label={copied ? 'Email address copied' : 'Copy email address'}>
+          {copied ? <Check size={15} /> : <Copy size={15} />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      ),
+    },
+    {
+      key: 'discord', icon: <MessageSquare size={22} />, label: 'Discord · add the bot', value: 'GameGuide for your server',
+      href: LINKS.discordInvite, external: true,
+      text: 'The same guide in your server: @mention it, use its slash commands, or let Watchtower post patch notes.',
+      extra: <a className="s-copy" href={LINKS.topgg} target="_blank" rel="noopener noreferrer"><span>top.gg</span><ArrowUpRight size={14} aria-hidden="true" /></a>,
+    },
+    {
+      key: 'github', icon: <GitHubGlyph size={22} />, label: 'GitHub · code', value: '@angarkartanmay-ops',
+      href: LINKS.github, external: true,
+      text: 'Issues, ideas and pull requests.',
+    },
+    {
+      key: 'linkedin', icon: <LinkedInGlyph size={22} />, label: 'LinkedIn · connect', value: 'Tanmay Angarkar',
+      href: LINKS.linkedin, external: true,
+      text: 'Collaboration, hiring conversations and engineering chats.',
+    },
+  ];
+
+  return (
+    <>
+      <ul className="s-channels">
+        {rows.map((r) => (
+          <li key={r.key} className="s-channel">
+            <a
+              className="s-channel__main"
+              href={r.href}
+              {...(r.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+            >
+              <span className="s-channel__icon" aria-hidden="true">{r.icon}</span>
+              <span className="s-channel__body">
+                <span className="s-channel__label">{r.label}</span>
+                <span className="s-channel__value">{r.value}</span>
+                <span className="s-channel__text">{r.text}</span>
+              </span>
+              <ArrowUpRight className="s-channel__arrow" size={20} aria-hidden="true" />
+            </a>
+            {r.extra && <span className="s-channel__extra">{r.extra}</span>}
+          </li>
+        ))}
+      </ul>
+      <p className="s-note">For DMCA requests, please use email.</p>
+      <p className="s-note">Response times: support email ~24h · LinkedIn ~3 days · GitHub issues triaged weekly.</p>
+      <span className="sr-only" role="status" aria-live="polite">{copied ? 'Email address copied' : ''}</span>
+    </>
+  );
+}
+
+// ─── Shell ─────────────────────────────────────────────────────────────────
+
+const PAGES = {
+  about: {
+    title: 'About', label: 'About',
+    heading: 'A game guide you can talk to.',
+    lead: 'Ask about any game — a boss, a build, a quest, a sale — and GameGuide researches it live, sets the answer out like a strategy guide, and keeps the story you haven’t reached behind a bar.',
+    Body: About,
+  },
+  terms: {
+    title: 'Terms', label: 'Terms & copyright',
+    heading: 'Terms of service & copyright.',
+    lead: 'The rules for using GameGuide, what it stores and for how long, and how to reach us.',
+    meta: 'Last updated: September 2026',
+    Body: Terms,
+  },
+  contacts: {
+    title: 'Contact', label: 'Contact',
+    heading: 'Contact & connect.',
+    lead: 'Questions, partnerships, bug reports or copyright concerns — pick a channel.',
+    Body: Contact,
+  },
+};
+
+export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
+  const page = PAGES[kind] || PAGES.about;
+  const calm = useCalm();
+  const rootRef = useRef(null);
+  const [game] = useState(lastGame);
+  const { Body } = page;
+
+  useEffect(() => {
+    const prev = document.title;
+    document.title = `GameGuide · ${page.title}`;
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    return () => { document.title = prev; };
+  }, [page.title]);
+
+  // Links inside page copy dispatch this rather than receiving props.
+  useEffect(() => {
+    const handler = (e) => { if (typeof e.detail === 'string') onNavigate?.(e.detail); };
+    window.addEventListener('gg:navigate', handler);
+    return () => window.removeEventListener('gg:navigate', handler);
+  }, [onNavigate]);
+
+  useScene(rootRef, ({ calm: still }, root) => {
+    if (still) return;
+    gsap.from(root.querySelectorAll('[data-intro]'), { y: 20, opacity: 0, duration: 0.8, stagger: 0.07, ease: 'power3.out' });
+    gsap.fromTo(root.querySelector('.s-page-head__art'), { scale: 1.08, opacity: 0 }, { scale: 1, opacity: 1, duration: 1.6, ease: 'power2.out' });
+  }, [calm, kind]);
+
+  const links = [
+    { label: 'About', onClick: () => onNavigate?.('about'), current: kind === 'about' },
+    { label: 'Terms', onClick: () => onNavigate?.('terms'), current: kind === 'terms' },
+    { label: 'Contact', onClick: () => onNavigate?.('contacts'), current: kind === 'contacts' },
+  ];
+
+  return (
+    <div ref={rootRef} className={`site s-info s-info--${kind}${calm ? ' is-calm' : ''}`} style={{ '--s-game-accent': game.accent }}>
+      <a className="s-skip" href="#main" onClick={(e) => { e.preventDefault(); document.getElementById('main')?.focus(); }}>Skip to content</a>
+      <SiteNav links={links} onBrand={onLogo} cta={{ label: 'Open GameGuide', onClick: () => onNavigate?.('chat') }} />
+
+      <div className="s-page-head">
+        <div className="s-page-head__art" aria-hidden="true">
+          <img src={heroArt(game.appid)} alt="" decoding="async" />
+        </div>
+        <div className="s-wrap s-page-head__inner">
+          <button type="button" className="s-back" onClick={onBack} data-intro>
+            <ArrowLeft size={15} aria-hidden="true" /> Back
+          </button>
+          <div data-intro><Overline>Codex · {page.label}</Overline></div>
+          <h1 className="s-h1" data-intro>{page.heading}</h1>
+          <p className="s-lead" data-intro>{page.lead}</p>
+          {page.meta && <p className="s-meta" data-intro>{page.meta}</p>}
+        </div>
+      </div>
+
+      <main id="main" tabIndex={-1} className="s-wrap s-page">
+        <Body />
+      </main>
+
+      <SiteFooter onNavigate={onNavigate} onStart={() => onNavigate?.('chat')} />
+    </div>
+  );
+}

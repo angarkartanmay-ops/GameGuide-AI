@@ -2,4 +2,4 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://gameguide-ai.vercel.app/sitemap.xml
+Sitemap: https://game-guide-ai-plum.vercel.app/sitemap.xml

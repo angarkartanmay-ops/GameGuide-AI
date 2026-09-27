@@ -15,8 +15,8 @@
 // never re-typed — a hand-computed value is how the original went wrong.
 
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -28,8 +28,15 @@ const { PermissionFlagsBits: P } = botRequire('discord.js');
 const INDEX = readFileSync(join(BOT, 'index.js'), 'utf8');
 const REGISTER = readFileSync(join(BOT, 'register-commands.js'), 'utf8');
 const README = readFileSync(join(BOT, 'README.md'), 'utf8');
-const INFO = readFileSync(join(ROOT, 'src', 'components', 'InfoPage.jsx'), 'utf8');
-const LANDING = readFileSync(join(ROOT, 'src', 'components', 'LandingPage.jsx'), 'utf8');
+// The site keeps every external link in one module; the pages import it.
+const LINKS = readFileSync(join(ROOT, 'src', 'site', 'links.js'), 'utf8');
+
+function sourceFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(e => {
+    const p = join(dir, e.name);
+    return e.isDirectory() ? sourceFiles(p) : /\.(jsx?|tsx?|html)$/.test(e.name) ? [p] : [];
+  });
+}
 
 let passed = 0;
 let failed = 0;
@@ -49,11 +56,18 @@ const FORBIDDEN = ['Administrator', 'ManageMessages', 'MuteMembers', 'DeafenMemb
 const MINIMAL = REQUIRED.reduce((v, k) => v | P[k], 0n);
 
 const inviteInts = [
-  ...[...INFO.matchAll(/permissions=(\d+)/g)].map(m => ['InfoPage.jsx', m[1]]),
-  ...[...LANDING.matchAll(/permissions=(\d+)/g)].map(m => ['LandingPage.jsx', m[1]]),
+  ...[...LINKS.matchAll(/permissions=(\d+)/g)].map(m => ['src/site/links.js', m[1]]),
   ...[...README.matchAll(/permissions=(\d+)/g)].map(m => ['discord-bot/README.md', m[1]]),
 ];
-check('invite links exist on the site and in the README', inviteInts.length >= 3, String(inviteInts.length));
+check('invite links exist on the site and in the README', inviteInts.length >= 2, String(inviteInts.length));
+
+// A second, hand-typed invite anywhere in the web app would dodge the check
+// above; every page must take the one in links.js.
+const LINKS_PATH = join(ROOT, 'src', 'site', 'links.js');
+const strays = [...sourceFiles(join(ROOT, 'src')), join(ROOT, 'index.html')]
+  .filter(f => f !== LINKS_PATH && /discord(?:app)?\.com\/(?:api\/)?oauth2\/authorize/.test(readFileSync(f, 'utf8')))
+  .map(f => relative(ROOT, f));
+check('the only web invite link lives in src/site/links.js', strays.length === 0, strays.join(', '));
 for (const [file, raw] of inviteInts) {
   const v = BigInt(raw);
   check(`${file}: invite is exactly the minimal set`, v === MINIMAL, `${raw} vs ${MINIMAL}`);

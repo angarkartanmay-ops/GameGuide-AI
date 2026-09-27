@@ -26,6 +26,7 @@ const SUITES = [
   ['watchtower',    'watchtower.test.mjs'],    // patch/deal alerts: once per channel, no backfill
   ['watch-command', 'watch-command.test.mjs'], // the real /watch handler, fake Discord
   ['codex',         'codex.test.mjs'],         // chat UI: palette, game context, accent, shelf
+  ['site',          'site.test.mjs'],          // landing + info: konami, achievements, showcase, honest copy
   ['steam-art',     'steam-art.test.mjs'],     // backdrop art lookup: strict match, fixed host
   ['corroboration', 'corroboration.test.ts'],  // source-agreement scoring
   ['ssrf',          'ssrf.test.mjs'],          // wiki-proxy subdomain validation

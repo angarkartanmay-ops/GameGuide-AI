@@ -1,1404 +1,158 @@
-import React, {
-  Suspense,
-  createContext,
-  lazy,
-  useCallback,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import { motion, useReducedMotion } from 'framer-motion';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import './LandingPage.css';
-
-const HoloCanvas = lazy(() => import('./HoloCanvas'));
-
-gsap.registerPlugin(ScrollTrigger);
-
-/* ============================================================
-   SECTION: device-capability hook
-   Gates the WebGL hero (and the pinned scroll sections that share
-   its threshold) on a real GPU probe plus environmental signals.
-   The old check (small viewport OR <4GB RAM) let integrated-graphics
-   desktops, software-rendered browsers, low-core CPUs, and data-saver
-   sessions through — all of which struggled with the R3F crystal.
-   ============================================================ */
-let _gpuProbeCache = null;
-function probeGPU() {
-  if (_gpuProbeCache !== null) return _gpuProbeCache;
-  if (typeof document === 'undefined') return (_gpuProbeCache = false);
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = 1;
-    const gl =
-      canvas.getContext('webgl2') ||
-      canvas.getContext('webgl') ||
-      canvas.getContext('experimental-webgl');
-    if (!gl) return (_gpuProbeCache = false);
-
-    // Reject CPU-rasterized renderers (SwiftShader, llvmpipe, Microsoft
-    // Basic Render). They satisfy the context test but run a physically-
-    // based material at single-digit fps.
-    let ok = true;
-    const ext = gl.getExtension('WEBGL_debug_renderer_info');
-    if (ext) {
-      const renderer = String(
-        gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || ''
-      ).toLowerCase();
-      if (/swiftshader|llvmpipe|software|microsoft basic|basic render/.test(renderer)) {
-        ok = false;
-      }
-    }
-
-    const lose = gl.getExtension('WEBGL_lose_context');
-    if (lose) lose.loseContext();
-    return (_gpuProbeCache = ok);
-  } catch {
-    return (_gpuProbeCache = false);
-  }
-}
-
-function readEnvCaps() {
-  if (typeof window === 'undefined') return { webgl: false, magnetic: false };
-  const small = window.matchMedia('(max-width: 767px)').matches;
-  const lowMem = (navigator.deviceMemory || 8) < 4;
-  const lowCores = (navigator.hardwareConcurrency || 8) < 4;
-  const coarse = window.matchMedia('(pointer: coarse)').matches;
-  const conn = navigator.connection || {};
-  const saveData = !!conn.saveData;
-  const slowNet = /^(slow-2g|2g)$/.test(conn.effectiveType || '');
-  const gpuOk = probeGPU();
-  return {
-    webgl: gpuOk && !small && !lowMem && !lowCores && !saveData && !slowNet,
-    magnetic: !small && !coarse,
-  };
-}
-
-function useCapability() {
-  const reduce = useReducedMotion();
-  const [caps, setCaps] = useState(readEnvCaps);
-  // Global low-power signal lives on <html data-low-power> — set by the
-  // App-level usePerfMode hook. We mirror it here as React state so the
-  // component re-renders when the probe flips us into low-power mode.
-  const [lowPower, setLowPower] = useState(() => {
-    if (typeof document === 'undefined') return false;
-    return document.documentElement.hasAttribute('data-low-power');
-  });
-
-  useEffect(() => {
-    const onChange = () => setCaps(readEnvCaps());
-    const mqSize = window.matchMedia('(max-width: 767px)');
-    const mqPointer = window.matchMedia('(pointer: coarse)');
-    mqSize.addEventListener?.('change', onChange);
-    mqPointer.addEventListener?.('change', onChange);
-    navigator.connection?.addEventListener?.('change', onChange);
-    return () => {
-      mqSize.removeEventListener?.('change', onChange);
-      mqPointer.removeEventListener?.('change', onChange);
-      navigator.connection?.removeEventListener?.('change', onChange);
-    };
-  }, []);
-
-  // Subscribe to the App-level perf signal via a MutationObserver. No
-  // re-running of the FPS probe here — App already paid that cost.
-  useEffect(() => {
-    if (typeof document === 'undefined') return undefined;
-    const html = document.documentElement;
-    const obs = new MutationObserver(() => {
-      setLowPower(html.hasAttribute('data-low-power'));
-    });
-    obs.observe(html, { attributes: true, attributeFilter: ['data-low-power'] });
-    return () => obs.disconnect();
-  }, []);
-
-  const effectiveLow = lowPower || !!reduce;
-  return {
-    webgl: caps.webgl && !reduce && !lowPower,
-    magnetic: caps.magnetic && !reduce && !lowPower,
-    reduce: !!reduce,
-    lowPower: effectiveLow,
-  };
-}
-
-/* ============================================================
-   SECTION: Caps context — lets sub-components read capability
-   flags without prop-drilling or stale module-level references.
-   ============================================================ */
-const CapsContext = createContext({ webgl: false, magnetic: false, reduce: false, lowPower: false });
-function useCaps() { return useContext(CapsContext); }
-
-/* ============================================================
-   SECTION: Lenis smooth scroll bridge
-   ============================================================ */
-function useLenis(enabled) {
-  useEffect(() => {
-    if (!enabled) return;
-    let lenis;
-    let tick;
-    let mounted = true;
-    (async () => {
-      const Lenis = (await import('lenis')).default;
-      if (!mounted) return;
-      lenis = new Lenis({ duration: 1.05, smoothWheel: true });
-      lenis.on('scroll', ScrollTrigger.update);
-      tick = (time) => {
-        lenis?.raf(time * 1000);
-      };
-      gsap.ticker.add(tick);
-      gsap.ticker.lagSmoothing(0);
-    })();
-    return () => {
-      mounted = false;
-      if (tick) gsap.ticker.remove(tick);
-      try { lenis?.destroy(); } catch {}
-    };
-  }, [enabled]);
-}
-
-/* ============================================================
-   SECTION: Starfield (decorative)
-   ============================================================ */
-function Starfield({ count = 200 }) {
-  const stars = useMemo(() => {
-    return Array.from({ length: count }, (_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      top: Math.random() * 100,
-      size: Math.random() * 1.6 + 0.4,
-      delay: Math.random() * 12,
-      dur: 14 + Math.random() * 18,
-      o: 0.3 + Math.random() * 0.6,
-    }));
-  }, [count]);
-  return (
-    <div className="hg-starfield" aria-hidden="true">
-      {stars.map(s => (
-        <span
-          key={s.id}
-          style={{
-            left: `${s.left}%`,
-            top: `${s.top}%`,
-            width: s.size,
-            height: s.size,
-            opacity: s.o,
-            animationDelay: `${s.delay}s`,
-            animationDuration: `${s.dur}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/* ============================================================
-   SECTION: Nav
-   ============================================================ */
-function Nav({ onNavigate }) {
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 16);
-    window.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
-  return (
-    <header className={`hg-nav ${scrolled ? 'is-scrolled' : ''}`}>
-      <div className="hg-nav__inner">
-        <a className="hg-logo" href="#top" data-magnetic>
-          <span className="hg-logo__mark" aria-hidden="true" />
-          <span>GameGuide-AI</span>
-        </a>
-        <nav className="hg-nav__links" aria-label="Primary">
-          <a href="#manifesto" data-magnetic>Manifesto</a>
-          <a href="#pipeline" data-magnetic>Pipeline</a>
-          <a href="#features" data-magnetic>Capabilities</a>
-          <a href="#demo" data-magnetic>Demo</a>
-          {onNavigate && (
-            <button
-              type="button"
-              className="hg-nav__btn"
-              data-magnetic
-              onClick={() => onNavigate('about')}
-            >
-              About
-            </button>
-          )}
-        </nav>
-      </div>
-    </header>
-  );
-}
-
-/* ============================================================
-   SECTION: Hero
-   ============================================================ */
-function Hero({ webgl, onEnter }) {
-  const tiltRef = useRef({ x: 0, y: 0 });
-  const dollyRef = useRef(false);
-  const heroRef = useRef(null);
-  const [exiting, setExiting] = useState(false);
-  // canvasActive flips to false as soon as the hero scrolls fully out of view.
-  // The Canvas's frameloop prop then pauses R3F entirely — no GPU work, no
-  // per-frame CPU cost, until the user scrolls back up.
-  const [canvasActive, setCanvasActive] = useState(true);
-  const reduce = useReducedMotion();
-
-  useEffect(() => {
-    if (!webgl) return;
-    const onMove = (e) => {
-      const nx = (e.clientX / window.innerWidth) * 2 - 1;
-      const ny = (e.clientY / window.innerHeight) * 2 - 1;
-      tiltRef.current.x = nx;
-      tiltRef.current.y = ny;
-    };
-    window.addEventListener('pointermove', onMove);
-    return () => window.removeEventListener('pointermove', onMove);
-  }, [webgl]);
-
-  useEffect(() => {
-    if (!webgl || !heroRef.current) return;
-    const io = new IntersectionObserver(
-      ([entry]) => setCanvasActive(entry.intersectionRatio > 0.01),
-      { threshold: [0, 0.01, 0.1] },
-    );
-    io.observe(heroRef.current);
-    return () => io.disconnect();
-  }, [webgl]);
-
-  const handleEnter = useCallback(() => {
-    if (exiting) return;
-    setExiting(true);
-    if (webgl) dollyRef.current = true;
-    setTimeout(() => onEnter?.(), 800);
-  }, [exiting, webgl, onEnter]);
-
-  // Word-level stagger reveal to prevent mid-word line breaks
-  const headline = 'Built for the moment before you press play.';
-  const words = useMemo(() => {
-    const w = headline.split(' ');
-    let charIndex = 0;
-    return w.map((word) => {
-      const chars = word.split('').map((c) => ({ c, i: charIndex++ }));
-      charIndex++; // account for the space
-      return { word, chars };
-    });
-  }, []);
-
-  const caps = useCaps();
-
-  return (
-    <section className="hg-hero" id="top" ref={heroRef}>
-      <div className="hg-hero__bg" aria-hidden="true">
-        {webgl ? (
-          <Suspense fallback={<div className="hg-hero__fallback" />}>
-            <HoloCanvas tiltRef={tiltRef} dollyRef={dollyRef} active={canvasActive} lowPower={caps.lowPower} reduce={caps.reduce} />
-          </Suspense>
-        ) : (
-          <div className="hg-hero__fallback" />
-        )}
-      </div>
-
-      <div className="hg-hero__content">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.6 }}
-          className="hg-eyebrow"
-        >
-          <span className="hg-dot" /> v4.0 · neural-mesh online
-        </motion.div>
-
-        <h1 className="hg-hero__headline" aria-label={headline}>
-          {words.map((w, wi) => (
-            <span key={wi} className="hg-word" aria-hidden="true">
-              {w.chars.map(({ c, i }) => (
-                <span key={i} className="hg-char">
-                  <span
-                    className="hg-char__inner"
-                    style={{
-                      animationDelay: reduce ? '0s' : `${0.25 + i * 0.022}s`,
-                    }}
-                  >
-                    {c}
-                  </span>
-                </span>
-              ))}
-              {wi < words.length - 1 && ' '}
-            </span>
-          ))}
-        </h1>
-
-        <motion.p
-          className="hg-hero__sub"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.2, duration: 0.6 }}
-        >
-          GameGuide-AI is the gaming co-pilot built on a self-healing 4-provider
-          neural mesh. 200+ titles. Live intel. Sub-400ms calls.
-        </motion.p>
-
-        <motion.div
-          className="hg-hero__ctas"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.4, duration: 0.5 }}
-        >
-          <button
-            type="button"
-            className="hg-btn hg-btn--primary"
-            data-magnetic
-            onClick={handleEnter}
-          >
-            <span>Enter</span>
-            <span className="hg-btn__arrow" aria-hidden="true">→</span>
-          </button>
-          <a className="hg-btn hg-btn--ghost" href="#manifesto" data-magnetic>
-            Read the manifesto
-          </a>
-        </motion.div>
-
-        <div className="hg-hero__stats" aria-label="Key statistics">
-          <div><b>4</b><span>provider mesh</span></div>
-          <div><b>200+</b><span>titles indexed</span></div>
-          <div><b>&lt;400ms</b><span>P50 latency</span></div>
-        </div>
-      </div>
-
-      <div className={`hg-flash ${exiting ? 'is-active' : ''}`} aria-hidden="true" />
-    </section>
-  );
-}
-
-/* ============================================================
-   SECTION: Manifesto strip
-   ============================================================ */
-function Manifesto() {
-  const caps = useCaps();
-  const lines = [
-    "We don't write guides.",
-    'We compute them — live, every query, from six sources.',
-    'And we hand them to you in 0.4 seconds.',
-  ];
-  const useMotion = !(caps.lowPower || caps.reduce);
-  return (
-    <section className="hg-manifesto" id="manifesto" aria-label="Manifesto">
-      {lines.map((line, i) => {
-        if (useMotion) {
-          return (
-            <motion.div
-              key={i}
-              className="hg-manifesto__row"
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.6, delay: i * 0.1 }}
-            >
-              <span className="hg-manifesto__num">0{i + 1}</span>
-              <motion.p
-                className="hg-manifesto__line"
-                initial={{ opacity: 0, x: -30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: 0.15 + i * 0.12 }}
-              >
-                {line}
-              </motion.p>
-            </motion.div>
-          );
-        }
-        return (
-          <div key={i} className="hg-manifesto__row" style={{ opacity: 1 }}>
-            <span className="hg-manifesto__num">0{i + 1}</span>
-            <p className="hg-manifesto__line">{line}</p>
-          </div>
-        );
-      })}
-    </section>
-  );
-}
-
-/* ============================================================
-   SECTION: Signal Path — scroll-morphing shape with text reveal
-   ============================================================ */
-const SIGNAL_STEPS = [
-  { label: 'QUERY', desc: 'Your question enters the mesh', morph: 'circle(50% at 50% 50%)' },
-  { label: 'ROUTE', desc: '4 providers race to respond', morph: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' },
-  { label: 'FUSE', desc: 'Sources merge into one answer', morph: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)' },
-  { label: 'DELIVER', desc: 'Streamed back in under 400ms', morph: 'circle(50% at 50% 50%)' },
-];
-
-function SignalPath({ pinned = true }) {
-  const caps = useCaps();
-  const containerRef = useRef(null);
-  const orbRef = useRef(null);
-  const [activeStep, setActiveStep] = useState(0);
-  const reduce = useReducedMotion();
-  const shouldAnimate = !(reduce || caps.lowPower) && pinned;
-
-  // For low-power devices, we'll use IntersectionObserver instead of GSAP
-  useEffect(() => {
-    if (!pinned || shouldAnimate) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            // Calculate which step based on scroll position
-            const scrollTop = window.pageYOffset;
-            const sectionTop = entry.target.offsetTop;
-            const sectionHeight = entry.target.offsetHeight;
-            const scrollProgress = (scrollTop - sectionTop) / sectionHeight;
-            const step = Math.min(
-              SIGNAL_STEPS.length - 1,
-              Math.max(0, Math.floor(scrollProgress * SIGNAL_STEPS.length))
-            );
-            setActiveStep(step);
-          }
-        });
-      },
-      { threshold: [0, 0.2, 0.4, 0.6, 0.8, 1.0] }
-    );
-
-    const container = containerRef.current;
-    if (container) {
-      observer.observe(container);
-    }
-
-    return () => {
-      if (container) {
-        observer.unobserve(container);
-      }
-    };
-  }, [pinned, reduce, caps.lowPower]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // GSAP animation for high-power devices
-  useLayoutEffect(() => {
-    if (!pinned || !shouldAnimate) return;
-    const ctx = gsap.context(() => {
-      const container = containerRef.current;
-      if (!container) return;
-
-      // Pin the section and scrub through morph stages
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: container,
-          start: 'top top',
-          end: '+=200%',
-          pin: true,
-          scrub: 0.5,
-          onUpdate: (self) => {
-            const step = Math.min(
-              SIGNAL_STEPS.length - 1,
-              Math.floor(self.progress * SIGNAL_STEPS.length)
-            );
-            setActiveStep(step);
-          },
-        },
-      });
-
-      // Animate the orb scale pulsing
-      tl.fromTo(
-        orbRef.current,
-        { scale: 0.85, rotation: 0 },
-        { scale: 1.1, rotation: 360, ease: 'none' }
-      );
-    }, containerRef);
-    return () => ctx.revert();
-  }, [pinned, shouldAnimate]);
-
-  return (
-    <section className={`hg-signal ${pinned ? '' : 'hg-signal--static'}${
-      reduce || caps.lowPower ? ' hg-signal--lowpower' : ''
-    }`} ref={containerRef} aria-label="Signal path">
-      <div className="hg-signal__inner">
-        {/* Morphing orb */}
-        <div className="hg-signal__orb-wrap">
-          <div
-            ref={orbRef}
-            className="hg-signal__orb"
-            style={{
-              clipPath: SIGNAL_STEPS[activeStep].morph,
-              // Add fallback for low-power - show first step if animations disabled
-              opacity: shouldAnimate ? 1 : 0.8,
-              transform: shouldAnimate ? 'none' : 'scale(0.95)',
-              transition: shouldAnimate
-                ? 'none'
-                : 'opacity 0.3s ease, transform 0.3s ease'
-            }}
-          >
-            <div className="hg-signal__orb-glow" />
-            <span className="hg-signal__orb-label">{String(activeStep + 1).padStart(2, '0')}</span>
-          </div>
-          {/* Orbit rings - static in low-power mode */}
-          <div className={`hg-signal__ring hg-signal__ring--1${!shouldAnimate ? ' hg-signal-ring-static' : ''}`} aria-hidden="true" />
-          <div className={`hg-signal__ring hg-signal__ring--2${!shouldAnimate ? ' hg-signal-ring-static' : ''}`} aria-hidden="true" />
-        </div>
-
-        {/* Text reveal */}
-        <div className="hg-signal__text">
-          <span className="hg-section__kicker">SIGNAL PATH</span>
-          {SIGNAL_STEPS.map((step, i) => (
-            <div
-              key={i}
-              // When motion is off, every step renders active. Marking only
-              // step 0 left the rest pinned at opacity .2 permanently, which
-              // is unreadable for exactly the users who opted out of motion.
-              className={`
-                hg-signal__step
-                ${shouldAnimate && i === activeStep ? 'is-active' : ''}
-                ${shouldAnimate && i < activeStep ? 'is-past' : ''}
-                ${!shouldAnimate ? 'is-active' : ''}
-              `}
-            >
-              <span className="hg-signal__step-label">{step.label}</span>
-              <p className="hg-signal__step-desc">{step.desc}</p>
-            </div>
-          ))}
-          {/* Progress dots */}
-          <div className="hg-signal__dots">
-            {SIGNAL_STEPS.map((_, i) => (
-              <span
-                key={i}
-                className={`
-                  hg-signal__dot
-                  ${shouldAnimate && i === activeStep ? 'is-active' : ''}
-                  ${shouldAnimate && i < activeStep ? 'is-past' : ''}
-                  ${!shouldAnimate && i === 0 ? 'is-active' : ''}
-                `}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-      {/* Connecting beam line - static in low-power mode */}
-      <div className={`hg-signal__beam${!shouldAnimate ? ' hg-signal-beam-static' : ''}`} aria-hidden="true" />
-    </section>
-  );
-}
-
-/* ============================================================
-   SECTION: Game Marquee — infinite ticker of supported titles
-   ============================================================ */
-const GAME_TITLES = [
-  'Elden Ring', 'Path of Exile 2', 'Valorant', 'League of Legends', 'Counter-Strike 2',
-  'Diablo IV', 'Destiny 2', 'Baldur\'s Gate 3', 'Dota 2', 'Warframe',
-  'Monster Hunter', 'Final Fantasy XIV', 'Apex Legends', 'Genshin Impact', 'Helldivers 2',
-  'Deadlock', 'The Finals', 'Palworld', 'Wuthering Waves', 'Zenless Zone Zero',
-];
-
-function GameMarquee() {
-  // Double the array for seamless loop
-  const doubled = [...GAME_TITLES, ...GAME_TITLES];
-  return (
-    <div className="hg-marquee" aria-label="Supported game titles">
-      <div className="hg-marquee__track">
-        {doubled.map((title, i) => (
-          <span key={i} className="hg-marquee__item">
-            <span className="hg-marquee__diamond" aria-hidden="true">◆</span>
-            {title}
-          </span>
-        ))}
-      </div>
-      <div className="hg-marquee__track hg-marquee__track--reverse">
-        {doubled.map((title, i) => (
-          <span key={i} className="hg-marquee__item">
-            <span className="hg-marquee__diamond" aria-hidden="true">◆</span>
-            {title}
-          </span>
-        ))}
-      </div>
-      <div className="hg-marquee__fade hg-marquee__fade--l" aria-hidden="true" />
-      <div className="hg-marquee__fade hg-marquee__fade--r" aria-hidden="true" />
-    </div>
-  );
-}
-
-/* ============================================================
-   SECTION: Glowing section divider
-   ============================================================ */
-function SectionDivider({ variant = 'default' }) {
-  return (
-    <div className={`hg-divider hg-divider--${variant}`} aria-hidden="true">
-      <div className="hg-divider__line" />
-      <div className="hg-divider__glow" />
-    </div>
-  );
-}
-
-/* ============================================================
-   SECTION: Pinned horizontal pipeline
-   ============================================================ */
-const STAGES = [
-  { id: 1, name: 'Intent', body: 'Slash commands, natural language, vision uploads — all parsed in parallel.', accent: '#00E5FF', viz: 'intent' },
-  { id: 2, name: 'Mesh route', body: '4 providers. Load-aware. Self-healing fallback at the token level.', accent: '#22D3EE', viz: 'mesh' },
-  { id: 3, name: 'PULSE search', body: 'Multi-source live web search. Wikipedia, Steam, web search, RSS — fused.', accent: '#3B82F6', viz: 'pulse' },
-  { id: 4, name: 'Vision GODMODE', body: 'Screenshot-grade scene understanding for builds, fits, comps.', accent: '#7C5CFC', viz: 'vision' },
-  { id: 5, name: 'Persona blend', body: 'Tone, depth, voice — adapted to the player at the keyboard.', accent: '#FF2A6D', viz: 'persona' },
-  { id: 6, name: 'Stream', body: 'Tokens land in <400ms. Sources, follow-ups, prices — all attached.', accent: '#FFB800', viz: 'stream' },
-];
-
-function StageViz({ kind }) {
-  switch (kind) {
-    case 'intent':
-      return (
-        <div className="hg-viz hg-viz--intent" aria-hidden="true">
-          <span className="hg-modality hg-modality--1">T</span>
-          <span className="hg-modality hg-modality--2">~</span>
-          <span className="hg-modality hg-modality--3">▣</span>
-          <span className="hg-viz-line hg-viz-line--1" />
-          <span className="hg-viz-line hg-viz-line--2" />
-          <span className="hg-viz-line hg-viz-line--3" />
-          <span className="hg-converge" />
-        </div>
-      );
-    case 'mesh':
-      return (
-        <div className="hg-viz hg-viz--mesh" aria-hidden="true">
-          <svg viewBox="0 0 120 120" preserveAspectRatio="xMidYMid meet">
-            <line className="hg-mesh-line" x1="60" y1="20" x2="100" y2="60" />
-            <line className="hg-mesh-line" x1="100" y1="60" x2="60" y2="100" />
-            <line className="hg-mesh-line" x1="60" y1="100" x2="20" y2="60" />
-            <line className="hg-mesh-line" x1="20" y1="60" x2="60" y2="20" />
-            <line className="hg-mesh-line" x1="60" y1="20" x2="60" y2="100" />
-            <line className="hg-mesh-line" x1="20" y1="60" x2="100" y2="60" />
-            <circle className="hg-mesh-node" cx="60" cy="20" r="6" />
-            <circle className="hg-mesh-node hg-mesh-heal" cx="100" cy="60" r="6" />
-            <circle className="hg-mesh-node" cx="60" cy="100" r="6" />
-            <circle className="hg-mesh-node" cx="20" cy="60" r="6" />
-            <circle className="hg-mesh-core" cx="60" cy="60" r="4" />
-          </svg>
-        </div>
-      );
-    case 'pulse':
-      return (
-        <div className="hg-viz hg-viz--pulse" aria-hidden="true">
-          <span className="hg-ripple hg-ripple--1" />
-          <span className="hg-ripple hg-ripple--2" />
-          <span className="hg-ripple hg-ripple--3" />
-          <span className="hg-ripple-core" />
-        </div>
-      );
-    case 'vision':
-      return (
-        <div className="hg-viz hg-viz--vision" aria-hidden="true">
-          <span className="hg-vision-grid" />
-          <span className="hg-bracket hg-bracket--tl" />
-          <span className="hg-bracket hg-bracket--tr" />
-          <span className="hg-bracket hg-bracket--bl" />
-          <span className="hg-bracket hg-bracket--br" />
-          <span className="hg-vision-label">DETECT · 0.94</span>
-        </div>
-      );
-    case 'persona':
-      return (
-        <div className="hg-viz hg-viz--persona" aria-hidden="true">
-          <span className="hg-persona hg-persona--1" />
-          <span className="hg-persona hg-persona--2" />
-          <span className="hg-persona hg-persona--3" />
-          <span className="hg-persona-tag hg-persona-tag--1">TACT</span>
-          <span className="hg-persona-tag hg-persona-tag--2">CASUAL</span>
-          <span className="hg-persona-tag hg-persona-tag--3">COMP</span>
-        </div>
-      );
-    case 'stream':
-      return (
-        <div className="hg-viz hg-viz--stream" aria-hidden="true">
-          {Array.from({ length: 14 }).map((_, i) => (
-            <span
-              key={i}
-              className="hg-token"
-              style={{ animationDelay: `${i * 0.08}s`, height: `${10 + (i % 4) * 4}px` }}
-            />
-          ))}
-        </div>
-      );
-    default:
-      return null;
-  }
-}
-
-function PinnedPipeline({ pinned }) {
-  const wrapRef = useRef(null);
-  const trackRef = useRef(null);
-
-  useLayoutEffect(() => {
-    if (!pinned) return;
-    const ctx = gsap.context(() => {
-      const track = trackRef.current;
-      const wrap = wrapRef.current;
-      if (!track || !wrap) return;
-      const distance = () => track.scrollWidth - window.innerWidth;
-      gsap.to(track, {
-        x: () => -distance(),
-        ease: 'none',
-        scrollTrigger: {
-          trigger: wrap,
-          pin: true,
-          start: 'top top',
-          end: () => `+=${distance() + window.innerHeight}`,
-          scrub: 0.6,
-          invalidateOnRefresh: true,
-        },
-      });
-    }, wrapRef);
-    return () => ctx.revert();
-  }, [pinned]);
-
-  if (!pinned) {
-    // Mobile / reduced-motion fallback: vertical stack
-    return (
-      <section className="hg-pipeline hg-pipeline--stacked" id="pipeline" aria-label="Pipeline">
-        <div className="hg-section__head">
-          <span className="hg-section__kicker">PIPELINE</span>
-          <h2>Six stages. One round-trip.</h2>
-        </div>
-        <div className="hg-pipeline__stack">
-          {STAGES.map((s) => (
-            <article key={s.id} className="hg-stage hg-stage--stacked" style={{ '--stage-accent': s.accent }}>
-              <div className="hg-stage__bg" aria-hidden="true" />
-              <div className="hg-stage__num">0{s.id}</div>
-              <div className="hg-stage__viz"><StageViz kind={s.viz} /></div>
-              <h3>{s.name}</h3>
-              <p>{s.body}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="hg-pipeline" id="pipeline" ref={wrapRef} aria-label="Pipeline">
-      <div className="hg-pipeline__viewport">
-        <div className="hg-pipeline__track" ref={trackRef}>
-          <div className="hg-pipeline__intro">
-            <span className="hg-section__kicker">PIPELINE</span>
-            <h2>Six stages.<br/>One round-trip.</h2>
-            <p>Scroll horizontally — each stage activates as it enters the focus axis.</p>
-          </div>
-          {STAGES.map((s, i) => (
-            <article
-              key={s.id}
-              className="hg-stage"
-              style={{ '--stage-accent': s.accent, '--stage-i': i }}
-            >
-              <div className="hg-stage__bg" aria-hidden="true" />
-              <div className="hg-stage__num">0{s.id}</div>
-              <div className="hg-stage__viz"><StageViz kind={s.viz} /></div>
-              <h3>{s.name}</h3>
-              <p>{s.body}</p>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ============================================================
-   SECTION: ARSENAL — pinned scroll morph through commands & features
-   ============================================================ */
-const ARSENAL = [
-  {
-    id: 'price',
-    label: '/price',
-    sub: 'LIVE MULTI-STORE INTEL',
-    accent: '#FFB800',
-    desc: 'Real-time price scrape across 20+ stores — Steam, GOG, Humble, Fanatical, Epic — via the CheapShark mesh.',
-    sample: [
-      '$ /price elden ring',
-      '↻ scanning 20 storefronts...',
-      '→ Steam       $59.99',
-      '→ GOG         $59.99  ─ DRM-free',
-      '→ Fanatical   $24.99  ▼ 58%',
-      '⏚ best deal flagged in 312ms',
-    ],
-  },
-  {
-    id: 'discover',
-    label: '/discover',
-    sub: 'TIPS · SECRETS · LORE',
-    accent: '#A855F7',
-    desc: 'A random pro tip, hidden industry secret, or spoiler-aware lore drop — live-sourced and cross-checked against curated archives.',
-    sample: [
-      '$ /discover',
-      '↻ wiki · 184ms',
-      '↻ reddit · 211ms',
-      '↻ patch · 92ms',
-      '⏚ cross-checked across 12 sources',
-      '→ rendering lore drop...',
-    ],
-  },
-  {
-    id: 'vision',
-    label: 'Vision GODMODE',
-    sub: 'SCREENSHOT-GRADE READING',
-    accent: '#7C5CFC',
-    desc: 'Drop a screenshot. Get build reads, kit fits, comp analysis — pixel-grade scene understanding.',
-    sample: [
-      'IMG ▣ uploaded · 1920×1080',
-      '→ detect: 4 items · 2 modifiers',
-      '→ infer: cold-conv Sunder',
-      '→ scale: Replica Restless Ward',
-      '⏚ verdict: BiS for boss rush',
-    ],
-  },
-  {
-    id: 'pulse',
-    label: 'PULSE Search',
-    sub: 'LIVE WEB FUSION',
-    accent: '#00E5FF',
-    desc: 'Wikipedia, Steam, web search, RSS — fused into one answer. Ranked, deduped, and citation-linked.',
-    sample: [
-      '↻ wiki    · 184ms · 6 hits',
-      '↻ steam   · 122ms · 4 hits',
-      '↻ reddit  · 211ms · 18 hits',
-      '↻ rss     · 168ms · 9 hits',
-      '⏚ fused · 387ms · cited',
-    ],
-  },
-  {
-    id: 'mesh',
-    label: 'Neural Mesh',
-    sub: 'SELF-HEALING ROUTING',
-    accent: '#3B82F6',
-    desc: '4 providers race. Token-level fallback. No single LLM is a single point of failure.',
-    sample: [
-      '→ provider A · 92ms  · ✓',
-      '→ provider B · 88ms  · ✓',
-      '→ provider C · ⊘ retrying',
-      '→ provider D · 104ms · ✓',
-      '⏚ healed mid-stream · 41ms',
-    ],
-  },
-  {
-    id: 'discord',
-    label: 'Discord Bot',
-    sub: 'SERVER-NATIVE COMPANION',
-    accent: '#FF2A6D',
-    desc: 'Same brain, in your server. Slash commands, thread-aware replies, inline price + lore lookups.',
-    sample: [
-      '/gg build assassin poe',
-      '→ thread opened in #builds',
-      '→ 6 sources attached',
-      '→ follow-ups primed',
-      '⏚ delivered · 298ms',
-    ],
-  },
-];
-
-function ArsenalGlyph({ id }) {
-  switch (id) {
-    case 'price':
-      return (
-        <svg viewBox="0 0 100 100" fill="none">
-          <path d="M18 28 L62 28 L82 50 L62 72 L18 72 Z" />
-          <circle cx="32" cy="50" r="3" />
-          <path d="M58 38 v24 M50 44 h12 a4 4 0 0 1 0 8 h-12 a4 4 0 0 0 0 8 h12" />
-        </svg>
-      );
-    case 'discover':
-      return (
-        <svg viewBox="0 0 100 100" fill="none">
-          <path d="M14 22 Q50 14 50 24 Q50 14 86 22 L86 78 Q50 70 50 80 Q50 70 14 78 Z" />
-          <path d="M50 24 L50 80" />
-          <circle cx="26" cy="40" r="2" />
-          <circle cx="34" cy="34" r="1.4" />
-          <circle cx="76" cy="48" r="1.4" />
-          <circle cx="68" cy="42" r="2" />
-        </svg>
-      );
-    case 'vision':
-      return (
-        <svg viewBox="0 0 100 100" fill="none">
-          <path d="M10 50 Q50 18 90 50 Q50 82 10 50 Z" />
-          <circle cx="50" cy="50" r="14" />
-          <circle cx="50" cy="50" r="5" fill="currentColor" stroke="none" />
-          <path d="M14 18 v8 M14 18 h8 M86 18 v8 M86 18 h-8 M14 82 v-8 M14 82 h8 M86 82 v-8 M86 82 h-8" />
-        </svg>
-      );
-    case 'pulse':
-      return (
-        <svg viewBox="0 0 100 100" fill="none">
-          <circle cx="50" cy="50" r="6" />
-          <path d="M30 50 a20 20 0 0 1 40 0" />
-          <path d="M20 50 a30 30 0 0 1 60 0" />
-          <path d="M10 50 a40 40 0 0 1 80 0" />
-          <path d="M10 50 L4 50 M90 50 L96 50 M50 10 L50 4 M50 90 L50 96" />
-        </svg>
-      );
-    case 'mesh':
-      return (
-        <svg viewBox="0 0 100 100" fill="none">
-          <circle cx="50" cy="18" r="5" />
-          <circle cx="82" cy="50" r="5" />
-          <circle cx="50" cy="82" r="5" />
-          <circle cx="18" cy="50" r="5" />
-          <circle cx="50" cy="50" r="3" />
-          <path d="M50 23 L50 47 M77 50 L53 50 M50 77 L50 53 M23 50 L47 50" />
-          <path d="M55 22 L77 45 M55 78 L77 55 M45 78 L23 55 M45 22 L23 45" strokeDasharray="3 4" />
-        </svg>
-      );
-    case 'discord':
-      return (
-        <svg viewBox="0 0 100 100" fill="none">
-          <path d="M16 26 Q16 18 24 18 L76 18 Q84 18 84 26 L84 60 Q84 68 76 68 L46 68 L30 82 L30 68 L24 68 Q16 68 16 60 Z" />
-          <path d="M40 36 L46 50 L36 50 L42 64" />
-          <circle cx="60" cy="40" r="2" fill="currentColor" stroke="none" />
-          <circle cx="68" cy="48" r="2" fill="currentColor" stroke="none" />
-        </svg>
-      );
-    default:
-      return null;
-  }
-}
-
-function ArsenalDeck({ pinned }) {
-  const containerRef = useRef(null);
-  const [active, setActive] = useState(0);
-
-  useLayoutEffect(() => {
-    if (!pinned) return;
-    const ctx = gsap.context(() => {
-      const container = containerRef.current;
-      if (!container) return;
-      ScrollTrigger.create({
-        trigger: container,
-        start: 'top top',
-        end: '+=300%',
-        pin: true,
-        scrub: 0.5,
-        onUpdate: (self) => {
-          const step = Math.min(
-            ARSENAL.length - 1,
-            Math.floor(self.progress * ARSENAL.length)
-          );
-          setActive(step);
-        },
-      });
-    }, containerRef);
-    return () => ctx.revert();
-  }, [pinned]);
-
-  const accent = ARSENAL[active].accent;
-
-  if (!pinned) {
-    return (
-      <section className="hg-arsenal hg-arsenal--stacked" id="arsenal" aria-label="Arsenal">
-        <div className="hg-section__head">
-          <span className="hg-section__kicker">ARSENAL</span>
-          <h2>Every verb in one console.</h2>
-        </div>
-        <div className="hg-arsenal__stack">
-          {ARSENAL.map((a) => (
-            <article key={a.id} className="hg-arsenal__tile" style={{ '--arsenal-accent': a.accent }}>
-              <div className="hg-arsenal__tile-glyph"><ArsenalGlyph id={a.id} /></div>
-              <div className="hg-arsenal__tile-body">
-                <span className="hg-arsenal__sub">{a.sub}</span>
-                <h3 className="hg-arsenal__label">{a.label}</h3>
-                <p className="hg-arsenal__desc">{a.desc}</p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section
-      className="hg-arsenal"
-      id="arsenal"
-      ref={containerRef}
-      style={{ '--arsenal-accent': accent }}
-      aria-label="Arsenal"
-    >
-      <div className="hg-arsenal__bg" aria-hidden="true" />
-      <div className="hg-arsenal__inner">
-        <div className="hg-arsenal__head">
-          <span className="hg-section__kicker">ARSENAL</span>
-          <h2>Every verb in one console.</h2>
-        </div>
-
-        <div className="hg-arsenal__viz" aria-hidden="true">
-          <div className="hg-arsenal__plate" />
-          <div className="hg-arsenal__plate hg-arsenal__plate--inner" />
-
-          {ARSENAL.map((a, i) => (
-            <div
-              key={a.id}
-              className={`hg-arsenal__glyph ${i === active ? 'is-active' : ''}`}
-            >
-              <ArsenalGlyph id={a.id} />
-            </div>
-          ))}
-
-          <div className="hg-arsenal__constellation">
-            {ARSENAL.map((a, i) => (
-              <div
-                key={a.id}
-                className={`hg-arsenal__orbit hg-arsenal__orbit--${i} ${i === active ? 'is-active' : ''}`}
-                style={{ '--orbit-accent': a.accent }}
-              >
-                <ArsenalGlyph id={a.id} />
-              </div>
-            ))}
-          </div>
-
-          <svg className="hg-arsenal__beam" viewBox="0 0 200 200">
-            <defs>
-              <linearGradient id="hg-beam-grad" x1="0%" y1="50%" x2="100%" y2="50%">
-                <stop offset="0%" stopColor={accent} stopOpacity="0" />
-                <stop offset="50%" stopColor={accent} stopOpacity="0.9" />
-                <stop offset="100%" stopColor={accent} stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <line
-              x1="100" y1="100"
-              x2={100 + 90 * Math.cos((active / ARSENAL.length) * Math.PI * 2 - Math.PI / 2)}
-              y2={100 + 90 * Math.sin((active / ARSENAL.length) * Math.PI * 2 - Math.PI / 2)}
-              stroke="url(#hg-beam-grad)"
-              strokeWidth="1.4"
-            />
-          </svg>
-        </div>
-
-        <div className="hg-arsenal__panel">
-          <span className="hg-arsenal__sub">{ARSENAL[active].sub}</span>
-          <h3 className="hg-arsenal__label">{ARSENAL[active].label}</h3>
-          <p className="hg-arsenal__desc">{ARSENAL[active].desc}</p>
-
-          <div className="hg-arsenal__sample" key={ARSENAL[active].id}>
-            <div className="hg-arsenal__sample-chrome">
-              <span /> <span /> <span />
-              <span className="hg-arsenal__sample-title">gameguide://{ARSENAL[active].id}</span>
-            </div>
-            <div className="hg-arsenal__sample-lines">
-              {ARSENAL[active].sample.map((line, i) => (
-                <span
-                  key={`${ARSENAL[active].id}-${i}`}
-                  className="hg-arsenal__sample-line"
-                  style={{ animationDelay: `${0.05 + i * 0.08}s` }}
-                >
-                  {line}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="hg-arsenal__dots">
-            {ARSENAL.map((a, i) => (
-              <span
-                key={a.id}
-                className={`hg-arsenal__dot ${i === active ? 'is-active' : ''} ${i < active ? 'is-past' : ''}`}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ============================================================
-   SECTION: Feature grid
-   ============================================================ */
-const FEATURES = [
-  { name: 'Spoiler Shield', body: 'Tell it where you are — “just beat Margit” — and answers stay on your side of that line. Anything past it goes behind a click-to-reveal bar; in Discord servers, reveals are always tagged.' },
-  { name: 'Neural Mesh', body: '4-provider routing with self-healing fallback. No single LLM is a single point of failure.' },
-  { name: 'PULSE Web Search', body: 'Live multi-source intel — Wikipedia, Steam, web search, RSS — fused into your answer.' },
-  { name: 'Vision GODMODE', body: 'Screenshot-grade visual analysis for builds, kit fits, and comp reads.' },
-  { name: 'Persona Engine', body: 'Tone and depth adapt to the player. Tactical, casual, or competitive — plus direct verbs for power users: /build, /counter, /price, /progress.' },
-  { name: 'Discord Bot', body: 'Same brain, in your server. /watch posts a game’s patch notes — summarised — and its best deals straight into your channels.' },
-];
-
-function FeatureGrid() {
-  return (
-    <section className="hg-features" id="features" aria-label="Capabilities">
-      <div className="hg-section__head">
-        <span className="hg-section__kicker">CAPABILITIES</span>
-        <h2>Everything wired into one loop.</h2>
-      </div>
-      <div className="hg-features__grid">
-        {FEATURES.map((f, i) => (
-          <motion.article
-            key={f.name}
-            className="hg-feat"
-            data-magnetic
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.3 }}
-            transition={{ duration: 0.55, delay: (i % 3) * 0.06, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <div className="hg-feat__sheen" aria-hidden="true" />
-            <div className="hg-feat__num">{String(i + 1).padStart(2, '0')}</div>
-            <h3>{f.name}</h3>
-            <p>{f.body}</p>
-            <div className="hg-feat__edge" aria-hidden="true" />
-          </motion.article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ============================================================
-   SECTION: Live demo card
-   ============================================================ */
-const DEMO_QUERY = 'Best Reaver build in PoE 3.26 for max single-target?';
-const DEMO_RESPONSE_LINES = [
-  '**Reaver · Single-Target · 3.26**',
-  '',
-  '• **Skill:** Sunder of Glaciation — converted phys → cold scaling',
-  '• **Gear pillar:** Replica Restless Ward + Mahuxotl shield',
-  '• **Damage:** ~14.2M sustained DPS at endgame conf',
-  '• **Why:** elemental cap > 90%, no map-mod blockers',
-  '',
-  'Sources: poe.ninja · Reddit r/PathOfExile · Steam patch notes',
-];
-
-function LiveDemo() {
-  const [phase, setPhase] = useState('idle'); // idle | typing | thinking | answering | done
-  const [typed, setTyped] = useState('');
-  const [revealed, setRevealed] = useState(0);
-  const ref = useRef(null);
-  const reduce = useReducedMotion();
-  const { lowPower } = useCapability();
-  const shouldAnimate = !(reduce || lowPower);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    // For low-power devices, skip the typing animation entirely
-    if (shouldAnimate) {
-      const io = new IntersectionObserver(([entry]) => {
-        if (entry.isIntersecting && phase === 'idle') setPhase('typing');
-      }, { threshold: 0.35 });
-      io.observe(el);
-      return () => io.disconnect();
-    } else {
-      // Immediately show the full query for low-power devices
-      setTyped(DEMO_QUERY);
-      setPhase('answering');
-    }
-  }, [phase, shouldAnimate]);
-
-  useEffect(() => {
-    if (!shouldAnimate) return; // Skip animation effects for low-power
-
-    if (reduce && phase === 'typing') {
-      setTyped(DEMO_QUERY);
-      setPhase('answering');
-      return;
-    }
-    if (phase !== 'typing') return;
-    let i = 0;
-    const id = setInterval(() => {
-      i++;
-      setTyped(DEMO_QUERY.slice(0, i));
-      if (i >= DEMO_QUERY.length) {
-        clearInterval(id);
-        setTimeout(() => setPhase('thinking'), 200);
-        setTimeout(() => setPhase('answering'), 900);
-      }
-    }, 28);
-    return () => clearInterval(id);
-  }, [phase, reduce, shouldAnimate]);
-
-  useEffect(() => {
-    if (phase !== 'answering') return;
-    if (revealed >= DEMO_RESPONSE_LINES.length) { setPhase('done'); return; }
-
-    // Faster reveal for low-power devices
-    const delay = shouldAnimate ? (reduce ? 0 : 110) : 0;
-    const id = setTimeout(() => setRevealed(r => r + 1), delay);
-    return () => clearTimeout(id);
-  }, [phase, revealed, reduce, shouldAnimate]);
-
-  return (
-    <section className={`hg-demo${!shouldAnimate ? ' hg-demo--lowpower' : ''}`} id="demo" aria-label="Live demo" ref={ref}>
-      <div className="hg-section__head">
-        <span className="hg-section__kicker">LIVE DEMO</span>
-        <h2>Type. Stream. Done.</h2>
-      </div>
-      <div className="hg-demo__card" data-magnetic>
-        <div className="hg-demo__chrome">
-          <span /> <span /> <span />
-          <span className="hg-demo__title">gameguide://chat</span>
-        </div>
-        <div className="hg-demo__io">
-          <div className="hg-demo__row hg-demo__row--user">
-            <span className="hg-demo__label">YOU</span>
-            <p>
-              {typed}
-              {!shouldAnimate && phase === 'typing' && <span className="hg-caret" style={{ animation: 'none' }} />}
-            </p>
-          </div>
-          <div className="hg-demo__row hg-demo__row--ai">
-            <span className="hg-demo__label">GAMEGUIDE</span>
-            <div className="hg-demo__ai-body">
-              {phase === 'thinking' && shouldAnimate && (
-                <div className="hg-demo__think">
-                  <span /> <span /> <span />
-                </div>
-              )}
-              {(phase === 'answering' || phase === 'done') && (
-                <div className="hg-demo__answer">
-                  {DEMO_RESPONSE_LINES.slice(0, revealed).map((line, i) => (
-                    <p
-                      key={i}
-                      className={line.startsWith('Sources') ? 'hg-demo__src' : ''}
-                      style={{
-                        opacity: shouldAnimate ? 1 : 0.9,
-                        transform: shouldAnimate ? 'none' : 'translateY(0)',
-                        transition: shouldAnimate ? 'opacity 0.3s ease' : 'none'
-                      }}
-                    >
-                      {renderInline(line)}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function renderInline(line) {
-  if (!line) return ' ';
-  // tiny **bold** parser
-  const parts = line.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) =>
-    p.startsWith('**') && p.endsWith('**')
-      ? <strong key={i}>{p.slice(2, -2)}</strong>
-      : <React.Fragment key={i}>{p}</React.Fragment>
-  );
-}
-
-/* ============================================================
-   SECTION: Final CTA + Footer
-   ============================================================ */
-function FinalCTA({ onEnter, exiting }) {
-  return (
-    <section className="hg-cta" aria-label="Enter the app">
-      <div className="hg-cta__inner">
-        <h2>The moment before you press play.</h2>
-        <p>Open the app. Ask anything. Watch it think.</p>
-        <button
-          type="button"
-          className="hg-cta__btn"
-          data-magnetic
-          onClick={onEnter}
-          disabled={exiting}
-        >
-          <span className="hg-cta__btn-face">
-            <span>Enter</span>
-            <span aria-hidden="true">→</span>
-          </span>
-          <span className="hg-cta__btn-edge" aria-hidden="true" />
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function Footer({ onNavigate }) {
-  return (
-    <footer className="hg-footer">
-      <div className="hg-footer__inner">
-        <div className="hg-footer__col hg-footer__col--brand">
-          <a className="hg-logo hg-footer__logo" href="#top">
-            <span className="hg-logo__mark" aria-hidden="true" />
-            <span>GameGuide-AI</span>
-          </a>
-          <p className="hg-footer__tag">
-            Built on a self-healing neural mesh. 4 providers. 200+ titles. Sub-400ms.
-          </p>
-          <span className="hg-footer__copy">© 2026 Tanmay Angarkar — all rights reserved.</span>
-        </div>
-
-        <div className="hg-footer__col">
-          <span className="hg-footer__head">Project</span>
-          <button type="button" className="hg-footer__link" onClick={() => onNavigate?.('about')}>About</button>
-          <button type="button" className="hg-footer__link" onClick={() => onNavigate?.('terms')}>Terms &amp; Copyright</button>
-          <button type="button" className="hg-footer__link" onClick={() => onNavigate?.('contacts')}>Contact</button>
-        </div>
-
-        <div className="hg-footer__col">
-          <span className="hg-footer__head">Connect</span>
-          <a className="hg-footer__link" href="mailto:gameguideai.support@gmail.com">Email support</a>
-          <a className="hg-footer__link" href="https://www.linkedin.com/in/tanmay-angarkar-4b8a47319/" target="_blank" rel="noopener noreferrer">LinkedIn</a>
-          <a className="hg-footer__link" href="https://github.com/angarkartanmay-ops" target="_blank" rel="noopener noreferrer">GitHub</a>
-        </div>
-
-        <div className="hg-footer__col">
-          <span className="hg-footer__head">Bot</span>
-          <a className="hg-footer__link" href="https://top.gg/bot/1499622566472712202?s=0c09d3395142b" target="_blank" rel="noopener noreferrer">Add Discord bot</a>
-          <a className="hg-footer__link" href="https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=277025508352&scope=bot+applications.commands" target="_blank" rel="noopener noreferrer">Server setup</a>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-/* ============================================================
-   SECTION: LandingPage main
-   ============================================================ */
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { HERO_GAMES } from '../site/showcase';
+import { achievements } from '../site/achievements';
+import { advance, isTypingTarget } from '../site/konami';
+import { gsap, scrollToId, useCalm, useLenis, useScene, scheduleRefresh } from '../site/motion';
+import SiteNav from './site/SiteNav';
+import SiteFooter from './site/SiteFooter';
+import Achievements from './site/Achievements';
+import Hero from './site/Hero';
+import AnswerAnatomy from './site/AnswerAnatomy';
+import ShieldDemo from './site/ShieldDemo';
+import LibraryWall from './site/LibraryWall';
+import CapabilityMenu from './site/CapabilityMenu';
+import WatchtowerDemo from './site/WatchtowerDemo';
+import Closing from './site/Closing';
+import '../styles/site.css';
+
+const EXIT_MS = 560;
+const GAME_KEY = 'gg.site.game';
+const DRAFT_KEY = 'gg.startDraft';
+const INTERACTIVE = 'a, button, input, textarea, select, summary, [role="button"], [role="tab"], [contenteditable="true"]';
+
+const store = achievements();
+const subscribeCount = (fn) => store.subscribe(fn);
+const readCount = () => store.count();
+
+/**
+ * "Press Start" — the landing page. A thin composition: each chapter owns
+ * its own demo and animation; this owns the page-wide pieces (smooth scroll,
+ * the game accent, Enter-to-start, the Konami code and the exit wipe).
+ */
 export default function LandingPage({ onEnter, onNavigate }) {
-  const caps = useCapability();
+  const calm = useCalm();
+  const rootRef = useRef(null);
   const [exiting, setExiting] = useState(false);
+  const [arcade, setArcade] = useState(false);
+  const count = useSyncExternalStore(subscribeCount, readCount, readCount);
 
-  // Lenis costs JS+RAF per scroll event. On low-power devices, native scroll
-  // is meaningfully smoother — skip Lenis entirely there.
-  useLenis(!caps.reduce && !caps.lowPower);
+  useLenis(!calm);
 
-  // Refresh ScrollTrigger after layout stabilizes (fonts, lazy R3F)
   useEffect(() => {
-    const id = setTimeout(() => ScrollTrigger.refresh(), 400);
-    return () => clearTimeout(id);
+    const prev = document.title;
+    document.title = 'GameGuide — ask anything about any game';
+    return () => { document.title = prev; };
   }, []);
 
-  const handleEnter = useCallback(() => {
+  // Fonts change heights; re-measure once they land. And fetch the chat's
+  // chunk while the visitor reads, so Press Start opens it at once.
+  useEffect(() => {
+    document.fonts?.ready.then(() => scheduleRefresh(0));
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
+    const cancel = window.cancelIdleCallback || clearTimeout;
+    const id = idle(() => { import('./codex/CodexShell').catch(() => {}); });
+    return () => cancel(id);
+  }, []);
+
+  // Chapter headings rise in as they arrive. Built after the chapters' own
+  // scenes (parents' effects run last), so any pins above already exist.
+  useScene(rootRef, ({ calm: still }, root) => {
+    if (still) return;
+    root.querySelectorAll('[data-reveal]').forEach((el) => {
+      gsap.from(el.children, {
+        y: 28, opacity: 0, duration: 0.9, stagger: 0.08, ease: 'power3.out',
+        scrollTrigger: { trigger: el, start: 'top 85%', once: true },
+      });
+    });
+  }, [calm]);
+
+  const onGame = useCallback((game) => {
+    rootRef.current?.style.setProperty('--s-game-accent', game.accent);
+    try { sessionStorage.setItem(GAME_KEY, String(game.appid)); } catch { /* per-visit nicety only */ }
+  }, []);
+
+  const start = useCallback((draft) => {
     if (exiting) return;
+    if (typeof draft === 'string') {
+      try { sessionStorage.setItem(DRAFT_KEY, draft); } catch { /* the chat just opens empty */ }
+    }
+    if (calm) { onEnter(); return; }
     setExiting(true);
-    setTimeout(() => onEnter?.(), 800);
-  }, [exiting, onEnter]);
+    setTimeout(onEnter, EXIT_MS);
+  }, [calm, exiting, onEnter]);
+
+  const pick = useCallback((game) => start(`What should I know before starting ${game.name}?`), [start]);
+
+  // Enter starts (when nothing else has focus); the Konami code toggles arcade mode.
+  useEffect(() => {
+    let pos = 0;
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
+      if (e.key === 'Escape' && document.documentElement.hasAttribute('data-arcade')) {
+        setArcade(false);
+        return;
+      }
+      const r = advance(pos, e.key);
+      pos = r.pos;
+      if (r.done) {
+        setArcade(a => !a);
+        achievements().unlock('old-school');
+        return;
+      }
+      // Enter on a focused control belongs to that control.
+      const el = document.activeElement;
+      const idle = !el || el === document.body || !el.matches(INTERACTIVE);
+      if (e.key === 'Enter' && idle && !e.repeat) {
+        e.preventDefault();
+        start();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [start]);
+
+  useEffect(() => {
+    document.documentElement.toggleAttribute('data-arcade', arcade);
+    return () => document.documentElement.removeAttribute('data-arcade');
+  }, [arcade]);
+
+  const section = (id) => () => scrollToId(id);
+  const links = [
+    { label: 'How it works', onClick: section('anatomy') },
+    { label: 'Spoiler Shield', onClick: section('shield') },
+    { label: 'Library', onClick: section('library') },
+    { label: 'Discord', onClick: section('watchtower') },
+    { label: 'About', onClick: () => onNavigate?.('about') },
+  ];
 
   return (
-    <CapsContext.Provider value={caps}>
-      <div className={`hg-root ${exiting ? 'is-exiting' : ''} ${caps.lowPower ? 'is-lowpower' : ''}`}>
-        {!caps.lowPower && <div className="hg-noise" aria-hidden="true" />}
-        {!caps.lowPower && <div className="hg-scanlines" aria-hidden="true" />}
-        {!caps.lowPower && <div className="hg-vignette" aria-hidden="true" />}
-        <Starfield count={caps.lowPower ? 60 : 200} />
-        <Nav onNavigate={onNavigate} />
-        <main>
-          <Hero webgl={caps.webgl} onEnter={handleEnter} />
-          <Manifesto />
-          <SignalPath pinned={caps.webgl} />
-          <PinnedPipeline pinned={caps.webgl} />
-          <ArsenalDeck pinned={caps.webgl} />
-          <div className="hg-post-pipeline">
-            <GameMarquee />
-            <FeatureGrid />
-            <SectionDivider variant="glow" />
-            <LiveDemo />
-            <SectionDivider variant="glow" />
-            <FinalCTA onEnter={handleEnter} exiting={exiting} />
-          </div>
-        </main>
-        <Footer onNavigate={onNavigate} />
-        <div className={`hg-exit-flash ${exiting ? 'is-active' : ''}`} aria-hidden="true" />
-      </div>
-    </CapsContext.Provider>
+    <div
+      ref={rootRef}
+      className={`site s-landing${exiting ? ' is-exiting' : ''}${calm ? ' is-calm' : ''}`}
+      style={{ '--s-game-accent': HERO_GAMES[0].accent }}
+    >
+      <a className="s-skip" href="#main" onClick={(e) => { e.preventDefault(); scrollToId('main'); }}>Skip to content</a>
+      <SiteNav
+        links={links}
+        onBrand={() => scrollToId('main')}
+        cta={{ label: arcade ? 'Insert coin' : 'Press Start', onClick: () => start() }}
+        counter={{ count, total: store.total }}
+      />
+
+      <main id="main">
+        <Hero calm={calm} onStart={() => start()} onGame={onGame} arcade={arcade} />
+        <AnswerAnatomy calm={calm} />
+        <ShieldDemo calm={calm} />
+        <LibraryWall calm={calm} onPick={pick} />
+        <CapabilityMenu calm={calm} />
+        <WatchtowerDemo calm={calm} />
+        <Closing calm={calm} onStart={() => start()} arcade={arcade} />
+      </main>
+
+      <SiteFooter onNavigate={onNavigate} onStart={() => start()} />
+      <Achievements />
+      {arcade && <div className="s-arcade" aria-hidden="true"><span>Arcade mode · Esc to exit</span></div>}
+      <div className="s-wipe" aria-hidden="true" />
+    </div>
   );
 }

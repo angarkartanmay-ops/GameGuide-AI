@@ -1,24 +1,24 @@
 # GameGuide-AI
 
-> Real-time AI gaming intelligence built for ranked players. Sub-400ms responses powered by a self-healing 4-provider neural mesh.
+> A game guide you can talk to. Ask about any game and GameGuide researches the answer live, sets it out like a strategy-guide page, and keeps the story you haven't reached behind a click-to-reveal bar.
 
 ## Features
 
-- **Neural Mesh Routing** — 4 AI providers with automatic token-level fallback
-- **PULSE Web Search** — Live multi-source intel fused from Wikipedia, Steam, Reddit, and RSS
-- **Vision GODMODE** — Screenshot-grade build/comp analysis from uploaded images
-- **Slash Commands** — `/build`, `/counter`, `/price`, `/lore`, `/help` and more
-- **Live Price Intel** — Real-time game prices across 20+ storefronts via CheapShark
-- **Persona Engine** — Tactical, casual, or competitive tone — adapts to the player
-- **Discord Bot** — Same intelligence, native in your Discord server
+- **Live research** — answers draw on game wikis, official patch notes and web search at the moment you ask, with sources listed
+- **Spoiler Shield** — tell it where you are (`/progress Elden Ring: beat Margit`) and story answers stop there; `/spoilers off` when you're done
+- **Game-aware chat** — the page takes on the game's Steam artwork and a colour sampled from it
+- **Screenshot reading** — attach up to three screenshots and ask about what's in them
+- **Deals** — `/price <game>` shows the best current PC price and its all-time low, via CheapShark
+- **Stealth** — `/stealth` opens a conversation that is never saved
+- **Discord bot** — the same answers in your server, plus Watchtower: `/watch add` posts a game's patch notes and big deals into a channel
 
 ## Usage
 
-GameGuide-AI is a free-to-use web application at [gameguide-ai.vercel.app](https://gameguide-ai.vercel.app).  
-No account required for basic queries. Sign in to unlock conversation history and preferences.
+GameGuide-AI is free to use at [game-guide-ai-plum.vercel.app](https://game-guide-ai-plum.vercel.app).
+No account is needed to ask. Sign in to keep your conversation history.
 
 ## Optional
 
-- [Terms of Service](https://gameguide-ai.vercel.app/#terms)
-- [About](https://gameguide-ai.vercel.app/#about)
-- [Contact](https://gameguide-ai.vercel.app/#contacts)
+- [Terms of Service](https://game-guide-ai-plum.vercel.app/#terms)
+- [About](https://game-guide-ai-plum.vercel.app/#about)
+- [Contact](https://game-guide-ai-plum.vercel.app/#contacts)
