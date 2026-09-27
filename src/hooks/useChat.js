@@ -3,7 +3,9 @@ import { supabase, supabaseAnonKey } from '../services/supabaseClient';
 import { streamChatResponse } from '../services/aiProvider';
 import { searchReddit } from '../services/redditScraper';
 import { searchWikis } from '../services/wikiScraper';
-import { fetchPriceDirect, fetchPriceSummaryDirect } from '../services/priceScraper';
+import {
+  fetchPriceDirect, fetchPriceSummaryDirect, resolvePriceQuery, looksLikePriceQuestion, extractPriceSubject,
+} from '../services/priceScraper';
 import {
   loadSpoilerPrefs, setSpoilerMode, setGameProgress, clearGameProgress, parseProgressArgs,
 } from '../utils/spoilerPrefs';
@@ -486,67 +488,84 @@ export default function useChat(user) {
     },
     {
       trigger: '/price',
-      description: 'Live multi-store price check (e.g. /price elden ring)',
+      description: 'Live multi-store price check — understands abbreviations (e.g. /price gta 5, /price bg3)',
       emoji: '💰',
       action: async (args) => {
-        const game = (args || '').trim();
-        if (!game) {
+        const typed = (args || '').trim();
+        if (!typed) {
           return {
-            text: `## 💰 Live Price Check\n\n**Usage:** \`/price <game name>\`\n\n**Examples:**\n- \`/price elden ring\`\n- \`/price baldur's gate 3\`\n- \`/price helldivers 2\`\n- \`/price stardew valley\`\n\nPulls live prices from **20+ stores** (Steam, GOG, Humble, Fanatical, Epic, etc.) via CheapShark.`,
+            text: `## 💰 Live Price Check\n\n**Usage:** \`/price <game name>\`\n\n**Examples:**\n- \`/price gta 5\` → understood as **Grand Theft Auto V**\n- \`/price elden ring nightreign\` (a specific edition, not the base game)\n- \`/price bg3\` → **Baldur's Gate 3**\n- \`/price ff7 remake\`\n\nAbbreviations, roman numerals and common nicknames are recognised. Pulls live prices from **20+ stores** (Steam, GOG, Humble, Fanatical, Epic, etc.) via CheapShark.`,
             images: [],
             isCommand: true,
           };
         }
 
-        // Run both calls in parallel — fetchPrices for the markdown body,
-        // fetchPricesSummary for the structured PriceBadge sidebar UI.
+        // Resolve nicknames/abbreviations to the title the storefront lists
+        // it under BEFORE searching, so "/price gta 5" actually searches for
+        // "Grand Theft Auto V" instead of the literal three characters "gta"
+        // CheapShark's own fuzzy match can't expand. `alias` (when set) is
+        // what we understood the request as — shown back so the user can
+        // tell we picked the right game/edition.
+        const { query, alias } = resolvePriceQuery(typed);
+        if (!query) {
+          return {
+            text: `## 💰 Live Price Check\n\nCouldn't find a game title in "${typed}" — try \`/price <game name>\`.`,
+            images: [],
+            isCommand: true,
+          };
+        }
+
         setPriceActive(false);
         setPriceData([]);
 
-        try {
-          // Direct functions skip the noisy detectGames() heuristic and use
-          // the user's literal /price arg as the CheapShark search title.
-          // Inside fetchGamePrice we now also try exact=1 first and score
-          // fuzzy fallbacks to avoid "Minecraft → Minecraft Legends" misfires.
-          const [textResult, summaryResult] = await Promise.allSettled([
-            fetchPriceDirect(game),
-            fetchPriceSummaryDirect(game),
-          ]);
+        // Inside fetchGamePrice we also try exact=1 first and score fuzzy
+        // fallbacks to avoid "Minecraft → Minecraft Legends" misfires.
+        const [textResult, summaryResult] = await Promise.allSettled([
+          fetchPriceDirect(query),
+          fetchPriceSummaryDirect(query),
+        ]);
 
-          const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : [];
-          const priceBlock = textResult.status === 'fulfilled' ? textResult.value : '';
+        const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : [];
+        // fetchPriceDirect returns '' for "searched, found nothing" and null
+        // for "couldn't reach CheapShark" — these need different messages,
+        // or a network hiccup reads as "that game isn't tracked here".
+        const priceBlock = textResult.status === 'fulfilled' ? textResult.value : null;
+        // The title CheapShark itself confirmed the match against, when we
+        // have one — more trustworthy than our own alias guess.
+        const matchedTitle = summary[0]?.title || alias;
 
-          if (summary && summary.length > 0) {
-            setPriceData(summary);
-            setPriceActive(true);
-          }
+        if (summary && summary.length > 0) {
+          setPriceData(summary);
+          setPriceActive(true);
+        }
 
-          if (!priceBlock) {
-            return {
-              text: `## 💰 Live Price Check — **${game}**\n\nNo current price data found on **CheapShark** for "${game}".\n\nPossible reasons:\n- The title spelling differs (try \`/price ${game.split(' ')[0]}\`)\n- Free-to-play game (Valorant, Fortnite, League — no price to track)\n- Mobile-only or console-exclusive (CheapShark covers PC stores only)\n- Recently delisted\n\nYou can also browse manually at https://www.cheapshark.com/`,
-              images: [],
-              isCommand: true,
-            };
-          }
-
-          // Convert the raw === LIVE PRICE INTEL === block into a chat-friendly markdown view
-          const cleaned = priceBlock
-            .replace(/^=== LIVE PRICE INTEL[^=]*===\n?/i, '')
-            .replace(/\n?=== END PRICE INTEL ===$/i, '')
-            .trim();
-
+        if (priceBlock === null) {
           return {
-            text: `## 💰 Live Price Check — **${game}**\n\n${cleaned}\n\n*— prices via CheapShark, refreshed every 15 min*`,
-            images: [],
-            isCommand: true,
-          };
-        } catch {
-          return {
-            text: `## 💰 Live Price Check — **${game}**\n\n**Error contacting CheapShark.** This is usually temporary — try again in a few seconds.`,
+            text: `## 💰 Live Price Check — **${matchedTitle || typed}**\n\n**Couldn't reach CheapShark right now.** This is usually a dropped connection — try the same command again in a few seconds.`,
             images: [],
             isCommand: true,
           };
         }
+
+        if (!priceBlock) {
+          return {
+            text: `## 💰 Live Price Check — **${matchedTitle || typed}**\n\nNo current price data found on **CheapShark** for "${matchedTitle || typed}"${alias && alias !== typed ? ` (understood from "${typed}")` : ''}.\n\nPossible reasons:\n- The title still doesn't match CheapShark's listing — try the exact storefront name\n- Free-to-play game (Valorant, Fortnite, League — no price to track)\n- Mobile-only or console-exclusive (CheapShark covers PC stores only)\n- Recently delisted\n\nYou can also browse manually at https://www.cheapshark.com/`,
+            images: [],
+            isCommand: true,
+          };
+        }
+
+        const cleaned = priceBlock.trim();
+
+        const understood = alias && alias.toLowerCase() !== typed.toLowerCase()
+          ? `\n*Understood "${typed}" as **${alias}**.*\n`
+          : '';
+
+        return {
+          text: `## 💰 Live Price Check — **${matchedTitle || typed}**\n${understood}\n${cleaned}\n\n*— prices via CheapShark, refreshed every 15 min*`,
+          images: [],
+          isCommand: true,
+        };
       },
     },
     {
@@ -849,18 +868,26 @@ export default function useChat(user) {
       // Skip client-side scraping entirely for non-game-related queries
       // (greetings, meta-questions about the bot, casual chitchat). The
       // omniscience layer on the server still fans out when needed.
-      // Price-fetching is now opt-in via the /price slash command — no
-      // longer fires on every message.
       let redditContext = '';
       let wikiContext = '';
-      const priceContext = ''; // /price command handles this exclusively now
+      let priceContext = '';
+
+      // Price is opt-in, not "opt-out to never" — it used to be gated so
+      // hard nothing ever re-enabled it, so asking "what's elden ring cost"
+      // in plain English got silently zero price data. The regex gate below
+      // is cheap (no network) and only trips for messages that plausibly ask
+      // about buying, cost, or a discount, so this stays rare exactly like
+      // the original design intended — it just now actually fires sometimes.
+      const priceSubject = looksLikePriceQuestion(text) ? extractPriceSubject(text) : '';
 
       // Always run client-side scraping. Scope is handled conversationally by
       // the model itself now — there is no pre-filter here and no refusal gate
       // on the server, so every message gets full context gathering.
-      const [redditResult, wikiResult] = await Promise.allSettled([
+      const [redditResult, wikiResult, priceResult, priceSummaryResult] = await Promise.allSettled([
         searchReddit(text),
         searchWikis(text),
+        priceSubject ? fetchPriceDirect(priceSubject) : Promise.resolve(''),
+        priceSubject ? fetchPriceSummaryDirect(priceSubject) : Promise.resolve([]),
       ]);
 
       if (redditResult.status === 'fulfilled' && redditResult.value) {
@@ -870,6 +897,16 @@ export default function useChat(user) {
       if (wikiResult.status === 'fulfilled' && wikiResult.value) {
         wikiContext = wikiResult.value;
         setWikiActive(true);
+      }
+      // fetchPriceDirect returns null on a network failure (vs '' for
+      // "searched, found nothing") — either way there's no context to add,
+      // but only a real hit should light up the badge.
+      if (priceResult.status === 'fulfilled' && priceResult.value) {
+        priceContext = priceResult.value;
+      }
+      if (priceSummaryResult.status === 'fulfilled' && priceSummaryResult.value?.length) {
+        setPriceData(priceSummaryResult.value);
+        setPriceActive(true);
       }
 
       // Step 2: Call AI with all gathered context + attachments.

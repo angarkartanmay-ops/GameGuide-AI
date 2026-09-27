@@ -37,7 +37,10 @@ const {
   PermissionFlagsBits,
 } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
-const { fetchPriceDirect, fetchJson } = require('./cheapshark');
+const {
+  fetchPriceDirect, fetchJson, PriceLookupError,
+  resolvePriceQuery, looksLikePriceQuestion, extractPriceSubject, formatPriceContext,
+} = require('./cheapshark');
 const watchtower = require('./watchtower');
 const quota = require('./quota');
 const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
@@ -425,7 +428,7 @@ async function fetchAttachmentAsBase64(att) {
   }
 }
 
-async function callChatProxy({ prompt, history, attachments, discordUserId, tier, softCapped, spoiler, stateless }) {
+async function callChatProxy({ prompt, history, attachments, discordUserId, tier, softCapped, spoiler, stateless, priceContext }) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PROXY_TIMEOUT_MS);
   try {
@@ -460,6 +463,10 @@ async function callChatProxy({ prompt, history, attachments, discordUserId, tier
         // lands in a shared server channel (reveals then stay barred even if
         // the asker said "spoil it": bystanders never agreed).
         spoiler: spoiler || undefined,
+        // Live CheapShark data for messages that read as a price question —
+        // same "=== LIVE PRICE INTEL ===" block the website sends, so the
+        // model cites real numbers instead of guessing from training data.
+        priceContext: priceContext || undefined,
         // Watchtower summaries: no memory, no trace — nobody asked a question.
         ephemeral: stateless === true,
       }),
@@ -623,6 +630,20 @@ async function runChatRequest({ userId, guildId, prompt, attachments, replyTarge
   }
 
   try {
+    // Price is opt-in, not "opt-out to never": only messages that plausibly
+    // ask about buying, cost, or a discount pay for a CheapShark round trip
+    // (mirrors the web app's gate). A network hiccup here just means the
+    // model answers without live numbers — never worth failing the turn
+    // over, so any failure is swallowed to "no price context".
+    let priceContext = '';
+    if (looksLikePriceQuestion(cleaned)) {
+      const subject = extractPriceSubject(cleaned);
+      if (subject) {
+        const priced = await fetchPriceDirect(subject).catch(() => null);
+        if (priced) priceContext = formatPriceContext([priced]);
+      }
+    }
+
     const [history, spoilerPrefs] = await Promise.all([
       getHistory(userId, tierLimits.history_len || 10),
       getSpoilerPrefs(userId),
@@ -637,6 +658,7 @@ async function runChatRequest({ userId, guildId, prompt, attachments, replyTarge
       // A reply in a server is read by everyone in the channel; a DM only by
       // the asker. The shield keeps reveals barred in the first case always.
       spoiler: { ...spoilerPrefs, publicChannel: !!guildId },
+      priceContext,
     });
 
     // Persist history + bump stats (fire-and-forget)
@@ -986,25 +1008,48 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       case 'price': {
-        const game = interaction.options.getString('game', true);
+        const rawGame = interaction.options.getString('game', true);
         await interaction.deferReply();
 
         // Bill /price like any other turn, once, up front.
         const priceDecision = await quota.checkQuota(supabase, { userId, guildId, kind: 'chat' });
         if (!priceDecision.allowed) return sendBlocked(interaction, priceDecision, userId);
 
-        // Live CheapShark — mirrors the web app's /price path (no LLM hop).
-        const data = await fetchPriceDirect(game);
+        // Resolve nicknames/abbreviations to the title the storefront lists
+        // it under BEFORE searching CheapShark — mirrors the web app's
+        // /price path (also no LLM hop on a hit). `alias` is what we
+        // understood the request as, used both for a better LLM fallback
+        // prompt below and (implicitly) for a correct embed title, since
+        // formatPriceEmbed shows CheapShark's own confirmed match.
+        const { query, alias } = resolvePriceQuery(rawGame);
+        let data = null;
+        let networkError = false;
+        if (query) {
+          try {
+            data = await fetchPriceDirect(query);
+          } catch (err) {
+            if (err instanceof PriceLookupError) networkError = true;
+            else throw err;
+          }
+        }
         if (data && (data.cheapest || data.deals?.length)) {
           bumpStats(userId, false).catch(() => {});
           return interaction.editReply(formatPriceEmbed(data));
         }
 
-        // Fallback: nothing on CheapShark — let the LLM try with web search.
-        // The decision is handed through so this does not bill a second time.
+        if (networkError) {
+          return interaction.editReply(
+            `⚠️ Couldn't reach CheapShark just now — this is usually temporary. Try \`/price ${rawGame}\` again in a few seconds.`
+          );
+        }
+
+        // Nothing on CheapShark — let the LLM try with web search. The
+        // decision is handed through so this does not bill a second time;
+        // the resolved alias (when we have one) tells it precisely which
+        // game/edition to search for instead of the user's raw shorthand.
         return handleChatRequest({
           userId, guildId,
-          prompt: `What's the current price for "${game}" on PC? Use live data and include store URLs. If you can't find anything, say so directly.`,
+          prompt: `What's the current price for "${alias || rawGame}" on PC? Use live data and include store URLs. If you can't find anything, say so directly.`,
           attachments: [],
           replyTarget: interaction, channel: interaction.channel,
           decision: priceDecision,
