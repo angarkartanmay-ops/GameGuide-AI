@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Hash, ArrowUpRight } from 'lucide-react';
 import { LINKS } from '../../site/links';
-import { achievements } from '../../site/achievements';
+import { achievements, unlockWhenSeen } from '../../site/achievements';
 import { gsap, ScrollTrigger, useScene } from '../../site/motion';
 import { ChapterHead, Mark } from './bits';
 
@@ -24,7 +24,7 @@ export default function WatchtowerDemo({ calm }) {
     if (still) {
       setShown(ALL);
       if (cmd) cmd.textContent = COMMAND;
-      return undefined;
+      return unlockWhenSeen(root.querySelector('.s-server'), 'watchman');
     }
     setShown(0);
     if (cmd) cmd.textContent = '';

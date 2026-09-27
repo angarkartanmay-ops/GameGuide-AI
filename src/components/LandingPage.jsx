@@ -50,7 +50,10 @@ export default function LandingPage({ onEnter, onNavigate }) {
     document.fonts?.ready.then(() => scheduleRefresh(0));
     const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
     const cancel = window.cancelIdleCallback || clearTimeout;
-    const id = idle(() => { import('./codex/CodexShell').catch(() => {}); });
+    const id = idle(() => {
+      import('./codex/CodexShell').catch(() => {});
+      import('./InfoPage').catch(() => {});
+    });
     return () => cancel(id);
   }, []);
 

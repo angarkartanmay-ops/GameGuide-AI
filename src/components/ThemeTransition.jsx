@@ -18,9 +18,6 @@ import './ThemeTransition.css';
  * morph but skip the overlay entirely (handled in CSS).
  */
 
-export const VARIANTS = ['aurora', 'scan', 'focus', 'drift'];
-// Cap covers the longest variant (PARTICLE DRIFT, ~1500ms) plus a margin.
-export const THEME_TRANSITION_DURATION = 1600;
 
 export default function ThemeTransition({ variant = 'aurora', accent, accent2, origin }) {
   return (

@@ -59,7 +59,8 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
 
 .s-skip {
   position: fixed; left: 16px; top: -64px; z-index: 100;
-  padding: 12px 18px; border-radius: 10px;
+  display: flex; align-items: center; min-height: 44px;
+  padding: 0 18px; border-radius: 10px;
   background: var(--s-accent); color: var(--s-on-accent);
   font: 600 14px var(--s-body); transition: top 0.2s;
 }
@@ -255,6 +256,7 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
 
 .s-sheet {
   position: fixed; inset: 0; z-index: -1;
+  overscroll-behavior: contain;
   display: flex; flex-direction: column;
   padding: calc(var(--s-nav-h) + 24px) var(--s-gutter) 32px;
   background: var(--s-bg);
@@ -394,6 +396,9 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
   transition: max-height 0.5s var(--s-ease), margin 0.5s var(--s-ease);
 }
 .s-step.is-now .s-step__text { max-height: 96px; margin-top: 6px; }
+/* Calm pages never scrub through the steps, so every description is shown —
+   otherwise four of the five would be unreadable. */
+.is-calm .s-step__text { max-height: none; margin-top: 6px; }
 
 .s-frame {
   --f-accent: color-mix(in srgb, var(--s-ink) 62%, transparent);
@@ -978,7 +983,7 @@ html[data-arcade] .s-closing__title {
 .s-toc__list { list-style: none; margin: 0; padding: 0; }
 .s-toc__link {
   display: flex; align-items: baseline; gap: 10px; width: 100%;
-  min-height: 38px; padding: 8px 0 8px 14px;
+  min-height: 44px; padding: 8px 0 8px 14px;
   border: 0; border-left: 1px solid var(--s-hair); background: none; cursor: pointer; text-align: left;
   font: 14px/1.35 var(--s-body); color: var(--s-muted);
   transition: color 0.2s, border-color 0.2s;
@@ -986,7 +991,8 @@ html[data-arcade] .s-closing__title {
 .s-toc__link:hover { color: var(--s-ink); }
 .s-toc__link.is-on { color: var(--s-ink); border-left-color: var(--s-accent); }
 .s-toc__num { font: 500 10.5px var(--s-mono); color: inherit; }
-.s-term { scroll-margin-top: calc(var(--s-nav-h) + 28px); }
+/* No scroll-margin here: html already sets scroll-padding-top, and the two
+   would stack into a wide gap above the heading you jumped to. */
 .s-term:focus { outline: none; }
 .s-term__num { color: var(--s-accent); }
 @media (max-width: 1000px) {

@@ -226,21 +226,63 @@ const TERMS = [
 
 function Terms() {
   const [active, setActive] = useState(TERMS[0].id);
+  // Set when a contents entry is clicked. The last sections are too short to
+  // reach the reading line, so the spy falls back to "the final one" at the
+  // bottom of the page — which would otherwise overrule what you just picked.
+  const picked = useRef(false);
+  const pickedTimer = useRef(0);
+  useEffect(() => () => clearTimeout(pickedTimer.current), []);
 
-  // Scroll-spy: the section crossing the upper third of the screen is "here".
+  // Scroll-spy: you are in the last section whose top has passed the reading
+  // line. An IntersectionObserver band was tried first, but a short section
+  // (§7 DMCA) could sit entirely inside it and never win, so clicking it
+  // highlighted the section after. Offsets are measured once and re-measured
+  // on resize, so scrolling itself never reads layout.
   useEffect(() => {
-    if (typeof IntersectionObserver === 'undefined') return undefined;
-    const io = new IntersectionObserver((entries) => {
-      const hit = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-      if (hit) setActive(hit.target.id);
-    }, { rootMargin: '-25% 0px -65% 0px' });
-    TERMS.forEach(t => { const el = document.getElementById(t.id); if (el) io.observe(el); });
-    return () => io.disconnect();
+    const LINE = 140; // just below the sticky nav
+    let frame = 0;
+    let tops = [];
+    const measure = () => {
+      tops = TERMS.map(t => {
+        const el = document.getElementById(t.id);
+        return { id: t.id, top: el ? el.getBoundingClientRect().top + window.scrollY : 0 };
+      });
+    };
+    const update = () => {
+      frame = 0;
+      if (!tops.length || picked.current) return;
+      const line = window.scrollY + LINE;
+      let current = tops[0].id;
+      for (const s of tops) if (s.top <= line) current = s.id;
+      // The last sections can be too short to ever reach the line, so at the
+      // bottom of the page the final one is always the right answer.
+      const doc = document.documentElement;
+      if (window.innerHeight + window.scrollY >= doc.scrollHeight - 4) current = tops[tops.length - 1].id;
+      setActive(current);
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
+    measure();
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => { measure(); update(); })
+      : null;
+    ro?.observe(document.body);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      ro?.disconnect();
+    };
   }, []);
 
   const jump = (id) => {
     const el = document.getElementById(id);
     if (!el) return;
+    picked.current = true;
+    clearTimeout(pickedTimer.current);
+    pickedTimer.current = setTimeout(() => { picked.current = false; }, 1200);
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     el.focus({ preventScroll: true });
     setActive(id);
@@ -389,6 +431,18 @@ export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
     window.scrollTo({ top: 0, behavior: 'instant' });
     return () => { document.title = prev; };
   }, [page.title]);
+
+  // Warm the routes reachable from here, so switching doesn't flash the
+  // empty route fallback while the chunk downloads.
+  useEffect(() => {
+    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2000));
+    const cancel = window.cancelIdleCallback || clearTimeout;
+    const id = idle(() => {
+      import('./codex/CodexShell').catch(() => {});
+      import('./LandingPage').catch(() => {});
+    });
+    return () => cancel(id);
+  }, []);
 
   // Links inside page copy dispatch this rather than receiving props.
   useEffect(() => {

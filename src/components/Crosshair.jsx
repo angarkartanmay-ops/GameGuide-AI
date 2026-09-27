@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, useSpring, useMotionValue, useReducedMotion } from 'framer-motion';
+import { motion as Motion, useSpring, useMotionValue, useReducedMotion } from 'framer-motion';
 import './Crosshair.css';
 
 /* ============================================================
@@ -23,7 +23,7 @@ import './Crosshair.css';
 // Closest-ancestor selector for "interactive" elements. Inputs/textareas
 // are excluded because the OS still shows the text caret there — we don't
 // want to swap to "lock" state mid-edit.
-const HOT_SELECTOR = 'button, a, [role="button"], [data-magnetic], summary, label, select';
+const HOT_SELECTOR = 'button, a, [role="button"], summary, label, select';
 
 export default function Crosshair() {
   const [enabled, setEnabled] = useState(false);
@@ -121,12 +121,12 @@ export default function Crosshair() {
 
   return (
     <>
-      <motion.div
+      <Motion.div
         className={`gg-cursor-ring ${stateClass}`}
         style={{ x: shouldAnimate ? rx : x, y: shouldAnimate ? ry : y }}
         aria-hidden="true"
       />
-      <motion.div
+      <Motion.div
         className={`gg-cursor-reticle ${stateClass}`}
         style={{ x: shouldAnimate ? ix : x, y: shouldAnimate ? iy : y }}
         aria-hidden="true"
@@ -136,7 +136,7 @@ export default function Crosshair() {
         <span className="gg-tick gg-tick--s" />
         <span className="gg-tick gg-tick--w" />
         <span className="gg-pin" />
-      </motion.div>
+      </Motion.div>
     </>
   );
 }

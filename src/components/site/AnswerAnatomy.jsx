@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { ArrowUp, ShieldCheck } from 'lucide-react';
 import { ANATOMY, heroArt } from '../../site/showcase';
 import { STAGE_COPY } from '../../utils/gameContext';
-import { achievements } from '../../site/achievements';
+import { achievements, unlockWhenSeen } from '../../site/achievements';
 import { gsap, ScrollTrigger, useScene } from '../../site/motion';
 import { ChapterHead, Mark } from './bits';
 
@@ -57,12 +57,14 @@ export default function AnswerAnatomy({ calm }) {
         q.textContent = question.slice(0, n);
       }
       if (b.key !== lastKey) { lastKey = b.key; setBeat(b); }
-      if (p >= AT.done) achievements().unlock('tutorial');
+      // Calm pages jump straight to the end, so they award the chapter when
+      // it is actually scrolled into view instead (see below).
+      if (!still && p >= AT.done) achievements().unlock('tutorial');
     };
 
     if (still) {
       apply(1);
-      return undefined;
+      return unlockWhenSeen(root.querySelector('.s-frame'), 'tutorial');
     }
     if (desktop) {
       apply(0);

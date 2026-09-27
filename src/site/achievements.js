@@ -50,6 +50,27 @@ export function createAchievements(storage) {
   };
 }
 
+/**
+ * Unlock `id` the first time `el` is actually on screen. Calm pages have no
+ * scroll triggers, so this is how they award the chapters you scroll past —
+ * without firing everything at once the moment the page loads.
+ * Returns a cleanup function.
+ */
+export function unlockWhenSeen(el, id) {
+  if (!el || typeof IntersectionObserver === 'undefined') {
+    achievements().unlock(id);
+    return () => {};
+  }
+  const io = new IntersectionObserver((entries) => {
+    if (entries.some(e => e.isIntersecting)) {
+      achievements().unlock(id);
+      io.disconnect();
+    }
+  }, { threshold: 0.25 });
+  io.observe(el);
+  return () => io.disconnect();
+}
+
 let shared = null;
 /** The page-wide store (sessionStorage when it's available). */
 export function achievements() {

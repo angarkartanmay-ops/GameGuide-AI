@@ -579,7 +579,17 @@ function sendBlocked(replyTarget, decision, userId) {
  *   (e.g. /price, which checks before trying CheapShark). Passing it through
  *   prevents billing the same turn twice.
  */
-async function handleChatRequest({ userId, guildId, prompt, attachments, replyTarget, channel, decision }) {
+async function handleChatRequest(opts) {
+  stats.chatRequests++;
+  try {
+    return await runChatRequest(opts);
+  } catch (e) {
+    stats.errors++;
+    throw e;
+  }
+}
+
+async function runChatRequest({ userId, guildId, prompt, attachments, replyTarget, channel, decision }) {
   const cleaned = prompt.trim();
   if (!cleaned && (!attachments || attachments.length === 0)) {
     const msg = 'Please give me a question, or attach an image to analyse.';
@@ -1517,14 +1527,6 @@ client.on('shardDisconnect', (event, shardId) => console.warn(`[shard ${shardId}
 client.on('shardReconnecting', (shardId) => { stats.reconnects++; console.log(`[shard ${shardId}] reconnecting…`); });
 client.on('shardResume', (shardId, replayed) => console.log(`[shard ${shardId}] resumed (replayed ${replayed} events)`));
 client.on('shardReady', (shardId) => { stats.lastReadyAt = new Date().toISOString(); console.log(`[shard ${shardId}] ready`); });
-
-// Hook into handleChatRequest counter — wrap once at boot.
-const _origHandle = handleChatRequest;
-handleChatRequest = async function (...args) {
-  stats.chatRequests++;
-  try { return await _origHandle(...args); }
-  catch (e) { stats.errors++; throw e; }
-};
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  PROCESS-LEVEL RESILIENCE — never crash on transient errors

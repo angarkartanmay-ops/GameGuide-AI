@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import './styles/chrome.css';
-import { THEME_IDS, themes as THEME_LIST } from './components/ThemeSelector';
+import { THEME_IDS, themes as THEME_LIST } from './theme/palettes';
 import useChat from './hooks/useChat';
 import useAuth from './hooks/useAuth';
-import ThemeTransition, { THEME_TRANSITION_DURATION, VARIANTS as FX_VARIANTS } from './components/ThemeTransition';
+import ThemeTransition from './components/ThemeTransition';
+import { THEME_TRANSITION_DURATION, VARIANTS as FX_VARIANTS } from './theme/transition';
 import usePerfMode from './hooks/usePerfMode';
 
 // Each view is its own chunk: the landing no longer ships the chat's markdown
