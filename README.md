@@ -2,11 +2,11 @@
 
 <div align="center">
 
-<img src="public/favicon.svg" alt="GameGuide-AI Logo" width="84" height="84" />
+<img src="public/icon.svg" alt="GameGuide logo" width="84" height="84" />
 
-### Real-Time Multimodal Gaming Intelligence Platform
+### The spoiler-safe game guide you can talk to.
 
-*Sub-400ms streaming responses, self-healing multi-provider neural mesh, multi-model free-tier quota rotation, live web fusion across six sources, and vision-grade HUD/screenshot analysis.*
+*Tell it where you are. Ask anything — bosses, builds, what you can still miss, whether it's on sale. It researches the answer live, sets it out like a strategy guide, and never spoils what you haven't reached.*
 
 [![CI Pipeline](https://github.com/angarkartanmay-ops/GameGuide-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/angarkartanmay-ops/GameGuide-AI/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Proprietary-blue.svg)](LICENSE)
@@ -15,9 +15,29 @@
 [![Supabase](https://img.shields.io/badge/Supabase-Edge%20Functions-3ecf8e.svg?logo=supabase&logoColor=white)](https://supabase.com)
 [![Discord](https://img.shields.io/badge/Discord-Bot%20v2.0-5865F2.svg?logo=discord&logoColor=white)](discord-bot/README.md)
 
-[🌐 Live Web Application](https://game-guide-ai-plum.vercel.app) • [🤖 Discord Bot Setup](discord-bot/README.md) • [🧪 Local Testing Guide](LOCAL_TESTING.md) • [🔒 Security Policy](SECURITY.md)
+**[▶ Try it free — no account needed](https://game-guide-ai-plum.vercel.app)** • [🤖 Add to Discord](https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=277025508352&scope=bot+applications.commands) • [Discord bot setup](discord-bot/README.md) • [🔒 Security](SECURITY.md)
 
 </div>
+
+---
+
+## Why GameGuide
+
+General chatbots will answer a game question — and happily spoil the ending while they're at it. GameGuide is built around the one thing a player actually needs from a guide: **help from where you are, and nothing past it.**
+
+| | |
+|---|---|
+| 🛡️ **Spoiler Shield** | Say *"I just beat Margit"* (or `/progress Elden Ring : beat Margit`). Story answers stop at that line; anything past it sits behind a click-to-reveal bar. On by default. |
+| 🧭 **Missables** | `/missables` — what you can still lose for good (items, questlines, trophies, one-time choices), in the order you'll reach them, starting from where you are. |
+| 🔗 **Spoiler-safe sharing** | Share any answer as a link. Your friend sees it with every spoiler still hidden — and the answer travels inside the link, so nothing is stored. |
+| 🔎 **Live research, with sources** | Game wikis, official patch notes and web search, read when you ask — so answers follow the current patch, not last year's. |
+| 🎨 **It becomes the game** | Name a game and the chat takes on its Steam art and a colour sampled from it. |
+| 💸 **Deals** | `/price gta 5` — best current PC price across 20+ stores and how it compares with the all-time low. Understands nicknames and editions. |
+| 🖼️ **Screenshots** | Drop in up to three — a build screen, a map, a puzzle — and ask about them. |
+| 📡 **Discord bot + Watchtower** | The same guide in your server, plus `/watch add` to post a game's patch notes (summarised) and big deals into a channel. |
+| 📱 **Installable** | Add it to your phone's home screen and keep it open as a second screen while you play. |
+
+Free on the web. No account needed to ask — sign in only to keep your history.
 
 ---
 
@@ -59,7 +79,7 @@
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │                             CLIENT PLATFORMS                                     │
-│   Web Application (React 19, Vite 8, Framer Motion)   │   Discord Bot (24/7)     │
+│   Web Application (React 19, Vite 8, GSAP)            │   Discord Bot (24/7)     │
 └─────────────────────────────────────────┬────────────────────────────────────────┘
                                           │
                                           ▼ HTTPS / SSE Stream
@@ -142,16 +162,21 @@ Users can attach up to 3 screenshots or UI captures per message. Attachment proc
 
 | Capability | Web Application | Discord Bot |
 |---|:---:|:---:|
-| **Sub-400ms Streaming Inference** | ✅ | ✅ (Chunked / Edit) |
-| **Self-Healing Neural Mesh** | ✅ | ✅ |
-| **Project PULSE Live Web Fusion** | ✅ | ✅ |
-| **Vision Screenshot Analysis** | ✅ (Up to 3 images) | ✅ (Attachments) |
-| **Contextual Follow-up Chips** | ✅ (Interactive pills) | ✅ (Inline suggestions) |
-| **Live Multi-Store Price Intel (`/price`)** | ✅ | ✅ (Affiliate decorated) |
-| **Dark Theme Switcher (7 Themes)** | ✅ (Smooth morph) | — |
-| **Player Authentication & History** | ✅ (Supabase Auth) | ✅ (Discord User ID) |
-| **Stealth / Incognito Mode (`/stealth`)** | ✅ | — |
-| **Tiered Rate Limiting** | ✅ (IP/User Token Bucket) | ✅ (Tiered Quotas) |
+| **Spoiler Shield (progress-aware answers)** | ✅ (saved in your browser / profile) | ✅ (per user; reveals always barred in server channels) |
+| **Missables from your position (`/missables`)** | ✅ | ✅ |
+| **Streaming answers with live research stages** | ✅ | ✅ (chunked) |
+| **Multi-provider fallback** | ✅ | ✅ |
+| **Live web research with sources** | ✅ | ✅ |
+| **Screenshot analysis** | ✅ (up to 3 images) | ✅ (attachments) |
+| **Follow-up suggestions** | ✅ | ✅ |
+| **Price checks (`/price`) — also detected in plain questions** | ✅ | ✅ (affiliate decorated) |
+| **Spoiler-safe share links** | ✅ | — (Discord has native `\|\|spoilers\|\|`) |
+| **Patch-note & deal alerts (Watchtower)** | — | ✅ (`/watch`) |
+| **Game-reactive art & 7 themes** | ✅ | — |
+| **Installable app (PWA)** | ✅ | — |
+| **Account & history** | ✅ (Supabase Auth, optional) | ✅ (Discord user ID) |
+| **Stealth / incognito (`/stealth`)** | ✅ | — |
+| **Rate limiting** | ✅ (per IP / per account) | ✅ (tiered daily quotas) |
 
 ---
 
@@ -177,13 +202,14 @@ Type `/` in the chat input or Discord to trigger power-user actions:
 
 | Command | Action |
 |---|---|
-| `/price <game>` | Fetches live multi-store price comparisons and historic lows via CheapShark. |
-| `/discover` | A pro gameplay tip, a little-known industry secret, or a deep lore drop — blended from live community data and curated knowledge. |
-| `/progress <game> : <where>` | 🛡️ Spoiler Shield: tell it where you are (`/progress Elden Ring : beat Margit`). Story answers stay behind that point; anything past it goes behind a click-to-reveal bar. `/progress clear` forgets it. |
+| `/progress <game> : <where>` | 🛡️ Spoiler Shield: tell it where you are (`/progress Elden Ring : beat Margit`). Story answers stay behind that point; anything past it goes behind a click-to-reveal bar. `/progress clear` forgets it. Saying it in plain words works too. |
+| `/missables [game]` | 🧭 What you can still permanently miss from where you are, in the order you'll reach it. With no game, uses the one you last set progress for. |
+| `/price <game>` | Live multi-store prices and the all-time low via CheapShark. Resolves nicknames and editions (`gta 5` → Grand Theft Auto V, `elden ring nightreign` ≠ `elden ring`). Plain questions like *"is bg3 on sale?"* trigger it too. |
+| `/discover` | A random pro tip, hidden detail or piece of lore. |
 | `/spoilers on` · `/spoilers off` | Turns Spoiler Shield on or off. |
-| `/stealth` | Activates incognito mode — conversations are never stored or logged. |
-| `/clear` | Wipes the active conversation viewport. |
-| `/help` | Displays the complete command reference palette. |
+| `/stealth` | Incognito — the conversation is never stored, remembered or used to look anything up. |
+| `/clear` | Deletes your chat history. |
+| `/help` | The full command reference. |
 
 ---
 
@@ -349,7 +375,8 @@ supabase secrets set GOOGLE_API_KEY="your_api_key"
 GameGuide-AI includes a comprehensive offline and live evaluation test suite:
 
 ```bash
-# Execute master test suite (190+ tests)
+# Every suite: pure-logic assertions, the Discord handlers against a fake
+# client, and the quota SQL on an in-process Postgres (PGlite). No keys needed.
 npm test
 ```
 

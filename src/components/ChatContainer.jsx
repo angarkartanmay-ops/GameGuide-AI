@@ -6,6 +6,22 @@ import EmptyState from './codex/EmptyState';
 const NEAR_BOTTOM_PX = 140;
 
 /**
+ * The nearest player message before index `i`, as a question a stranger
+ * would read on a share page — "/missables elden ring" reads as a command,
+ * so it's spelled out.
+ */
+function questionBefore(messages, i) {
+  for (let j = i - 1; j >= 0; j--) {
+    if (messages[j]?.sender !== 'user') continue;
+    const text = messages[j].text || '';
+    const m = /^\/missables\b\s*(.*)$/i.exec(text.trim());
+    if (m) return m[1] ? `What can I still miss in ${m[1]}?` : 'What can I still miss?';
+    return text;
+  }
+  return '';
+}
+
+/**
  * The transcript. Scroll follows new text only while the reader is already
  * near the bottom — scrolled up to re-read something, they stay put — and
  * always jumps down when they send. The old smooth scrollIntoView ran on every
@@ -34,6 +50,13 @@ export default function ChatContainer({
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    // The empty state reads top-down; pinning it to the bottom hid its
+    // heading and first row of games on a phone.
+    if (messages.length === 0) {
+      lastCount.current = 0;
+      el.scrollTop = 0;
+      return;
+    }
     const sentNew = messages.length > lastCount.current && last?.sender === 'user';
     lastCount.current = messages.length;
     if (sentNew) stick.current = true;
@@ -60,10 +83,12 @@ export default function ChatContainer({
             <span style={{ width: '76%' }} />
           </div>
         )}
-        {messages.map((msg) => (
+        {messages.map((msg, i) => (
           <MessageBubble
             key={msg.id}
             message={msg}
+            // The question an answer replies to, for its share link.
+            question={msg.sender === 'ai' ? questionBefore(messages, i) : ''}
             onFollowUpClick={onFollowUpClick}
             followUpsDisabled={isLoading}
           />

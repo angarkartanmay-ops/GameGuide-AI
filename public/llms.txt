@@ -6,9 +6,12 @@
 
 - **Live research** — answers draw on game wikis, official patch notes and web search at the moment you ask, with sources listed
 - **Spoiler Shield** — tell it where you are (`/progress Elden Ring: beat Margit`) and story answers stop there; `/spoilers off` when you're done
+- **Missables** — `/missables` lists what you can still permanently miss (items, questlines, trophies, one-time choices) from where you are, without spoiling anything past it
+- **Spoiler-safe sharing** — share any answer as a link; spoilers stay hidden for whoever opens it, and nothing is stored (the answer is carried in the link)
 - **Game-aware chat** — the page takes on the game's Steam artwork and a colour sampled from it
 - **Screenshot reading** — attach up to three screenshots and ask about what's in them
-- **Deals** — `/price <game>` shows the best current PC price and its all-time low, via CheapShark
+- **Deals** — `/price <game>` shows the best current PC price and its all-time low, via CheapShark; understands nicknames like `gta 5` or `bg3`, and plain questions like "is bg3 on sale?"
+- **Installable** — add it to a phone's home screen as a second screen while playing
 - **Stealth** — `/stealth` opens a conversation that is never saved
 - **Discord bot** — the same answers in your server, plus Watchtower: `/watch add` posts a game's patch notes and big deals into a channel
 

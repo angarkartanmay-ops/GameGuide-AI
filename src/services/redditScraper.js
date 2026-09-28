@@ -231,8 +231,9 @@ function buildSearchUrl(query, gameSubs) {
 // VITE_ENABLE_REDDIT=1 turns it straight back on once OAuth credentials exist.
 //
 // While it was on, every single message paid a doomed round trip and logged a
-// 403 pair to the console.
-const REDDIT_ENABLED = import.meta.env.VITE_ENABLE_REDDIT === '1';
+// 403 pair to the console. Exported so /discover and the "Community" source
+// indicator follow the same switch instead of assuming Reddit still answers.
+export const REDDIT_ENABLED = import.meta.env.VITE_ENABLE_REDDIT === '1';
 
 /**
  * Search Reddit for posts related to the user's gaming query.

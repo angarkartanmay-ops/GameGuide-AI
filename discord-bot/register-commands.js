@@ -68,6 +68,17 @@ const commands = [
     .addStringOption(o => o.setName('game').setDescription('e.g. Elden Ring').setRequired(false).setMaxLength(60))
     .addStringOption(o => o.setName('at').setDescription('e.g. "beat Margit" or "chapter 4" — or "clear" to forget').setRequired(false).setMaxLength(60)),
 
+  // The question only a progress-aware guide can answer safely: what can I
+  // still miss, from where I am, without spoiling what comes after?
+  new SlashCommandBuilder()
+    .setName('missables')
+    .setDescription('What you can still permanently miss from where you are — spoiler-safe')
+    .addStringOption(o => o
+      .setName('game')
+      .setDescription('e.g. Elden Ring — leave empty to use the game you set with /progress')
+      .setRequired(false)
+      .setMaxLength(60)),
+
   new SlashCommandBuilder()
     .setName('spoilers')
     .setDescription('Turn the Spoiler Shield on or off for you')

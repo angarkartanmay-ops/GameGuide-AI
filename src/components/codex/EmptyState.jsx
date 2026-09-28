@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Tag, MapPin, Image as ImageIcon } from 'lucide-react';
+import { Tag, MapPin, Compass, Image as ImageIcon } from 'lucide-react';
 import { buildShelf, loadRecentGames, coverUrl } from '../../utils/recentGames';
 import { loadSpoilerPrefs } from '../../utils/spoilerPrefs';
 import { resolveGameArt } from '../../utils/gameArt';
@@ -29,6 +29,9 @@ export default function EmptyState({ onAsk, onDraft, onAttach, stealthMode }) {
     })();
     return () => { cancelled = true; };
   }, [shelf, stealthMode]);
+
+  // The game /missables will default to — the newest one with a saved position.
+  const lastProgress = shelf.find((g) => g.progress) || null;
 
   const ask = (g) => onAsk(g.progress
     ? `I'm at ${g.progress} in ${g.name}. What should I do next?`
@@ -64,6 +67,20 @@ export default function EmptyState({ onAsk, onDraft, onAttach, stealthMode }) {
       </ul>
 
       <div className="cx-starters">
+        {/* The question only a progress-aware guide can answer safely. With a
+            saved position it runs straight away for that game; otherwise it
+            waits for the player to name one. */}
+        <button
+          type="button"
+          className="cx-starter"
+          onClick={() => (lastProgress ? onAsk(`/missables ${lastProgress.name}`) : onDraft('/missables '))}
+        >
+          <span className="cx-starter__icon" aria-hidden="true"><Compass size={17} /></span>
+          <span className="cx-starter__text">
+            <span>What can I still miss?</span>
+            <code>{lastProgress ? `/missables · ${lastProgress.name}` : '/missables elden ring'}</code>
+          </span>
+        </button>
         <button type="button" className="cx-starter" onClick={() => onDraft('/price ')}>
           <span className="cx-starter__icon" aria-hidden="true"><Tag size={17} /></span>
           <span className="cx-starter__text"><span>Check a price</span><code>/price elden ring</code></span>

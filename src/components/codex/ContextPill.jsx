@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { Shield } from 'lucide-react';
+import { REDDIT_ENABLED } from '../../services/redditScraper';
 
 /**
  * What the chat is working with, at a glance: the game in context, what the
@@ -14,7 +15,9 @@ function ContextPill({ game, spoiler, wiki, community, web, price }) {
     : null;
   const sources = [
     ['Wiki', wiki],
-    ['Community', community],
+    // Only while Reddit is actually queried — otherwise this dot sat at
+    // "idle" forever, advertising a source that is switched off.
+    ...(REDDIT_ENABLED ? [['Community', community]] : []),
     ['Web', web],
     ...(price ? [['Prices', true]] : []),
   ];

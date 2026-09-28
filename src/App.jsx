@@ -17,13 +17,21 @@ const CodexShell = lazy(() => import('./components/codex/CodexShell'));
 const Crosshair = lazy(() => import('./components/Crosshair'));
 const FINE_POINTER = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
 
+const SharedAnswer = lazy(() => import('./components/codex/SharedAnswer'));
+
 // Hash-routable static views. Anything outside this set falls back to landing
 // (so a stale or unknown hash never strands the user on a blank page).
 const INFO_VIEWS = new Set(['about', 'terms', 'contacts']);
 const ALL_VIEWS = new Set(['landing', 'chat', ...INFO_VIEWS]);
+// Shared answers live at #share/<payload>. The payload is case-sensitive
+// base64url, so it's read raw — never lowercased, never rewritten.
+const SHARE_PREFIX = 'share/';
+const rawHash = () => (typeof window === 'undefined' ? '' : (window.location.hash || '').replace(/^#\/?/, ''));
 function readViewFromHash() {
   if (typeof window === 'undefined') return null;
-  const hash = (window.location.hash || '').replace(/^#\/?/, '').toLowerCase();
+  const raw = rawHash();
+  if (raw.startsWith(SHARE_PREFIX)) return 'share';
+  const hash = raw.toLowerCase();
   return ALL_VIEWS.has(hash) ? hash : null;
 }
 
@@ -54,6 +62,7 @@ function App() {
     if (fromHash) return fromHash;
     return sessionStorage.getItem('gg_entered') === '1' ? 'chat' : 'landing';
   });
+  const [shareHash, setShareHash] = useState(rawHash);
   const [theme, setTheme] = useState(readStoredTheme);
   const [themeChosen, setThemeChosen] = useState(readThemeChosen);
   // Active theme-swap effect. `null` while idle. The `key` (timestamp) forces
@@ -141,6 +150,8 @@ function App() {
   // here so the sync itself never adds history entries — actual navigation
   // (navigate()) does pushState.
   useEffect(() => {
+    // The share payload IS the hash; syncing would erase it.
+    if (view === 'share') return;
     const expected = view === 'landing' ? '' : `#${view}`;
     if (window.location.hash !== expected) {
       const url = `${window.location.pathname}${window.location.search}${expected}`;
@@ -148,9 +159,13 @@ function App() {
     }
   }, [view]);
 
-  // Browser back/forward + manual hash edits.
+  // Browser back/forward + manual hash edits. The raw hash is tracked too, so
+  // opening a second share link in the same tab shows the new answer.
   useEffect(() => {
-    const onPop = () => setView(readViewFromHash() || 'landing');
+    const onPop = () => {
+      setView(readViewFromHash() || 'landing');
+      setShareHash(rawHash());
+    };
     window.addEventListener('popstate', onPop);
     window.addEventListener('hashchange', onPop);
     return () => {
@@ -185,6 +200,15 @@ function App() {
     navigate('chat');
   }, [navigate]);
 
+  // From a shared answer into the chat, optionally with a question drafted
+  // (a follow-up chip); the chat consumes gg.startDraft once on mount.
+  const askFromShare = useCallback((question) => {
+    if (typeof question === 'string' && question.trim()) {
+      try { sessionStorage.setItem('gg.startDraft', question.trim().slice(0, 200)); } catch { /* opens empty */ }
+    }
+    goChat();
+  }, [goChat]);
+
   // Show the splash exactly once — on the first time auth resolves.
   useEffect(() => {
     if (authLoading) return;        // still bootstrapping — keep loader on
@@ -216,7 +240,18 @@ function App() {
   // + fxOverlay siblings — so view transitions (landing → chat → info) don't
   // remount the reticle and lose its spring/position state.
   let viewBody;
-  if (view === 'landing') {
+  if (view === 'share') {
+    viewBody = (
+      <SharedAnswer
+        // Keyed by the link: opening a second share in the same tab starts
+        // clean instead of showing the first one's art while it decodes.
+        key={shareHash}
+        encoded={shareHash.startsWith(SHARE_PREFIX) ? shareHash.slice(SHARE_PREFIX.length) : ''}
+        onAsk={askFromShare}
+        onHome={goLanding}
+      />
+    );
+  } else if (view === 'landing') {
     viewBody = (
       <LandingPage
         onEnter={goChat}

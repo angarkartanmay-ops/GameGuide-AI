@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { supabase, supabaseAnonKey } from '../services/supabaseClient';
 import { streamChatResponse } from '../services/aiProvider';
-import { searchReddit } from '../services/redditScraper';
+import { searchReddit, REDDIT_ENABLED } from '../services/redditScraper';
 import { searchWikis } from '../services/wikiScraper';
 import {
   fetchPriceDirect, fetchPriceSummaryDirect, resolvePriceQuery, looksLikePriceQuestion, extractPriceSubject,
@@ -9,6 +9,14 @@ import {
 import {
   loadSpoilerPrefs, setSpoilerMode, setGameProgress, clearGameProgress, parseProgressArgs,
 } from '../utils/spoilerPrefs';
+import { pickMissablesGame, buildMissablesPrompt } from '../utils/missables';
+import { track } from '../utils/analytics';
+
+// Two identical sends inside this window are a double Enter, not a question.
+const DOUBLE_SUBMIT_MS = 3000;
+
+const LEGACY_ERROR_RX = /^(?:System Error: Unable to fetch protocol response\.|\*\*Network Error:\*\* Could not reach the API|\*\*Error:\*\* Failed to connect to Neural Net)/;
+const isLegacyErrorText = (text) => LEGACY_ERROR_RX.test(String(text || ''));
 
 export default function useChat(user) {
   const [messages, setMessages] = useState([]);
@@ -32,9 +40,8 @@ export default function useChat(user) {
 
   // ─── Credit-saving refs ────────────────────────────────────────────────────
   const abortControllerRef = useRef(null);   // for Stop Response
-  const lastMessageRef = useRef('');         // for duplicate guard
-  const cooldownRef = useRef(false);         // for rate limiting (2s)
-  const cooldownTimerRef = useRef(null);     // to clear on unmount
+  const lastMessageRef = useRef('');         // for the double-submit guard
+  const lastSentAtRef = useRef(0);
 
   // Depend on user?.id (stable string) instead of the user object reference.
   // Supabase rebuilds the user object on every TOKEN_REFRESHED event (which
@@ -52,7 +59,9 @@ export default function useChat(user) {
           .order('created_at', { ascending: true });
 
         if (!error && data) {
-          setMessages(data.map(msg => ({
+          // Older versions saved their error replies into history; they're
+          // not part of anyone's conversation, so don't bring them back.
+          setMessages(data.filter(msg => !isLegacyErrorText(msg.text)).map(msg => ({
             id: msg.id || Date.now().toString(),
             text: msg.text,
             sender: msg.sender,
@@ -66,9 +75,6 @@ export default function useChat(user) {
       setMessages([]);
     }
   }, [userId]);
-
-  // Clear cooldown timer on unmount
-  useEffect(() => () => clearTimeout(cooldownTimerRef.current), []);
 
   /** Stop the in-flight AI request immediately. */
   const cancelRequest = useCallback(() => {
@@ -120,7 +126,9 @@ export default function useChat(user) {
   // holds the former /tip body directly and dispatches to these two.
   const runRedpill = async () => {
     // ── Try live Reddit scrape from gaming-secrets/details subs ───────
-    if (Math.random() < 0.6) {
+    // Only while Reddit answers at all (see REDDIT_ENABLED): otherwise this
+    // was a guaranteed 403 plus up to 2.5s of waiting on 60% of calls.
+    if (REDDIT_ENABLED && Math.random() < 0.6) {
       try {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 2500);
@@ -258,7 +266,7 @@ export default function useChat(user) {
 
   const runLore = async () => {
     // ── Try live Reddit scrape from lore + theory subreddits ──────────
-    if (Math.random() < 0.6) {
+    if (REDDIT_ENABLED && Math.random() < 0.6) {
       try {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), 2500);
@@ -411,7 +419,7 @@ export default function useChat(user) {
       description: 'List all available commands',
       emoji: '📖',
       action: async () => ({
-        text: `## 📖 GameGuide-AI Command Reference\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | 🗑️ Wipe your entire chat history |\n| \`/stealth\` | 🥷 Incognito mode — nothing saved, nothing learned |\n| \`/help\` | 📖 Show this command list |\n| \`/discover\` | 🎲 Random gaming tip, secret, or lore drop (live + curated) |\n| \`/spoilers on\` · \`/spoilers off\` | 🛡️ Spoiler Shield — hides story reveals past where you are |\n| \`/progress <game> : <where>\` | 📍 Tell me where you are in a game |\n| \`/price <game>\` | 💰 Get live multi-store prices via CheapShark |\n| \`/konami\` | 🎮 Unlock the legendary Konami Easter Egg |`,
+        text: `## 📖 GameGuide-AI Command Reference\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | 🗑️ Wipe your entire chat history |\n| \`/stealth\` | 🥷 Incognito mode — nothing saved, nothing learned |\n| \`/help\` | 📖 Show this command list |\n| \`/discover\` | 🎲 Random gaming tip, secret, or lore drop (live + curated) |\n| \`/spoilers on\` · \`/spoilers off\` | 🛡️ Spoiler Shield — hides story reveals past where you are |\n| \`/progress <game> : <where>\` | 📍 Tell me where you are in a game |\n| \`/missables [game]\` | 🧭 What you can still permanently miss from where you are — spoiler-safe |\n| \`/price <game>\` | 💰 Live prices across PC stores — understands \`gta 5\`, \`bg3\`, \`ff7 remake\` |\n| \`/konami\` | 🎮 Unlock the legendary Konami Easter Egg |`,
         images: [],
         isCommand: true,
       }),
@@ -484,6 +492,27 @@ export default function useChat(user) {
           images: [],
           isCommand: true,
         };
+      },
+    },
+    {
+      trigger: '/missables',
+      description: 'What you can still permanently miss from where you are — spoiler-safe',
+      emoji: '🧭',
+      action: async (args) => {
+        const { game, where } = pickMissablesGame(args, loadSpoilerPrefs().progress);
+        if (!game) {
+          return {
+            text: '## 🧭 Missables\n\nTell me which game: `/missables elden ring`.\n\n'
+              + 'It works best once I know where you are — set it with `/progress elden ring : just beat Margit` '
+              + 'and the list starts from there, with nothing past that point spoiled.',
+            images: [],
+            isCommand: true,
+          };
+        }
+        // Not answered locally: this becomes a normal question to the model,
+        // shown in the transcript as the command the player typed.
+        track('missables', { withProgress: !!where });
+        return { prompt: buildMissablesPrompt(game, where) };
       },
     },
     {
@@ -583,7 +612,7 @@ export default function useChat(user) {
         if (category === 'lore') return runLore();
 
         // ── Try live Reddit scrape first (60% of the time, 2.5s timeout) ──
-        if (Math.random() < 0.6) {
+        if (REDDIT_ENABLED && Math.random() < 0.6) {
           try {
             const ctrl = new AbortController();
             const t = setTimeout(() => ctrl.abort(), 2500);
@@ -779,6 +808,9 @@ export default function useChat(user) {
     const args = text.trim().slice(cmd.trigger.length).trim();
     const result = await cmd.action(args);
     if (result === null) return true; // e.g. /clear — no message
+    // A command that is really a well-phrased question (/missables): the
+    // caller sends `prompt` to the model and shows what the player typed.
+    if (typeof result?.prompt === 'string') return { prompt: result.prompt };
     const cmdMessage = {
       id: Date.now().toString(),
       text: result.text,
@@ -801,23 +833,33 @@ export default function useChat(user) {
   };
 
   const sendMessage = async (text, attachments = []) => {
+    // What the model is asked. Usually the same as what the player typed; a
+    // command like /missables swaps in a fuller question but the transcript
+    // still shows the command.
+    let prompt = text;
+
     // ── Slash commands ──────────────────────────────────────────────────────
     if (text.trim().startsWith('/')) {
       const handled = await processCommand(text);
-      if (handled) return;
+      if (handled?.prompt) prompt = handled.prompt;
+      else if (handled) return;
     }
 
-    // ── Duplicate guard ─────────────────────────────────────────────────────
-    if (text.trim() === lastMessageRef.current && attachments.length === 0) {
-      console.warn('Duplicate message blocked.');
+    // ── Double-submit guard ────────────────────────────────────────────────
+    // Only catches the same text sent twice within a few seconds (a double
+    // Enter). It used to block ANY repeat of the last question forever, and
+    // the old 2-second cooldown dropped messages typed right after a fast
+    // answer — both silently, after the input box had already been cleared,
+    // so the player's message just vanished. The server rate-limits abuse.
+    const now = Date.now();
+    if (
+      attachments.length === 0
+      && text.trim() === lastMessageRef.current
+      && now - lastSentAtRef.current < DOUBLE_SUBMIT_MS
+    ) {
       return;
     }
-
-    // ── Cooldown guard (2 seconds between requests) ─────────────────────────
-    if (cooldownRef.current) {
-      console.warn('Rate limit: please wait before sending another message.');
-      return;
-    }
+    lastSentAtRef.current = now;
 
     // Build user message with optional image previews
     const userMessage = {
@@ -859,10 +901,6 @@ export default function useChat(user) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Start 2-second cooldown
-    cooldownRef.current = true;
-    cooldownTimerRef.current = setTimeout(() => { cooldownRef.current = false; }, 2000);
-
     try {
       // ─── SPEED OPTIMIZATION ────────────────────────────────────────────
       // Skip client-side scraping entirely for non-game-related queries
@@ -878,14 +916,14 @@ export default function useChat(user) {
       // is cheap (no network) and only trips for messages that plausibly ask
       // about buying, cost, or a discount, so this stays rare exactly like
       // the original design intended — it just now actually fires sometimes.
-      const priceSubject = looksLikePriceQuestion(text) ? extractPriceSubject(text) : '';
+      const priceSubject = looksLikePriceQuestion(prompt) ? extractPriceSubject(prompt) : '';
 
       // Always run client-side scraping. Scope is handled conversationally by
       // the model itself now — there is no pre-filter here and no refusal gate
       // on the server, so every message gets full context gathering.
       const [redditResult, wikiResult, priceResult, priceSummaryResult] = await Promise.allSettled([
-        searchReddit(text),
-        searchWikis(text),
+        searchReddit(prompt),
+        searchWikis(prompt),
         priceSubject ? fetchPriceDirect(priceSubject) : Promise.resolve(''),
         priceSubject ? fetchPriceSummaryDirect(priceSubject) : Promise.resolve([]),
       ]);
@@ -926,7 +964,7 @@ export default function useChat(user) {
         });
       };
 
-      const aiResponse = await streamChatResponse(text, activeMessages, {
+      const aiResponse = await streamChatResponse(prompt, activeMessages, {
         redditContext,
         wikiContext,
         priceContext,
@@ -998,7 +1036,10 @@ export default function useChat(user) {
         setActiveMessages((prev) => [...prev, aiMessage]);
       }
 
-      if (user && !stealthMode) {
+      // Error and rate-limit replies are about this moment, not the
+      // conversation — saving them put "try again" notes into history.
+      const transient = aiResponse.meta?.error || aiResponse.meta?.rateLimited;
+      if (user && !stealthMode && !transient) {
         supabase.from('chat_messages').insert({
           user_id: user.id,
           text: aiMessage.text,
@@ -1007,6 +1048,13 @@ export default function useChat(user) {
         }).then();
       }
     } catch (error) {
+      // Whatever streamed before a Stop or a failure stays readable, but it's
+      // no longer in progress. Left marked as streaming, it kept the live
+      // region busy and the spoiler guard in its mid-stream mode for good.
+      setActiveMessages((prev) => (prev.some((m) => m.streaming)
+        ? prev.map((m) => (m.streaming ? { ...m, streaming: false, meta: { ...(m.meta || {}), partial: true } } : m))
+        : prev));
+
       // AbortError = user clicked Stop — don't show any error message
       if (error.name === 'AbortError') {
         console.info('Request cancelled by user.');
@@ -1014,22 +1062,14 @@ export default function useChat(user) {
       }
       console.error(error);
       lastMessageRef.current = ''; // let the user retry the same message
-      const errorMessage = {
+      // Not saved to history (see above), and marked so it can't be shared.
+      setActiveMessages((prev) => [...prev, {
         id: (Date.now() + 1).toString(),
-        text: "System Error: Unable to fetch protocol response.",
+        text: "**That answer didn't come through.** Send your question again — if it keeps happening, the service may be busy for a minute.",
         sender: 'ai',
         images: [],
-      };
-      setActiveMessages((prev) => [...prev, errorMessage]);
-
-      if (user && !stealthMode) {
-        supabase.from('chat_messages').insert({
-          user_id: user.id,
-          text: errorMessage.text,
-          sender: errorMessage.sender,
-          images: []
-        }).then();
-      }
+        meta: { error: true },
+      }]);
     } finally {
       abortControllerRef.current = null;
       setIsLoading(false);

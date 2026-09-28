@@ -17,6 +17,11 @@ const ITEMS = [
     tries: ['/progress Elden Ring: beat Margit', '/spoilers off'],
   },
   {
+    id: 'missables', label: 'Missables', hint: 'Before the point of no return',
+    body: 'What can you still lose for good — items, questlines, trophies, one-time choices — listed in the order you will reach them, starting from where you are and spoiling nothing after it.',
+    tries: ['/missables Elden Ring'],
+  },
+  {
     id: 'vision', label: 'Screenshot reading', hint: 'Up to three per message',
     body: 'Drop in a build screen, a map or a puzzle and ask about what is in it. Up to three screenshots in one message.',
     tries: ['Attach a screenshot, then: "What should I upgrade next?"'],
@@ -37,9 +42,9 @@ const ITEMS = [
     tries: ['/stealth'],
   },
   {
-    id: 'themes', label: 'Seven themes', hint: 'When no game is on screen',
-    body: 'With no game in the conversation, the chat wears the theme you pick. Seven dark themes, from the menu at the top right.',
-    tries: ['Theme menu → pick one'],
+    id: 'share', label: 'Share it', hint: 'Spoilers stay hidden',
+    body: 'Send an answer to a friend who is behind you. The link opens it with every spoiler still under its bar — and it is carried in the link itself, so nothing is stored on our side.',
+    tries: ['Share under any answer'],
   },
 ];
 

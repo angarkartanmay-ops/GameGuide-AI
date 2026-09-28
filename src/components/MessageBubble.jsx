@@ -1,16 +1,29 @@
 import React, { memo, useId, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ChevronDown, Shield } from 'lucide-react';
+import { Check, ChevronDown, Copy, Share2, Shield } from 'lucide-react';
 import FollowUpChips, { parseFollowUps } from './FollowUpChips';
 import { toSpoilerMarkdown, SPOILER_HREF } from '../utils/spoilerText';
+import { track } from '../utils/analytics';
 // Shared with the edge function so both apply exactly the same rule.
 import { guardStreaming } from '../../supabase/functions/chat-proxy/spoilerGuard.ts';
+
+// The plain text inside a spoiler's rendered children (strings, or inline
+// markdown like **bold**), for sizing its stand-in.
+function plainText(node) {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(plainText).join('');
+  return node?.props?.children != null ? plainText(node.props.children) : '';
+}
 
 /**
  * A hidden span the reader reveals on purpose (click, Enter or Space).
  * Rendered from [text](#spoiler), which toSpoilerMarkdown produces from the
  * server's Discord-style ||spoiler|| syntax.
+ *
+ * While hidden, the real words aren't in the page at all — a blank stand-in
+ * of the same shape holds the bar's size. Transparent text still turned up in
+ * find-in-page, in a text selection, and to anything reading the page.
  */
 function Spoiler({ children }) {
   const [shown, setShown] = useState(false);
@@ -28,7 +41,12 @@ function Spoiler({ children }) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
       }}
     >
-      <span className="spoiler__text" aria-hidden={!shown}>{children}</span>
+      {shown
+        ? <span className="spoiler__text">{children}</span>
+        // Two no-break spaces come to about one letter's width and never
+        // break; the real spaces between words do, so the bar wraps like the
+        // sentence would and doesn't jump when it's revealed.
+        : <span className="spoiler__text" aria-hidden="true">{plainText(children).replace(/\S/g, '  ')}</span>}
     </span>
   );
 }
@@ -39,7 +57,8 @@ const MARKDOWN_COMPONENTS = {
     // react-markdown passes its AST `node`; it must not reach the DOM.
     const rest = { ...props };
     delete rest.node;
-    return <a {...rest} target="_blank" rel="noopener noreferrer" />;
+    // nofollow/ugc: answers (and especially shared ones) aren't our editorial links.
+    return <a {...rest} target="_blank" rel="noopener noreferrer nofollow ugc" />;
   },
 };
 
@@ -85,7 +104,94 @@ function MessageImages({ images, isUser }) {
   );
 }
 
-function MessageBubble({ message, onFollowUpClick, followUpsDisabled = false }) {
+/**
+ * Copy / Share under a finished answer. Share builds a spoiler-safe link
+ * (the answer travels in the URL fragment; nothing is stored) and uses the
+ * phone share sheet where there is one, the clipboard otherwise. If the
+ * clipboard is blocked, the link is shown to copy by hand.
+ */
+function AnswerActions({ text, copyText, question, game, sources }) {
+  const [state, setState] = useState('idle'); // idle | working | copied | linked | manual
+  const [manualUrl, setManualUrl] = useState('');
+
+  const settle = (next) => {
+    setState(next);
+    if (next === 'copied' || next === 'linked') setTimeout(() => setState('idle'), 2200);
+  };
+
+  const copy = async () => {
+    try {
+      // Server spoiler syntax (||…||) is kept on purpose: pasted into Discord
+      // it becomes Discord's own spoiler, so nothing gets spoiled there either.
+      await navigator.clipboard.writeText((copyText || text).trim());
+      settle('copied');
+    } catch { settle('idle'); }
+  };
+
+  const share = async () => {
+    setState('working');
+    let url;
+    try {
+      const { buildShareUrl } = await import('../utils/share');
+      url = await buildShareUrl({ q: question || '', a: text, g: game || null, s: sources || [] });
+    } catch {
+      settle('idle');
+      return;
+    }
+    track('share_created');
+    const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+    if (coarse && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: 'GameGuide', text: question ? `“${question}” — spoiler-safe answer` : 'A spoiler-safe GameGuide answer', url });
+        settle('idle');
+        return;
+      } catch (err) {
+        if (err?.name === 'AbortError') { settle('idle'); return; }
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      settle('linked');
+    } catch {
+      setManualUrl(url);
+      settle('manual');
+    }
+  };
+
+  const said = state === 'copied' ? 'Answer copied' : state === 'linked' ? 'Share link copied' : '';
+
+  return (
+    <div className="cx-actions">
+      <button type="button" className={`cx-action${state === 'copied' ? ' is-done' : ''}`} onClick={copy}>
+        {state === 'copied' ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+        {state === 'copied' ? 'Copied' : 'Copy'}
+      </button>
+      <button
+        type="button"
+        className={`cx-action${state === 'linked' ? ' is-done' : ''}`}
+        onClick={share}
+        disabled={state === 'working'}
+        title="A link to this answer. Spoilers stay hidden for whoever opens it."
+      >
+        {state === 'linked' ? <Check size={13} aria-hidden="true" /> : <Share2 size={13} aria-hidden="true" />}
+        {state === 'linked' ? 'Link copied' : 'Share'}
+      </button>
+      {state === 'manual' && (
+        <input
+          className="cx-action__link"
+          readOnly
+          value={manualUrl}
+          aria-label="Share link — copy it from here"
+          onFocus={(e) => e.currentTarget.select()}
+          ref={(el) => el?.select()}
+        />
+      )}
+      <span className="sr-only" role="status" aria-live="polite">{said}</span>
+    </div>
+  );
+}
+
+function MessageBubble({ message, question = '', onFollowUpClick, followUpsDisabled = false, actions = true }) {
   const isUser = message.sender === 'user';
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const sourcesId = useId();
@@ -115,6 +221,10 @@ function MessageBubble({ message, onFollowUpClick, followUpsDisabled = false }) 
 
   const meta = message.meta && !message.meta.error ? message.meta : null;
   const uniqueSources = [...new Set((meta?.sources || []).filter(Boolean))];
+  // Only a complete, real answer: not an error, a rate-limit note, an answer
+  // cut off by Stop, or a command's canned reply.
+  const shareable = actions && !streaming && !message.isCommand && !!cleanText?.trim()
+    && !message.meta?.error && !message.meta?.partial && !message.meta?.rateLimited;
   const persona = meta?.persona || null;
 
   // Spoiler Shield: what it held back, shown under the answer.
@@ -172,6 +282,16 @@ function MessageBubble({ message, onFollowUpClick, followUpsDisabled = false }) 
             <li key={src}><span className="cx-sources__n">{i + 1}</span>{SOURCE_LABELS[src] || src}</li>
           ))}
         </ol>
+      )}
+
+      {shareable && (
+        <AnswerActions
+          text={message.text}
+          copyText={cleanText}
+          question={question}
+          game={meta?.game}
+          sources={uniqueSources}
+        />
       )}
 
       {!streaming && followUps.length > 0 && (

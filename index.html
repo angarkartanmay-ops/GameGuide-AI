@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/favicon.jpg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Installable: players keep it on a phone as a second screen while they play. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="GameGuide" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>GameGuide — ask anything about any game</title>
     <meta name="description" content="A game guide you can talk to. Live answers from wikis, patch notes and the web, set like a strategy guide — and it won't spoil what you haven't reached. Free on the web and in Discord." />
@@ -24,6 +30,27 @@
     <meta name="twitter:description" content="Live answers, set like a strategy guide, that stop where you are in the story." />
     <meta name="twitter:image" content="https://game-guide-ai-plum.vercel.app/og.png" />
 
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "GameGuide",
+        "url": "https://game-guide-ai-plum.vercel.app/",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any (web browser), Discord",
+        "description": "A spoiler-safe game guide you can talk to. Live answers from wikis, patch notes and the web, set like a strategy guide — it never spoils what you haven't reached.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "Spoiler Shield: answers stop where you are in the story",
+          "Missables checklist from your current progress",
+          "Live research from wikis, official patch notes and the web",
+          "Spoiler-safe share links",
+          "PC deal and all-time-low price checks",
+          "Discord bot with patch-note alerts"
+        ]
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://cdn.akamai.steamstatic.com" />
@@ -34,6 +61,12 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="max-width:560px;margin:15vh auto;padding:0 20px;font:16px/1.6 system-ui,sans-serif;color:#ece6da;background:#07090d">
+        <h1 style="font-weight:500">GameGuide needs JavaScript</h1>
+        <p>GameGuide is a spoiler-safe game guide you can talk to. Turn on JavaScript to ask it anything — or add the Discord bot to your server.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

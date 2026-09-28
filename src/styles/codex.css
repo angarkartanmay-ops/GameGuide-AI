@@ -301,6 +301,56 @@
 .cx-sources li { display: flex; gap: 12px; }
 .cx-sources__n { min-width: 1ch; font-family: var(--cx-mono); color: var(--cx-accent); }
 
+/* ── Shared answer page (#share/…) ─────────────────────────────────────── */
+.cx-shared__tag {
+  justify-self: center; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: var(--cx-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cx-muted);
+}
+.cx-shared__note {
+  display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 12px 14px;
+  border-radius: 12px; border: 1px solid var(--cx-hair); background: color-mix(in srgb, var(--cx-ink) 4%, transparent);
+  font-size: 13.5px; line-height: 1.55; color: var(--cx-ink-2);
+}
+.cx-shared__note svg { flex-shrink: 0; margin-top: 2px; color: var(--cx-accent); }
+.cx-shared__note strong { color: var(--cx-ink); font-weight: 600; }
+.cx-shared__end { padding-top: 26px; border-top: 1px solid var(--cx-hair); }
+.cx-shared__end p { max-width: 58ch; margin: 10px 0 0; font-size: 15.5px; line-height: 1.6; color: var(--cx-ink-2); }
+.cx-shared__title {
+  margin: 0; font-family: var(--cx-display); font-weight: 420; font-size: clamp(26px, 3.6vw, 34px);
+  line-height: 1.1; letter-spacing: -0.02em; color: var(--cx-ink);
+}
+.cx-shared__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+.cx-shared__btn {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px;
+  border-radius: 12px; border: 1px solid var(--cx-hair-2); background: none; cursor: pointer;
+  font: 600 14px var(--cx-body); color: var(--cx-ink); transition: border-color 160ms ease, background-color 160ms ease;
+}
+.cx-shared__btn:hover { border-color: color-mix(in srgb, var(--cx-accent) 50%, transparent); }
+.cx-shared__btn.is-primary { border-color: transparent; background: var(--cx-accent); color: #07090d; }
+.cx-shared__btn.is-primary:hover { background: color-mix(in srgb, var(--cx-accent) 84%, #fff); }
+@media (max-width: 600px) {
+  .cx-shared__tag { display: none; }
+  .cx-shared .cx-top { grid-template-columns: auto 1fr; }
+}
+
+/* Copy / Share under a finished answer — quiet until wanted. */
+.cx-actions { margin-top: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cx-action {
+  display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid var(--cx-hair); background: none; cursor: pointer;
+  font-family: var(--cx-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--cx-muted); transition: color 160ms ease, border-color 160ms ease;
+}
+.cx-action:hover { color: var(--cx-ink); border-color: var(--cx-hair-2); }
+.cx-action:disabled { opacity: 0.55; cursor: progress; }
+.cx-action.is-done { color: var(--cx-accent); border-color: color-mix(in srgb, var(--cx-accent) 42%, transparent); }
+.cx-action__link {
+  flex: 1 1 100%; min-height: 40px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--cx-hair-2); background: color-mix(in srgb, var(--cx-ink) 5%, transparent);
+  color: var(--cx-ink-2); font-family: var(--cx-mono); font-size: 12px;
+}
+@media (pointer: coarse) { .cx-action { min-height: 44px; } }
+
 .cx-next { margin-top: 22px; display: flex; flex-direction: column; gap: 2px; }
 .cx-next ul { margin: 0; padding: 0; list-style: none; }
 .cx-next__link {
@@ -377,7 +427,7 @@
 .cx-cover:focus-visible .cx-cover__art { outline: 2px solid var(--cx-accent); outline-offset: 3px; }
 .cx-cover__name { font-size: 13.5px; font-weight: 500; line-height: 1.3; }
 .cx-cover__meta { margin-top: -6px; font-family: var(--cx-mono); font-size: 10.5px; color: var(--cx-muted); }
-.cx-starters { margin-top: 34px; display: flex; flex-wrap: wrap; gap: 12px; }
+.cx-starters { margin-top: 34px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .cx-starter {
   display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 18px 0 10px;
   border-radius: 14px; border: 1px solid var(--cx-hair); background: color-mix(in srgb, var(--cx-ink) 4%, transparent);
@@ -553,7 +603,7 @@
   .cx-prose { font-size: 16px; }
   .cx-shelf { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
   .cx-empty__lede { font-size: 16.5px; }
-  .cx-starters { flex-direction: column; }
+  .cx-starters { grid-template-columns: minmax(0, 1fr); }
   .cx-dock { width: calc(100% - 16px); }
   .cx-bar { padding: 8px; gap: 8px; border-radius: 20px; }
   .cx-bar__hint { display: none; }

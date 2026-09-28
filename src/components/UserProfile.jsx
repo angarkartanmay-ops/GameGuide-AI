@@ -36,7 +36,8 @@ export default function UserProfile() {
   if (!user) {
     return (
       <div className="sign-in-wrap">
-        <button type="button" className="glass-panel sign-in-btn" onClick={signInWithGoogle}>
+        {/* Named on the button itself: phones hide the label and show just the icon. */}
+        <button type="button" className="glass-panel sign-in-btn" onClick={signInWithGoogle} aria-label="Sign in with Google">
           <LogIn size={16} aria-hidden="true" />
           <span>Sign in</span>
         </button>

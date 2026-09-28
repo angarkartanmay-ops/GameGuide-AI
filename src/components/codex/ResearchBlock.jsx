@@ -1,5 +1,6 @@
 import React from 'react';
 import { stageLabel } from '../../utils/gameContext';
+import { REDDIT_ENABLED } from '../../services/redditScraper';
 
 /**
  * Replaces the three bouncing dots. Retrieval takes seconds before the first
@@ -8,7 +9,8 @@ import { stageLabel } from '../../utils/gameContext';
  */
 export default function ResearchBlock({ streamStage, game, wiki, community, web }) {
   const label = stageLabel(streamStage) || 'Thinking…';
-  const chips = [['Wiki intel', wiki], ['Community', community], ['Web intel', web]];
+  // "Community" only while Reddit is actually queried (see REDDIT_ENABLED).
+  const chips = [['Wiki intel', wiki], ...(REDDIT_ENABLED ? [['Community', community]] : []), ['Web intel', web]];
   return (
     <section className="cx-entry cx-entry--ai cx-research" aria-label="Research in progress">
       <div className="cx-overline">

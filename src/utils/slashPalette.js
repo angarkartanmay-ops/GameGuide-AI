@@ -13,6 +13,8 @@
 export const PALETTE_META = {
   '/price': { args: true, usage: '<game>' },
   '/progress': { args: true, usage: '<game> : <where>' },
+  // Optional argument: Enter on its own uses the game you last set progress for.
+  '/missables': { args: true, usage: '[game]' },
   '/spoilers': { args: true, usage: 'on | off' },
   // Wipes history: picking it only fills the box, a second Enter runs it.
   '/clear': { confirm: true },

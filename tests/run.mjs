@@ -29,6 +29,8 @@ const SUITES = [
   ['site',          'site.test.mjs'],          // landing + info: konami, achievements, showcase, honest copy
   ['steam-art',     'steam-art.test.mjs'],     // backdrop art lookup: strict match, fixed host
   ['price',         'price.test.mjs'],         // /price game+version detection, web/Discord parity
+  ['share',         'share.test.mjs'],         // spoiler-safe share links: round trip, hostile input, deflate bomb
+  ['missables',     'missables.test.mjs'],     // /missables prompt + default game, web/Discord parity
   ['corroboration', 'corroboration.test.ts'],  // source-agreement scoring
   ['ssrf',          'ssrf.test.mjs'],          // wiki-proxy subdomain validation
   ['eval',          'eval/pipeline.test.mjs'], // golden-set retrieval + routing accuracy

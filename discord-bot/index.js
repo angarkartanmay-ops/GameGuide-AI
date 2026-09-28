@@ -41,6 +41,7 @@ const {
   fetchPriceDirect, fetchJson, PriceLookupError,
   resolvePriceQuery, looksLikePriceQuestion, extractPriceSubject, formatPriceContext,
 } = require('./cheapshark');
+const { buildMissablesPrompt, pickMissablesGame } = require('./missables');
 const watchtower = require('./watchtower');
 const quota = require('./quota');
 const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
@@ -1082,6 +1083,30 @@ client.on('interactionCreate', async (interaction) => {
         });
       }
 
+      case 'missables': {
+        const prefs = await getSpoilerPrefs(userId);
+        const pick = pickMissablesGame(interaction.options.getString('game') || '', prefs.progress);
+        if (pick.none || pick.choose) {
+          // Answered privately and free: nothing was asked of the model yet.
+          const list = pick.choose
+            ? `You've saved progress for: ${pick.choose.map(g => `**${g}**`).join(', ')}.\nPick one: \`/missables game:${pick.choose[0]}\``
+            : 'Tell me which game: `/missables game:Elden Ring`.';
+          return interaction.reply({
+            content: `🧭 ${list}\n-# Works best once I know where you are — \`/progress game:Elden Ring at:beat Margit\` — so the list starts there and spoils nothing past it.`,
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+        await interaction.deferReply();
+        // The stored progress rides along with every question, so the shield
+        // already bars anything past where this player is.
+        return handleChatRequest({
+          userId, guildId,
+          prompt: buildMissablesPrompt(pick.game, pick.where),
+          attachments: [],
+          replyTarget: interaction, channel: interaction.channel,
+        });
+      }
+
       case 'spoilers': {
         const choice = interaction.options.getString('mode');
         const prefs = await getSpoilerPrefs(userId);
@@ -1420,6 +1445,7 @@ client.on('interactionCreate', async (interaction) => {
             { name: '🛡️ Spoiler Shield', value:
                 'I answer up to where you are and hide the rest behind ||spoiler bars||.\n' +
                 '`/progress [game] [at]` — tell me where you are in a game\n' +
+                '`/missables [game]` — what you can still permanently miss from there\n' +
                 '`/spoilers [mode]` — turn the shield on or off for you', inline: false },
             { name: '📡 Watchtower (server admins)', value:
                 '`/watch add <game>` — post its patch notes (and deals) in a channel\n' +

@@ -1,6 +1,18 @@
 import { supabase } from './supabaseClient';
 
 /**
+ * Prefer the signed-in user's token so the server buckets rate limits by
+ * account (a much higher allowance) rather than by shared IP.
+ */
+async function currentAuthToken(anonKey) {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.access_token) return data.session.access_token;
+  } catch { /* not signed in — anon key is fine */ }
+  return anonKey;
+}
+
+/**
  * Streaming chat via Server-Sent Events.
  *
  * The backend runs retrieval (live web search, wiki/Reddit scraping, OCR)
@@ -39,14 +51,7 @@ export const streamChatResponse = async (
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
   const MAX_HISTORY_MESSAGES = 12;
-
-  // Prefer the signed-in user's token so the server buckets rate limits by
-  // account (a much higher allowance) rather than by shared IP.
-  let authToken = anonKey;
-  try {
-    const { data } = await supabase.auth.getSession();
-    if (data?.session?.access_token) authToken = data.session.access_token;
-  } catch { /* not signed in — anon key is fine */ }
+  const authToken = await currentAuthToken(anonKey);
 
   let sawToken = false;
 
@@ -188,6 +193,9 @@ export const generateChatResponse = async (
     if (signal) {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      // Same token the streaming path sends: a signed-in player falling back
+      // here used to be rate-limited as an anonymous IP instead of by account.
+      const authToken = await currentAuthToken(anonKey);
       const res = await fetch(
         `${supabaseUrl}/functions/v1/chat-proxy`,
         {
@@ -195,17 +203,25 @@ export const generateChatResponse = async (
           signal,
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${anonKey}`,
+            'Authorization': `Bearer ${authToken}`,
             'apikey': anonKey,
           },
           body: JSON.stringify(invokeOptions.body),
         }
       );
 
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(errText || `HTTP ${res.status}`);
+      // The server's rate-limit reply is already written for players ("give
+      // it a minute") — show it, as the streaming path does, rather than
+      // turning its JSON body into an error message.
+      if (res.status === 429) {
+        const data = await res.json().catch(() => ({}));
+        return {
+          text: data.text || 'Rate limit reached — give it a moment, then try again.',
+          images: [],
+          meta: data._meta || { rateLimited: true },
+        };
       }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
       return { text: data.text, images: data.images || [], meta: data._meta || null };
@@ -225,16 +241,19 @@ export const generateChatResponse = async (
 
     console.error('AI Error:', error);
 
-    if (error.message && error.message.includes('fetch')) {
-      return {
-        text: `**Network Error:** Could not reach the API. Have you started your Supabase local edge functions?`,
-        images: [],
-      };
-    }
-
+    // These are shown to players, so no raw server text (it can be a JSON
+    // body or a vendor error) and no developer hints — this used to ask
+    // real users whether they'd "started your Supabase local edge
+    // functions". `error: true` keeps the message out of saved history and
+    // lets the same question be sent again straight away.
+    const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const network = offline || /fetch|network|load failed/i.test(error?.message || '');
     return {
-      text: `**Error:** Failed to connect to Neural Net. Code: ${error.message}`,
+      text: network
+        ? "**Couldn't reach GameGuide.** Check your connection, then send that again."
+        : '**Something went wrong on our side.** Give it a few seconds and send that again.',
       images: [],
+      meta: { error: true },
     };
   }
 };

@@ -13,6 +13,7 @@ import LibraryWall from './site/LibraryWall';
 import CapabilityMenu from './site/CapabilityMenu';
 import WatchtowerDemo from './site/WatchtowerDemo';
 import Closing from './site/Closing';
+import { track } from '../utils/analytics';
 import '../styles/site.css';
 
 const EXIT_MS = 560;
@@ -76,6 +77,7 @@ export default function LandingPage({ onEnter, onNavigate }) {
 
   const start = useCallback((draft) => {
     if (exiting) return;
+    track('press_start', { from: typeof draft === 'string' ? 'library' : 'button' });
     if (typeof draft === 'string') {
       try { sessionStorage.setItem(DRAFT_KEY, draft); } catch { /* the chat just opens empty */ }
     }

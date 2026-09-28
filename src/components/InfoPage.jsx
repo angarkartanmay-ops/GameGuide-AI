@@ -27,8 +27,9 @@ const goto = (view) => (e) => {
 
 const COMMANDS = [
   ['/progress', 'Tell it where you are — /progress Elden Ring: beat Margit. Story answers stay behind that line.'],
+  ['/missables', 'What you can still permanently miss — items, questlines, trophies — from where you are, with nothing past it spoiled.'],
   ['/spoilers', 'Spoiler Shield on or off. On by default; /spoilers off once you have finished.'],
-  ['/price', 'The best current price for a game across PC stores, and how it compares with its lowest ever.'],
+  ['/price', 'The best current price for a game across PC stores, and how it compares with its lowest ever. Understands gta 5, bg3, ff7 remake.'],
   ['/discover', 'A random pro tip, hidden detail or piece of lore.'],
   ['/stealth', 'A throwaway conversation. Nothing saved, nothing remembered, no art looked up.'],
   ['/clear', 'Delete your chat history.'],
@@ -153,8 +154,9 @@ const TERMS = [
     id: 't-sources', title: 'Third-party sources',
     body: (
       <p>
-        The Service surfaces data from third parties (Steam, CheapShark, Wikipedia, Reddit, official
-        wikis, RSS feeds). We do not control their accuracy, availability, or terms. Citations are
+        The Service surfaces data from third parties (Steam, CheapShark, Wikipedia and game wikis,
+        official patch notes, RSS feeds, and web search results, which can include community sites such
+        as Reddit). We do not control their accuracy, availability, or terms. Citations are
         provided for verification; clicking them takes you to the third party&apos;s domain.
       </p>
     ),
@@ -175,6 +177,18 @@ const TERMS = [
           When a game comes up, the chat fetches that game&rsquo;s artwork from Steam through our server; only the
           game&rsquo;s name is sent, and never in Stealth. The last few games you asked about are remembered in
           your browser, so the chat can offer them again.
+        </p>
+        <p>
+          <strong>Usage counts.</strong> We may count page views and a few anonymous actions (such as pressing
+          Start, sharing an answer or opening a shared one) with Vercel Web Analytics, which sets no cookies and
+          does not identify you. What you type is never part of it.
+        </p>
+        <p>
+          <strong>Share links.</strong> When you share an answer, the question and answer are packed into the link
+          itself (after the <code>#</code>, the part of a web address browsers never send to a server). Nothing is
+          stored on our side, so we cannot see, edit or delete a shared link — anyone you send it to can read it,
+          and anyone they forward it to. Don&rsquo;t share an answer that contains something private. A shared page is
+          a copy made by whoever sent it; GameGuide does not verify its contents.
         </p>
         <p><strong>Discord bot.</strong> When you use GameGuide-AI in Discord, the bot stores:</p>
         <ul className="s-bullets">

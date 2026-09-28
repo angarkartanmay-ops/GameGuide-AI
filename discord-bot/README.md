@@ -7,7 +7,7 @@ Full feature parity with the GameGuide-AI web app, hardened for production and b
 | Web app feature | Bot equivalent |
 |---|---|
 | Chat with vision queries | `@GameGuide <text>` + image attachments, a DM to the bot, OR `/ask` |
-| `/price`, `/discover` | same slash commands |
+| `/price`, `/discover`, `/missables` | same slash commands |
 | `/konami` (vibes) | same slash command |
 | Persistent chat history (Supabase) | same Supabase project, table `discord_chat_messages` |
 | Live-source telemetry chip | footer line on every reply showing sources |
@@ -84,10 +84,11 @@ channel the bot can no longer post in is paused (shown in `/watch list`).
 | Command | What it does |
 |---|---|
 | `/ask <question> [image]` | Free-form question, optional screenshot |
-| `/price <game>` | Live multi-store prices via CheapShark |
+| `/price <game>` | Live multi-store prices via CheapShark — understands `gta 5`, `bg3`, `ff7 remake` |
 | `/discover [category] [game]` | Pro tip, industry secret, or lore drop — random unless you pick |
 | `/history` | Show your last messages with the bot (ephemeral) |
 | `/progress [game] [at]` | 🛡️ Tell the bot where you are in a game; story answers stay behind that point (`at:clear` forgets it) |
+| `/missables [game]` | 🧭 What you can still permanently miss from where you are — ordered from your position, nothing past it spoiled |
 | `/spoilers <on|off>` | 🛡️ Spoiler Shield for your DMs. In server channels reveals are always in spoiler bars |
 | `/clear` | Wipe your chat history and saved game progress |
 | `/watch add <game> [alerts] [channel]` | 📡 Watchtower (Manage Server): post the game's Steam patch notes, summarised, and optionally its deals into a channel |
