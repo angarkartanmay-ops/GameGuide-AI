@@ -1,4 +1,4 @@
-import React, { memo, useId, useState } from 'react';
+import React, { createContext, memo, useContext, useId, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Check, ChevronDown, Copy, Share2, Shield } from 'lucide-react';
@@ -51,7 +51,73 @@ function Spoiler({ children }) {
   );
 }
 
+// ── Tables that survive a phone ──────────────────────────────────────────
+// A six-column comparison squeezed into 390px turns every heading into
+// "SCA / LIN / G". Below 640px the CSS stacks each row into a small card,
+// which only reads if every cell carries its column's name — so the header
+// row is passed down and each cell labels itself.
+const TableHeaders = createContext([]);
+
+function hastText(node) {
+  if (!node) return '';
+  if (node.type === 'text') return node.value || '';
+  return (node.children || []).map(hastText).join('');
+}
+
+// Both layouts need `display` off `table` — block for the horizontal scroll
+// on a desktop, stacked rows on a phone — and that quietly strips the
+// browser's own table semantics, leaving a screen reader a run of loose text.
+// The roles below put the structure back by hand.
+function MarkdownTable({ node, children, ...rest }) {
+  const headers = useMemo(() => {
+    const out = [];
+    const walk = (n) => {
+      if (!n) return;
+      if (n.tagName === 'th') { out.push(hastText(n).trim()); return; }
+      (n.children || []).forEach(walk);
+    };
+    walk(node);
+    return out;
+  }, [node]);
+  return (
+    <TableHeaders.Provider value={headers}>
+      <table role="table" {...rest}>{children}</table>
+    </TableHeaders.Provider>
+  );
+}
+
+/** react-markdown hands every renderer its AST node; it must not reach the DOM. */
+const domProps = (props) => {
+  const rest = { ...props };
+  delete rest.node;
+  delete rest.children;
+  return rest;
+};
+
+function MarkdownCell(props) {
+  return <td role="cell" {...domProps(props)}>{props.children}</td>;
+}
+
+function MarkdownRow({ children, ...rest }) {
+  const headers = useContext(TableHeaders);
+  delete rest.node;   // react-markdown's AST node must not reach the DOM
+  let col = 0;
+  const labelled = React.Children.map(children, (child) => {
+    if (!React.isValidElement(child)) return child;   // stray whitespace nodes
+    const label = headers[col++];
+    if (child.type !== MarkdownCell || !label) return child;
+    return React.cloneElement(child, { 'data-label': label });
+  });
+  return <tr role="row" {...rest}>{labelled}</tr>;
+}
+
 const MARKDOWN_COMPONENTS = {
+  table: MarkdownTable,
+  tr: MarkdownRow,
+  td: MarkdownCell,
+  thead: (p) => <thead role="rowgroup" {...domProps(p)}>{p.children}</thead>,
+  tbody: (p) => <tbody role="rowgroup" {...domProps(p)}>{p.children}</tbody>,
+  th: (p) => <th role="columnheader" {...domProps(p)}>{p.children}</th>,
   a(props) {
     if (props.href === SPOILER_HREF) return <Spoiler>{props.children}</Spoiler>;
     // react-markdown passes its AST `node`; it must not reach the DOM.

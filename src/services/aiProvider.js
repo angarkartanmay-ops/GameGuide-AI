@@ -31,6 +31,12 @@ async function currentAuthToken(anonKey) {
  * Falls back to the non-streaming endpoint if streaming fails before any token
  * arrives, so a proxy that buffers SSE cannot break chat entirely.
  */
+// A phone gets a column about 40 characters wide, where a six-column
+// comparison table is unreadable however well it's styled. Telling the server
+// lets the answer itself come back the right shape. Read per request, so a
+// rotated phone or a resized window is right the next time you ask.
+const isNarrow = () => typeof window !== 'undefined' && window.innerWidth < 640;
+
 export const streamChatResponse = async (
   prompt,
   chatHistory,
@@ -75,6 +81,8 @@ export const streamChatResponse = async (
         stream: true,
         ephemeral,
         spoiler,
+        client: 'web',
+        narrow: isNarrow(),
       }),
     });
 
@@ -182,6 +190,8 @@ export const generateChatResponse = async (
         priceContext,
         ephemeral,
         spoiler,
+        client: 'web',
+        narrow: isNarrow(),
       },
       headers: {
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`

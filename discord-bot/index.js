@@ -47,6 +47,7 @@ const quota = require('./quota');
 const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
 const { mountStripeWebhook, buildCheckoutUrl, stripeConfigured } = require('./billing-stripe');
 const { splitForDiscord } = require('./textsplit');
+const { forDiscord } = require('./discordFormat');
 
 // ─── Native fetch sanity ───────────────────────────────────────────────────
 if (typeof fetch !== 'function') {
@@ -460,6 +461,10 @@ async function callChatProxy({ prompt, history, attachments, discordUserId, tier
         prompt,
         chatHistory: history,
         attachments: attachments || [],
+        // Shapes the answer for where it lands: Discord renders no tables at
+        // all, and most of the people reading this are on the phone app.
+        client: 'discord',
+        narrow: true,
         // Spoiler Shield context — where this player is, and whether the reply
         // lands in a shared server channel (reveals then stay barred even if
         // the asker said "spoil it": bystanders never agreed).
@@ -694,8 +699,10 @@ async function runChatRequest({ userId, guildId, prompt, attachments, replyTarge
         : '';
     const footer = [sourceLine, shieldLine, nudge].filter(Boolean).join('\n');
 
-    // Apply affiliate decoration when CheapShark / store URLs appear
-    const decorated = decorateWithAffiliate(data.text);
+    // Apply affiliate decoration when CheapShark / store URLs appear.
+    // forDiscord first: Discord has no tables, and a comparison arrives as a
+    // wall of pipes that wraps three times on a phone.
+    const decorated = decorateWithAffiliate(forDiscord(data.text));
 
     // The image-generation path returns pictures in `images[]`. Dropping them
     // left users with a bare "🎨 Done!" and nothing to look at.
@@ -1385,21 +1392,24 @@ client.on('interactionCreate', async (interaction) => {
             .setDescription(d.degraded
               ? `You're on **Free**.`
               : `You're on **${d.tier_label || 'Free'}** — ${d.messages?.remaining ?? 0} of ${d.messages?.limit || free.msgs_day} messages left today.`)
+            // Stacked, not inline: three inline fields share one row, which on
+            // a phone is about thirteen characters each — "**150** messages/"
+            // then a wrap. Full-width rows read the same on both.
             .addFields(
               {
                 name: `🆓 Free`,
-                value: `**${free.msgs_day}** messages/day\n**${free.vision_day}** screenshots/day\n${free.burst_min}/min`,
-                inline: true,
+                value: `**${free.msgs_day}** messages/day · **${free.vision_day}** screenshots/day · ${free.burst_min}/min`,
+                inline: false,
               },
               {
                 name: `⭐ Pro — ${PRO_PRICE}/mo`,
-                value: `**${pro.msgs_day}** messages/day\n**${pro.vision_day}** screenshots/day\n${pro.burst_min}/min · priority`,
-                inline: true,
+                value: `**${pro.msgs_day}** messages/day · **${pro.vision_day}** screenshots/day · ${pro.burst_min}/min · priority routing`,
+                inline: false,
               },
               {
                 name: `🌟 Server — ${SERVER_PRICE}/mo`,
-                value: `**${srv.msgs_day}**/day for **every member**\nWhole-server upgrade\nBest value for communities`,
-                inline: true,
+                value: `**${srv.msgs_day}**/day for **every member** — best value for communities`,
+                inline: false,
               },
             )
             .setFooter({ text: 'Cancel any time. Supports a solo dev keeping the bot free for everyone.' });

@@ -223,10 +223,14 @@ function quotaFields(decision) {
   const v = decision.vision || {};
   const g = decision.image_gen || {};
 
+  // Eight blocks, not ten: the two side-by-side fields below get half a
+  // phone's width each, and a ten-block bar plus "120/150" wrapped onto a
+  // second line there.
+  const BAR_WIDTH = 8;
   const bar = (used, limit) => {
     if (!limit) return '—';
-    const filled = Math.min(Math.round((used / limit) * 10), 10);
-    return `\`${'█'.repeat(filled)}${'░'.repeat(10 - filled)}\` ${used}/${limit}`;
+    const filled = Math.min(Math.round((used / limit) * BAR_WIDTH), BAR_WIDTH);
+    return `\`${'█'.repeat(filled)}${'░'.repeat(BAR_WIDTH - filled)}\` ${used}/${limit}`;
   };
 
   const fields = [

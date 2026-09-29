@@ -7,6 +7,7 @@ import {
 } from '../src/utils/gameContext.js';
 import { pickAccent, ensureContrast, contrastRatio, rgbToHsl, toHex } from '../src/utils/accent.js';
 import { addRecent, buildShelf, CURATED } from '../src/utils/recentGames.js';
+import { backdropCandidates } from '../src/utils/gameArt.js';
 
 let passed = 0;
 let failed = 0;
@@ -99,6 +100,16 @@ check('contrast of white on black is 21', Math.round(contrastRatio({ r: 255, g: 
   check('shelf: progress-only games next, title-cased', shelf[1].name === 'Stardew Valley' && shelf[1].progress === 'Year 2', JSON.stringify(shelf[1]));
   check('shelf: curated fills to 6 without repeats', shelf.length === 6 && new Set(shelf.map(s => s.key)).size === 6);
   check('shelf: empty history → curated', buildShelf([], {}).map(s => s.key).join() === CURATED.map(c => c.key).join());
+}
+
+// ── backdrop art ───────────────────────────────────────────────────────────
+// The hero is the wide atmospheric art; header.jpg is the store capsule, and
+// using it as the masthead shows the game's logo twice. Hero always leads.
+{
+  const match = { hero: ['H1', 'H2'], header: ['E1'], cover: ['C1'] };
+  check('hero leads, header is the fallback', backdropCandidates(match).join() === 'H1,H2,E1');
+  check('the cover is never a backdrop', !backdropCandidates(match).includes('C1'));
+  check('no art is not a crash', backdropCandidates(null).length === 0 && backdropCandidates({}).length === 0);
 }
 
 console.log(`codex: ${passed} passed, ${failed} failed`);

@@ -254,6 +254,28 @@
 }
 .cx-prose td { padding: 9px 14px 9px 0; border-bottom: 1px solid var(--cx-hair); vertical-align: top; }
 .cx-prose hr { height: 1px; margin: 1.6em 0; border: 0; background: var(--cx-hair); }
+/* On a phone the columns have nowhere to go, so each row becomes its own
+   small card and every cell wears its column name (set by MessageBubble). */
+@media (max-width: 640px) {
+  .cx-prose table { display: block; overflow-x: visible; font-size: 15.5px; }
+  .cx-prose thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .cx-prose tbody, .cx-prose tr, .cx-prose td { display: block; width: auto; }
+  .cx-prose tr { padding: 12px 0; border-bottom: 1px solid var(--cx-hair-2); }
+  .cx-prose tr:last-child { border-bottom: 0; }
+  /* Label beside the value, not above it: six stacked pairs per row turned
+     one comparison into a page and a half of scrolling. */
+  .cx-prose td { display: flex; gap: 10px; align-items: baseline; padding: 0 0 6px; border: 0; line-height: 1.45; }
+  .cx-prose td:last-child { padding-bottom: 0; }
+  .cx-prose td[data-label]::before {
+    content: attr(data-label); flex: 0 0 auto; width: 88px; padding-top: 2px;
+    font-family: var(--cx-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--cx-muted);
+    overflow-wrap: anywhere;
+  }
+  /* The first column is the thing each row is about — let it title the card. */
+  .cx-prose td:first-child { display: block; margin-bottom: 4px; font-size: 17px; font-weight: 600; color: var(--cx-ink); }
+  .cx-prose td:first-child[data-label]::before { display: none; }
+}
 .cx-prose img { max-width: 100%; border-radius: 10px; }
 .is-command .cx-prose h2 { font-size: 24px; }
 
@@ -509,7 +531,10 @@
   background: rgba(14, 16, 22, 0.97); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
   animation: cx-rise 180ms var(--cx-ease) both;
 }
-.cx-palette__list { margin: 0; padding: 0; list-style: none; max-height: 300px; overflow-y: auto; }
+/* 300px, but never more than the room actually left above the composer:
+   with a phone keyboard open the viewport is barely 400px tall, and a fixed
+   300px list pushed the top of the palette up behind the header. */
+.cx-palette__list { margin: 0; padding: 0; list-style: none; max-height: min(300px, 45dvh); overflow-y: auto; overscroll-behavior: contain; }
 .cx-palette__item { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; cursor: pointer; }
 .cx-palette__item.is-active { background: color-mix(in srgb, var(--cx-accent) 14%, transparent); }
 .cx-palette__trigger { font-family: var(--cx-mono); font-size: 13.5px; font-weight: 500; color: var(--cx-ink); }
@@ -585,6 +610,21 @@
 }
 .cx-foot button:hover { color: var(--cx-ink); }
 .cx-foot__feedback svg { width: 12px; height: 12px; }
+
+/* ── Touch targets ────────────────────────────────────────────────────── */
+/* A finger needs about 44px. These controls are deliberately small — a
+   10px footer, a hairline chip — so the hit area is grown with an overlay
+   instead of the box, which would push the layout around. */
+@media (pointer: coarse) {
+  .cx-foot { gap: 10px 18px; }
+  .cx-foot button, .cx-foot__feedback, .cx-chip--button, .cx-brand { position: relative; }
+  .cx-foot button::after, .cx-foot__feedback::after { content: ''; position: absolute; inset: -8px -6px; }
+  /* Its label is hidden at this width, leaving a 12px icon to aim at. */
+  .cx-foot__feedback::after { inset: -8px -14px; }
+  .cx-chip--button::after { content: ''; position: absolute; inset: -8px 0; }
+  .cx-brand { padding-right: 14px; }
+  .cx-brand::after { content: ''; position: absolute; inset: 0 -6px; }
+}
 
 /* ── Small screens ────────────────────────────────────────────────────── */
 @media (max-width: 900px) {

@@ -90,6 +90,18 @@ function loadImage(url, { cors = false } = {}) {
   });
 }
 
+/**
+ * The candidates for the backdrop, best first.
+ *
+ * The wide hero is ~300KB against header.jpg's ~40KB, and serving the small
+ * one to phones was tried — but header.jpg is the store capsule, so the
+ * masthead became a cropped copy of the game's logo, already sitting in the
+ * bar right above it. The art IS the product here; it keeps the hero.
+ */
+export function backdropCandidates(match) {
+  return [...(match?.hero || []), ...(match?.header || [])];
+}
+
 /** First URL that actually loads (hashed path, then legacy path, …). */
 export async function firstLoadable(urls) {
   for (const url of urls || []) {

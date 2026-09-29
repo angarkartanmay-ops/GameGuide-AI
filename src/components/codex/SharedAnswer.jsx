@@ -3,7 +3,7 @@ import { ArrowRight, Shield } from 'lucide-react';
 import MessageBubble from '../MessageBubble';
 import CodexBackdrop from './CodexBackdrop';
 import { decodeShare } from '../../utils/share';
-import { resolveGameArt, firstLoadable, sampleAccent } from '../../utils/gameArt';
+import { resolveGameArt, firstLoadable, backdropCandidates, sampleAccent } from '../../utils/gameArt';
 import { track } from '../../utils/analytics';
 import '../../styles/codex.css';
 
@@ -47,7 +47,7 @@ export default function SharedAnswer({ encoded, onAsk, onHome }) {
     (async () => {
       const match = await resolveGameArt(game);
       if (!match || cancelled) return;
-      const hero = await firstLoadable([...(match.hero || []), ...(match.header || [])]);
+      const hero = await firstLoadable(backdropCandidates(match));
       const accent = match.accent || await sampleAccent([...(match.header || []), ...(match.cover || [])]);
       if (!cancelled) setArt({ hero, accent });
     })();

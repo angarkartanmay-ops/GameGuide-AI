@@ -830,6 +830,41 @@ function isCorrection(prompt: string, history: any[]): boolean {
   return CORRECTION_LEAD_RX.test(prompt) || CORRECTION_INLINE_RX.test(prompt);
 }
 
+// ─── Where the answer will be read ────────────────────────────────────────
+// The formatting spec in BASE_SYSTEM assumes a browser on a desk: it offers a
+// table for comparisons. Discord renders no tables at all, so that same answer
+// arrives as raw pipes; and on a phone — most of both audiences — a six-column
+// table or a nine-line paragraph is unreadable whatever the client. So the
+// model is told the shape of the screen instead of left to guess.
+type RenderTarget = { client: 'web' | 'discord'; narrow: boolean };
+
+function readRenderTarget(body: any): RenderTarget {
+  return {
+    client: body?.client === 'discord' ? 'discord' : 'web',
+    narrow: body?.narrow === true,
+  };
+}
+
+function buildRenderDirective({ client, narrow }: RenderTarget): string {
+  if (client === 'discord') {
+    return `\n\n=== WHERE THIS IS READ ===
+Discord — for most people, the phone app.
+- NEVER use a markdown table. Discord does not render them: the reader gets a wall of raw pipes. Compare things as short labelled lines instead — "**Uchigatana** — Where: Deathtouched Catacombs · Needs: 11 STR".
+- No horizontal rules (---), no images, no HTML. Headings only in genuinely long answers, and \`###\` at most.
+- Two or three lines per paragraph. Anything over ~2000 characters is split across messages, and a wall of text on a phone gets scrolled past unread.
+=== END ===`;
+  }
+  if (narrow) {
+    return `\n\n=== WHERE THIS IS READ ===
+The website on a phone — a column roughly 40 characters wide.
+- Prefer short labelled lines or bullets over tables. If a comparison really is tabular, keep it to three columns with a few words per cell.
+- Put the answer in the first line or two. They may never scroll.
+- Two or three lines per paragraph.
+=== END ===`;
+  }
+  return '';
+}
+
 function buildCorrectionDirective(prompt: string, game: string | null): string {
   return `=== ⚠️ USER CORRECTION — HIGHEST PRIORITY ===
 The user is telling you that your PREVIOUS answer was wrong. Their message: "${prompt.slice(0, 300)}"
@@ -3078,7 +3113,11 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
     // the user turn to outrank the persona overlay and the raw INTEL above.
     const shieldBlock = buildShieldDirective(shield) + buildSpoilItNote(shield);
     const personaOverlay = shieldPersonaOverlay(profile.persona.id, profile.persona.overlay || '', shield);
-    const systemInstruction = BASE_SYSTEM + dateGroundingBlock + visionBlock + pulse.contextBlock + personaOverlay + shieldBlock + correctionBlock;
+    // The render block sits after the persona (which sets voice) and before
+    // the shield: what it governs is shape, and the persona must not override
+    // it with a table on a client that cannot draw one.
+    const renderBlock = buildRenderDirective(readRenderTarget(body));
+    const systemInstruction = BASE_SYSTEM + dateGroundingBlock + visionBlock + pulse.contextBlock + personaOverlay + renderBlock + shieldBlock + correctionBlock;
 
     // ── LAYER 3 + 4: route + run mesh ──
     // effectiveAttachments = original images + HUD strip crop (when vision pipe ran).

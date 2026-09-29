@@ -46,6 +46,15 @@ export default function ChatInput({
   useEffect(() => {
     const el = textAreaRef.current;
     if (!el) return;
+    // An empty box takes its height from CSS. Measuring scrollHeight here
+    // measured the *placeholder*, which wraps to two lines in the narrow
+    // composer on a phone — so an untouched chat opened with a composer half
+    // again as tall as it needed to be.
+    if (!inputText) {
+      el.style.height = '';
+      el.style.overflowY = 'hidden';
+      return;
+    }
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, MAX_HEIGHT)}px`;
     // Scroll only once the box has hit its cap — before that the text fits.
@@ -156,14 +165,15 @@ export default function ChatInput({
   const charCount = inputText.length;
   const isOverLimit = charCount > MAX_CHARS;
   const canSend = !!(inputText.trim() || attachments.length);
+  // Short enough to sit on one line in the composer on a phone.
   const placeholder = isLoading
-    ? 'Researching — press Stop to cancel'
+    ? 'Researching — Stop to cancel'
     : attachments.length > 0
-      ? 'Describe what you need help with, or just send the screenshot'
+      ? 'Add a note, or just send it'
       : stealthMode
         // Reinforce the incognito cue where the typing happens — the banner
         // can scroll out of view, this never does.
-        ? 'Stealth — nothing here is saved'
+        ? 'Stealth — nothing is saved'
         : gameName
           ? `Ask about ${gameName}…`
           : 'Ask about any game — try /help';

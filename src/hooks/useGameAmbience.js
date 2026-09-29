@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { parseStreamStage, latestGameFromMessages, normalizeGameKey, titleCase } from '../utils/gameContext';
-import { resolveGameArt, firstLoadable, sampleAccent, rememberAccent } from '../utils/gameArt';
+import { resolveGameArt, firstLoadable, backdropCandidates, sampleAccent, rememberAccent } from '../utils/gameArt';
 import { rememberGame } from '../utils/recentGames';
 
 const EMPTY = { key: '', name: null, hero: null, accent: null };
@@ -43,7 +43,7 @@ export default function useGameAmbience({ messages, streamStage, isLoading, stea
         setAmbience({ key, name: titleCase(rawName), hero: null, accent: null });
         return;
       }
-      const hero = await firstLoadable([...(match.hero || []), ...(match.header || [])]);
+      const hero = await firstLoadable(backdropCandidates(match));
       const accent = match.accent || await sampleAccent([...(match.header || []), ...(match.cover || [])]);
       if (cancelled) return;
       if (accent && !match.accent) rememberAccent(rawName, accent);
