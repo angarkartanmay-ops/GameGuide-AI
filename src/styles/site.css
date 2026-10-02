@@ -331,6 +331,39 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
 }
 .s-hero__actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 36px; }
 
+/* The live count under the hero buttons. The line is reserved before the
+   numbers arrive so nothing below it jumps. */
+.s-livecount {
+  display: flex; align-items: flex-start; gap: 10px;
+  min-height: 18px; margin: 26px 0 0;
+  font: 500 11px/1.5 var(--s-mono); letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--s-muted);
+  opacity: 0; transition: opacity 0.6s var(--s-ease);
+}
+.s-livecount.is-ready { opacity: 1; }
+.s-livecount__line { display: flex; flex-wrap: wrap; gap: 4px 0; }
+.s-livecount__part { white-space: nowrap; }
+.s-livecount b { font-weight: 600; color: var(--s-ink); font-variant-numeric: tabular-nums; }
+.s-livecount__sep { margin: 0 10px; opacity: 0.5; }
+.s-livecount__dot {
+  flex: none; width: 7px; height: 7px; margin-top: 5px; border-radius: 50%;
+  background: var(--s-accent);
+  animation: s-live 2.4s ease-out infinite;
+}
+@keyframes s-live {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--s-accent) 55%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 9px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .s-livecount { transition: none; }
+  .s-livecount__dot { animation: none; }
+}
+.is-calm .s-livecount__dot,
+html[data-low-power] .site .s-livecount__dot { animation: none; }
+@media (max-width: 767px) {
+  .s-livecount { min-height: 34px; }
+}
+
 .s-hero__hud {
   display: grid; grid-template-columns: auto minmax(0, 360px) 1fr auto; align-items: center; gap: 20px;
   padding-top: 14px; border-top: 1px solid var(--s-hair);

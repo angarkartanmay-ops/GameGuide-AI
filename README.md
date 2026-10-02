@@ -1,420 +1,213 @@
-# GameGuide-AI
-
 <div align="center">
 
-<img src="public/icon.svg" alt="GameGuide logo" width="84" height="84" />
+<img src="public/og.png" alt="GameGuide — ask anything about any game. Live answers, set like a strategy guide, that stop where you are in the story." width="820" />
 
-### The spoiler-safe game guide you can talk to.
+# GameGuide
 
-*Tell it where you are. Ask anything — bosses, builds, what you can still miss, whether it's on sale. It researches the answer live, sets it out like a strategy guide, and never spoils what you haven't reached.*
+**The spoiler-safe game guide you can talk to.**
 
-[![CI Pipeline](https://github.com/angarkartanmay-ops/GameGuide-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/angarkartanmay-ops/GameGuide-AI/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Proprietary-blue.svg)](LICENSE)
-[![React](https://img.shields.io/badge/React-19.2-61dafb.svg?logo=react&logoColor=black)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-8-646cff.svg?logo=vite&logoColor=white)](https://vitejs.dev/)
-[![Supabase](https://img.shields.io/badge/Supabase-Edge%20Functions-3ecf8e.svg?logo=supabase&logoColor=white)](https://supabase.com)
-[![Discord](https://img.shields.io/badge/Discord-Bot%20v2.0-5865F2.svg?logo=discord&logoColor=white)](discord-bot/README.md)
+Ask about any game: a boss, a build, a quest, a sale. GameGuide looks it up live,
+lays the answer out like a strategy-guide page with its sources, and keeps every
+story beat past your progress behind a bar until you choose to look.
 
-**[▶ Try it free — no account needed](https://game-guide-ai-plum.vercel.app)** • [🤖 Add to Discord](https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=277025508352&scope=bot+applications.commands) • [Discord bot setup](discord-bot/README.md) • [🔒 Security](SECURITY.md)
+[**▶ Try it — no account needed**](https://game-guide-ai-plum.vercel.app) ·
+[**Add to Discord**](https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=277025508352&scope=bot+applications.commands) ·
+[Top.gg](https://top.gg/bot/1499622566472712202?s=0c09d3395142b) ·
+[Security](SECURITY.md)
+
+[![CI](https://github.com/angarkartanmay-ops/GameGuide-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/angarkartanmay-ops/GameGuide-AI/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-1%2C300%2B%20assertions-2ea44f)
+![React 19](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=black)
+![Supabase](https://img.shields.io/badge/Supabase-Edge%20Functions%20%2B%20Postgres-3ecf8e?logo=supabase&logoColor=white)
+![Discord](https://img.shields.io/badge/Discord-bot-5865F2?logo=discord&logoColor=white)
 
 </div>
 
 ---
 
-## Why GameGuide
+## Why it exists
 
-General chatbots will answer a game question — and happily spoil the ending while they're at it. GameGuide is built around the one thing a player actually needs from a guide: **help from where you are, and nothing past it.**
+A general chatbot will answer a game question, and it will happily spoil the
+ending while it's at it, quote last year's patch, or make up an item location.
+GameGuide is built around the three things a player actually needs from a guide:
 
-| | |
+- **Help from where you are, and nothing past it.** Tell it *"I just beat Margit"*
+  once. Story answers stop at that line; anything beyond it is hidden until you click.
+- **Current information.** Every answer is researched when you ask, from game wikis,
+  official patch notes and web search, with the sources listed so you can check.
+- **An answer you can act on.** Laid out like a guide page (steps, items, numbers),
+  not a wall of chat.
+
+## What you can do
+
+| Feature | What it does |
 |---|---|
-| 🛡️ **Spoiler Shield** | Say *"I just beat Margit"* (or `/progress Elden Ring : beat Margit`). Story answers stop at that line; anything past it sits behind a click-to-reveal bar. On by default. |
-| 🧭 **Missables** | `/missables` — what you can still lose for good (items, questlines, trophies, one-time choices), in the order you'll reach them, starting from where you are. |
-| 🔗 **Spoiler-safe sharing** | Share any answer as a link. Your friend sees it with every spoiler still hidden — and the answer travels inside the link, so nothing is stored. |
-| 🔎 **Live research, with sources** | Game wikis, official patch notes and web search, read when you ask — so answers follow the current patch, not last year's. |
-| 🎨 **It becomes the game** | Name a game and the chat takes on its Steam art and a colour sampled from it. |
-| 💸 **Deals** | `/price gta 5` — best current PC price across 20+ stores and how it compares with the all-time low. Understands nicknames and editions. |
-| 🖼️ **Screenshots** | Drop in up to three — a build screen, a map, a puzzle — and ask about them. |
-| 📡 **Discord bot + Watchtower** | The same guide in your server, plus `/watch add` to post a game's patch notes (summarised) and big deals into a channel. |
+| 🛡️ **Spoiler Shield** | `/progress Elden Ring : beat Margit`, or just say it. On by default; `/spoilers off` once you've finished. |
+| 🧭 **Missables** | `/missables` lists what you can still lose for good (items, questlines, trophies) from where you are, in the order you'll reach them. |
+| 🔎 **Live research** | Wikis, official patch notes and web search, read at the moment you ask, then cross-checked against each other. |
+| 🖼️ **Screenshots** | Attach up to three per message: a build screen, a map, a puzzle. |
+| 💸 **Deals** | `/price gta 5` shows the best current PC price across stores and how it compares with the all-time low. It understands nicknames like `bg3`. |
+| 🔗 **Spoiler-safe sharing** | Share any answer as a link. Spoilers stay hidden for your friend, and the answer travels *inside* the link, so nothing is stored. |
+| 🎨 **The page becomes the game** | Name a game and the chat takes on its Steam art and a colour sampled from it. |
+| 🕶️ **Stealth** | `/stealth` starts a conversation that is never saved, remembered or traced. |
+| 📡 **Discord + Watchtower** | The same guide in your server via `/ask` or an @mention, plus `/watch add` to post a game's patch notes (summarised) and big deals into a channel. |
 | 📱 **Installable** | Add it to your phone's home screen and keep it open as a second screen while you play. |
 
-Free on the web. No account needed to ask — sign in only to keep your history.
+Free on the web, no account needed. Signing in with Google keeps your history.
 
----
+## How an answer is made
 
-## 📖 Table of Contents
-
-1. [Platform Overview](#-platform-overview)
-2. [Core Architecture & Neural Mesh](#-core-architecture--neural-mesh)
-3. [Reasoning Pipeline (Cortex v4.2)](#-reasoning-pipeline-cortex-v42)
-4. [Live Intelligence (Project PULSE & Omni-Scrape)](#-live-intelligence-project-pulse--omni-scrape)
-5. [Multimodal Vision (GODMODE Protocol)](#-multimodal-vision-godmode-protocol)
-6. [Feature Matrix](#-feature-matrix)
-7. [Expert Persona Engine](#-expert-persona-engine)
-8. [Interactive Slash Commands](#-interactive-slash-commands)
-9. [Dark Theme & Atmospheric Transition Engine](#-dark-theme--atmospheric-transition-engine)
-10. [Discord Bot Deployment](#-discord-bot-deployment)
-11. [Repository Structure](#-repository-structure)
-12. [Quickstart & Local Development](#-quickstart--local-development)
-13. [Environment Configuration](#-environment-configuration)
-14. [Deployment Guide](#-deployment-guide)
-15. [Automated Test & Regression Suite](#-automated-test--regression-suite)
-16. [Security & Responsible Disclosure](#-security--responsible-disclosure)
-17. [License & Intellectual Property](#-license--intellectual-property)
-18. [Contact & Support](#-contact--support)
-
----
-
-## 🌟 Platform Overview
-
-**GameGuide-AI** is a production-ready, multimodal AI assistant engineered specifically for competitive players, esports coaches, theorycrafters, speedrunners, and gaming communities. It solves the three fundamental flaws of generic LLMs in gaming:
-
-1. **Training Data Staleness** — Real-time game patches, balance adjustments, and new releases (e.g. 2026 titles) are actively fused via multi-angle live search and official publisher APIs before the model answers.
-2. **Hallucination & Vagueness** — A strict anti-confabulation contract enforces exact numbers, build routes, frame data, and patch-version tags rather than vague generic advice.
-3. **Provider Outages & Quotas** — A self-healing neural mesh rotates between Google Gemini (multi-model quota rotation), Groq, OpenRouter, and Cerebras with token-level fallback and zero single points of failure.
-
----
-
-## 🏛️ Core Architecture & Neural Mesh
-
-```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│                             CLIENT PLATFORMS                                     │
-│   Web Application (React 19, Vite 8, GSAP)            │   Discord Bot (24/7)     │
-└─────────────────────────────────────────┬────────────────────────────────────────┘
-                                          │
-                                          ▼ HTTPS / SSE Stream
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│              SUPABASE EDGE FUNCTION (Deno Runtime :: chat-proxy)                 │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│  1. Query Cortex      → Intent classification (lore/build/meta/tech/speedrun)    │
-│  2. Temporal Detector → Recency evaluation & implicit temporal boosting          │
-│  3. PULSE Engine      → 5-provider parallel live search + authority ranking      │
-│  4. Vision GODMODE    → Preprocessed OCR + 18 game-specific HUD decoders         │
-│  5. Route Optimizer   → Self-balancing provider selection (latency vs depth)     │
-│  6. Neural Mesh v3    → Multi-provider waterfall with per-model quota rotation   │
-│  7. Corroboration     → Multi-source cross-verification & confidence scoring     │
-│  8. Quality Gate      → Response caching (SHA-256), stream packaging, citations  │
-└─────────────────────────────────────────┬────────────────────────────────────────┘
-                                          │
-                  ┌───────────────────────┼───────────────────────┐
-                  ▼                       ▼                       ▼
-          [ Google Gemini ]            [ Groq ]          [ OpenRouter / Cerebras ]
-       Multi-Model Quota Pool      Fast-Path / Compound     Flagship Fallbacks
+```mermaid
+flowchart LR
+    A[Your question<br/>+ screenshots] --> B[Understand<br/>which game, what kind<br/>of question, how recent]
+    B --> C[Research<br/>wikis · patch notes ·<br/>web search · price data]
+    C --> D[Cross-check<br/>sources against<br/>each other]
+    D --> E[Answer<br/>from the best available<br/>model right now]
+    E --> F[Spoiler Shield<br/>hide anything past<br/>your progress]
+    F --> G[Guide-style answer<br/>with sources]
 ```
 
-### Self-Balancing Multi-Model Quota Pool
-Free-tier request quotas on Google Gemini are tracked **per model ID**, not pooled across the entire API key. GameGuide-AI dynamically rotates across 7 Gemini model tiers (`gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`, `gemini-2.5-flash-lite`, `gemini-2.5-flash`, `gemini-3-flash-preview`), automatically prioritizing whichever model has the most remaining daily headroom.
+The whole pipeline runs in one Supabase Edge Function
+([`supabase/functions/chat-proxy`](supabase/functions/chat-proxy)) and streams the
+answer back as it's written.
 
----
+| Step | What happens | Where |
+|---|---|---|
+| Understand | Detects the game (including numbered sequels), the kind of question (build, meta, lore, troubleshooting, speedrun, review, comparison) and whether the question needs fresh data. | `index.ts`, `temporalDetector.ts` |
+| Research | Queries several search backends in parallel (Serper, Brave, SearXNG, DuckDuckGo, Google CSE), game wikis via MediaWiki, the Steam News API for patch notes, CheapShark for prices, and official game APIs where they exist. Results are ranked by source authority and recency. | `pulseEngine.ts`, `webSearch.ts`, `recencyRanker.ts`, `officialSources.ts` |
+| Screenshots | Two passes run in parallel: a dedicated pass reads every piece of text off the image, and a full-resolution crop of the HUD is added so small hotbar details stay legible. The vision model then answers with both. | `visionPipeline.ts` |
+| Cross-check | Scores how far the sources agree, and flags claims only one source makes. | `corroboration.ts` |
+| Answer | Ranks models across Gemini, Groq, OpenRouter and Cerebras for each request by cost, health and remaining quota, spending free tiers first and skipping anything rate-limited or failing. Available models are discovered live, so a retired model doesn't silently break routing. | `meshRouter.ts`, `modelCatalog.ts` |
+| Shield | Rewrites the instructions around the player's progress, then checks the answer and its suggested follow-ups for anything past it. | `spoilerShield.ts`, `spoilerGuard.ts` |
 
-## 🧠 Reasoning Pipeline (Cortex v4.2)
+## Engineering notes
 
-Every query processed by the backend passes through an 8-stage observable pipeline:
+The parts I'd point a reviewer at:
 
-| Stage | Module | Functionality | Resilience & Fallback |
-|---|---|---|---|
-| **1. Query Cortex** | `index.ts` | Intent classification, game recognition (200+ titles), complexity scoring (0–10). | Defaults to general gamer intent on ambiguity. |
-| **2. Temporal Detector** | `temporalDetector.ts` | Evaluates if the query is recency-bound ("latest patch", "current meta", new releases). | Conservatively triggers PULSE when recency is implied. |
-| **3. PULSE Engine** | `pulseEngine.ts` | Parallel fan-out to Google CSE, Serper, Brave, SearXNG, and DuckDuckGo. | Deduplicates URLs, falls back to Groq compound search if starved. |
-| **4. Vision Pipeline** | `visionPipeline.ts` | OCR-first image processing, inventory detection, HUD signature matching. | Automatically skips to text if no attachments present. |
-| **5. Route Optimizer** | `meshRouter.ts` | Dynamically selects model tier based on task complexity and quota health. | Auto-balances across all configured API pools. |
-| **6. Neural Mesh** | `index.ts` | Executes inference with exponential backoff on 429/503/500 errors. | Cascades seamlessly to next provider in waterfall. |
-| **7. Corroboration** | `corroboration.ts` | Evaluates source agreement and computes confidence scores. | Flags uncorroborated claims to the model. |
-| **8. Quality Gate** | `index.ts` | Manages SHA-256 response caching, formats markdown tables, attaches citations. | Returns clean stream payload with follow-up chips. |
+- **Resilience on free tiers.** Provider health is a circuit breaker stored in
+  Postgres, so every edge-function instance knows a provider is down rather than
+  each one re-discovering it with a timeout. Gemini's free quota is tracked per
+  model, and requests rotate to whichever model has the most headroom left today.
+- **Rate limiting in the database.** One append-only events table answers minute,
+  hour and day windows in a single atomic check. Anonymous visitors are keyed by a
+  salted hash of their IP, never the IP itself.
+- **Auth that can't be forged.** Tokens are signature-verified before a player
+  profile is loaded with the service key; an unverified `sub` claim would have
+  let anyone read another player's profile.
+- **Hardened proxies.** The wiki proxy only reaches allow-listed hosts (with SSRF
+  tests), and `/health` never relays a vendor's raw error text.
+- **A Discord business model with tests.** Free, Pro and Premium Server tiers are
+  enforced by a Postgres function. Its SQL runs on a real Postgres (PGlite) in CI,
+  and Stripe handles billing.
+- **Tested, not just typed.** 29 suites and 1,300+ assertions cover game
+  detection, retrieval, spoiler handling, Discord formatting, quotas, billing,
+  share links (including hostile input) and a golden-set retrieval eval. CI runs
+  them, builds the site and syntax-checks the bot on every push.
+- **A self-audit.** [`AUDIT_REPORT.md`](AUDIT_REPORT.md) records adversarial
+  testing against production: what broke, why, and what was fixed.
 
----
+## Live player count
 
-## 🌐 Live Intelligence (Project PULSE & Omni-Scrape)
+Under the hero buttons, the landing page shows a live line in the form
+**● 1,284 players · 9,312 answers researched · 412 games** (example numbers),
+read from `gg_public_stats()`
+([`supabase/migrations/20261002_public_stats.sql`](supabase/migrations/20261002_public_stats.sql)).
 
-To guarantee that answers reflect current patches and releases, GameGuide-AI deploys two complementary retrieval engines:
+- **Players**: distinct people who got a researched answer, on the web or in Discord
+  (signed-in accounts, Discord users, and anonymous visitors by salted IP hash).
+  It's an honest approximation: one person on two networks counts twice, and a
+  household behind one router counts once.
+- **Answers**: researched answers. Cache hits and stealth turns are never logged,
+  so this is a floor, not a ceiling.
+- **Games**: distinct games those answers were about.
 
-### 1. Project PULSE (Recency-Bound Queries)
-- **Multi-Angle Formulation**: Expands queries into up to 4 search permutations in parallel (e.g., `{game} new {subject} 2026`, `{game} patch notes`).
-- **Publisher Domain Boosting**: Recognizes 26 official gaming domains (Riot, Valve, Blizzard, Supercell, Bungie, etc.) and elevates their authority score to 9/10.
-- **Recency Half-Life Decay**: Freshness multiplier weights results under 7 days at 1.6× and demotes content older than 1 year to 0.3×.
+Only these three totals leave the database. The function recomputes at most once
+every ten minutes, and if it isn't deployed, the line simply doesn't appear. It
+never shows a made-up number.
 
-### 2. Omni-Scrape (General Game Inquiries)
-- **Supercell Official APIs**: Live brawler/card rosters and stats from `api.clashroyale.com` and `api.brawlstars.com`.
-- **Wikipedia & MediaWiki APIs**: Clean wiki extraction with automatic title disambiguation.
-- **Steam News API**: Recent patch notes and developer announcements mapped via a 90+ Steam AppID registry.
-- **CheapShark API**: Live PC game price comparison across 20+ digital storefronts (Steam, Epic, GOG, Humble, Fanatical).
+## Tech stack
 
----
-
-## 👁️ Multimodal Vision (GODMODE Protocol)
-
-Users can attach up to 3 screenshots or UI captures per message. Attachment processing follows a strict 4-step pipeline:
-
-```
-[ Image Upload ] ──▶ [ Client Preprocess (1568px, JPEG 88%) ] ──▶ [ Step 1: OCR Text Extraction ]
-                                                                             │
-[ Step 4: Grounded Output ] ◀── [ Step 3: HUD Signature Match ] ◀── [ Step 2: Visual Inventory ]
-```
-
-- **Step 1 (OCR Extraction)**: Verbatim text reading of item names, ability titles, error codes, and coordinates.
-- **Step 2 (Visual Inventory)**: Detection of HUD elements, inventory slots, skill bars, and health indicators.
-- **Step 3 (HUD Signature Matching)**: 18 specialized game decoders (Minecraft, Valorant, League of Legends, Apex Legends, Elden Ring, Genshin Impact, Cyberpunk 2077, etc.).
-- **Step 4 (Grounded Response)**: Restricts the reasoning model to explicitly reference verified elements from Steps 1–3.
-
----
-
-## ⚡ Feature Matrix
-
-| Capability | Web Application | Discord Bot |
-|---|:---:|:---:|
-| **Spoiler Shield (progress-aware answers)** | ✅ (saved in your browser / profile) | ✅ (per user; reveals always barred in server channels) |
-| **Missables from your position (`/missables`)** | ✅ | ✅ |
-| **Streaming answers with live research stages** | ✅ | ✅ (chunked) |
-| **Multi-provider fallback** | ✅ | ✅ |
-| **Live web research with sources** | ✅ | ✅ |
-| **Screenshot analysis** | ✅ (up to 3 images) | ✅ (attachments) |
-| **Follow-up suggestions** | ✅ | ✅ |
-| **Price checks (`/price`) — also detected in plain questions** | ✅ | ✅ (affiliate decorated) |
-| **Spoiler-safe share links** | ✅ | — (Discord has native `\|\|spoilers\|\|`) |
-| **Patch-note & deal alerts (Watchtower)** | — | ✅ (`/watch`) |
-| **Game-reactive art & 7 themes** | ✅ | — |
-| **Installable app (PWA)** | ✅ | — |
-| **Account & history** | ✅ (Supabase Auth, optional) | ✅ (Discord user ID) |
-| **Stealth / incognito (`/stealth`)** | ✅ | — |
-| **Rate limiting** | ✅ (per IP / per account) | ✅ (tiered daily quotas) |
-
----
-
-## 🎭 Expert Persona Engine
-
-GameGuide-AI dynamically adapts its tone and formatting structure depending on player intent:
-
-```
-├── 🎯 The Coach        ── Strategy breakdowns, rotation drills, practice routines
-├── 📜 The Loremaster   ── Canonical lore, timeline tables, narrative context
-├── 🧙 The TechWizard   ── Crash diagnostics, error resolution, FPS optimization ladders
-├── ⚡ The Speedrunner  ── Route maps, frame data, glitch execution steps
-├── 📊 The MetaAnalyst  ── Tier lists, patch delta analysis, rising/falling picks
-├── 🎮 The GameCritic   ── Balanced verdicts, strengths, weaknesses, purchasing advice
-└── 🛡️ The GameGuide    ── Structured, scannable answers with bullet points and comparison tables
-```
-
----
-
-## ⌨️ Interactive Slash Commands
-
-Type `/` in the chat input or Discord to trigger power-user actions:
-
-| Command | Action |
+| Layer | Built with |
 |---|---|
-| `/progress <game> : <where>` | 🛡️ Spoiler Shield: tell it where you are (`/progress Elden Ring : beat Margit`). Story answers stay behind that point; anything past it goes behind a click-to-reveal bar. `/progress clear` forgets it. Saying it in plain words works too. |
-| `/missables [game]` | 🧭 What you can still permanently miss from where you are, in the order you'll reach it. With no game, uses the one you last set progress for. |
-| `/price <game>` | Live multi-store prices and the all-time low via CheapShark. Resolves nicknames and editions (`gta 5` → Grand Theft Auto V, `elden ring nightreign` ≠ `elden ring`). Plain questions like *"is bg3 on sale?"* trigger it too. |
-| `/discover` | A random pro tip, hidden detail or piece of lore. |
-| `/spoilers on` · `/spoilers off` | Turns Spoiler Shield on or off. |
-| `/stealth` | Incognito — the conversation is never stored, remembered or used to look anything up. |
-| `/clear` | Deletes your chat history. |
-| `/help` | The full command reference. |
+| Web app | React 19, Vite 8, Tailwind CSS 4, GSAP, Framer Motion |
+| Backend | Supabase Edge Functions (Deno, TypeScript), Postgres with RLS |
+| Hosting | Vercel (site + small API routes for wiki and Steam art) |
+| Discord bot | Node.js, discord.js; deploy configs for Fly.io, Railway and Render |
+| Payments | Stripe (Discord Pro and Premium Server plans) |
+| AI | Gemini, Groq, OpenRouter and Cerebras, routed by health and quota |
 
----
+## Run it locally
 
-## 🎨 Dark Theme & Atmospheric Transition Engine
+You need Node 22.6+ and Deno. Full walkthrough, including which free API keys
+matter most: [`LOCAL_TESTING.md`](LOCAL_TESTING.md).
 
-GameGuide-AI features seven custom-engineered dark themes with synchronized palette transitions:
-
-| Theme | Accent 1 | Accent 2 | Aesthetic |
-|---|---|---|---|
-| **Black Ice** *(Default)* | `#0ea5e9` | `#fbbf24` | Tactical Oceanic Cyan & Gold |
-| **Nightblade** | `#ff2d95` | `#a855f7` | Cyberpunk Neon Synthwave |
-| **Redline** | `#dc2626` | `#cbd5e1` | High-RPM Apex Racing |
-| **Ghostline** | `#67e8f9` | `#c4b5fd` | Ethereal Cosmic Violet |
-| **Biohazard** | `#84cc16` | `#facc15` | Post-Apocalyptic Wasteland Green |
-| **Warspire** | `#f59e0b` | `#6366f1` | Medieval War Banner Amber |
-| **Dreadcore** | `#8b5cf6` | `#fef3c7` | Obsidian Dark Fantasy |
-
-**Atmospheric Transitions**: Switching themes engages a 700ms full-interface cubic-bezier color morph accompanied by one of four deterministic ambient visual overlays (*Aurora Wash*, *Scanline Drift*, *Depth Focus*, or *Particle Drift*).
-
----
-
-## 🤖 Discord Bot Deployment
-
-The repository includes a standalone 24/7 Discord bot located in `discord-bot/`.
-
-### Key Features:
-- Mention `@GameGuide <query>` or `/ask <query>` in any channel.
-- Attach up to 3 screenshots directly in Discord for instant vision analysis.
-- Tiered per-user rate limits with automatic 429 retry handling.
-- Persistent conversation memory across sessions backed by Supabase.
-- Ready-to-deploy configurations for **Render**, **Fly.io**, **Railway**, **Docker**, and **PM2**.
-
-*For complete setup and deployment instructions, see [`discord-bot/README.md`](discord-bot/README.md).*
-
----
-
-## 📁 Repository Structure
-
-```
-GameGuide-AI/
-├── .github/
-│   ├── workflows/ci.yml               ← Automated CI pipeline (Node 20, tests, build)
-│   ├── ISSUE_TEMPLATE/                ← Structured bug and feature templates
-│   └── PULL_REQUEST_TEMPLATE.md       ← PR verification checklist
-│
-├── api/
-│   └── wiki/                          ← Serverless CORS proxy for MediaWiki API
-│
-├── discord-bot/                       ← Standalone 24/7 Discord bot
-│   ├── index.js                       ← Bot main engine
-│   ├── Dockerfile, fly.toml, render.yaml
-│   └── README.md
-│
-├── public/                            ← Static web assets, icons, llms.txt
-│
-├── src/
-│   ├── components/                    ← UI components (LandingPage, Chat, InfoPages)
-│   ├── hooks/                         ← State management (useChat, useAuth)
-│   ├── services/                      ← Scrapers, API clients, Supabase singleton
-│   └── utils/                         ← Image preprocessing and OCR utilities
-│
-├── supabase/
-│   ├── functions/chat-proxy/          ← Cortex neural mesh edge function (Deno)
-│   └── migrations/                    ← PostgreSQL schema, rate limiting, RLS
-│
-├── tests/                             ← Regression & evaluation test suites
-│   ├── behaviour.test.ts              ← User correction & persona test suite
-│   ├── corroboration.test.ts          ← Source-agreement scoring suite
-│   ├── detection.test.ts              ← Game-title and installment parsing
-│   ├── gemini.test.ts                 ← Multi-model quota rotation suite
-│   ├── ssrf.test.mjs                  ← Wiki proxy security validation
-│   └── run.mjs                        ← Master test runner
-│
-├── LOCAL_TESTING.md                   ← Guide for running the mesh locally on free keys
-├── SECURITY.md                        ← Responsible disclosure policy
-├── CONTRIBUTING.md                    ← Contribution guidelines
-└── LICENSE                            ← Proprietary software license
-```
-
----
-
-## 🚀 Quickstart & Local Development
-
-### Prerequisites
-- **Node.js** ≥ 18.17.0
-- **npm** ≥ 9.0.0
-- A free [Google Gemini API Key](https://aistudio.google.com) (recommended)
-- A free [Supabase Project](https://supabase.com) (for auth & database persistence)
-
-### 1. Clone & Install
 ```bash
-git clone https://github.com/angarkartanmay-ops/GameGuide-AI.git
-cd GameGuide-AI
 npm install
+npm install -g deno
+
+cp supabase/functions/.env.example supabase/functions/.env   # model + search keys
+cp .env.example .env.local                                   # VITE_SUPABASE_URL=http://127.0.0.1:8000
+
+npm run dev:api   # edge function on http://127.0.0.1:8000
+npm run dev       # site on http://localhost:5173
 ```
 
-### 2. Configure Environment
-```bash
-cp .env.example .env.local
-cp supabase/functions/.env.example supabase/functions/.env
-```
-
-### 3. Run Development Server
-```bash
-# Terminal 1: Run frontend application
-npm run dev
-
-# Terminal 2 (Optional): Run local chat-proxy Edge Function with Deno
-npm run dev:api
-```
-
-The web client will be available at `http://localhost:5173`.
-
----
-
-## ⚙️ Environment Configuration
-
-### Client Configuration (`.env.local`)
-| Variable | Description |
-|---|---|
-| `VITE_SUPABASE_URL` | Supabase project API URL (e.g. `https://<id>.supabase.co`). |
-| `VITE_SUPABASE_ANON_KEY` | Public anonymous API key with RLS enforcement. |
-
-### Edge Function Secrets (`supabase/functions/.env`)
-| Variable | Required | Description |
-|---|:---:|---|
-| `GOOGLE_API_KEY` | **Yes** | Primary AI provider for Gemini text, vision, and OCR. |
-| `GROQ_API_KEY` | Optional | Fast-path reasoning and compound search routing. |
-| `OPENROUTER_API_KEY` | Optional | Extended vision model fallback and multi-provider options. |
-| `CEREBRAS_API_KEY` | Optional | Ultra-fast low-latency text fallback. |
-| `SERPER_API_KEY` | Optional | Google SERP API for Project PULSE (2,500 free queries/mo). |
-| `GOOGLE_CSE_ID` | Optional | Google Custom Search Engine ID (100 free queries/day). |
-| `BRAVE_SEARCH_API_KEY` | Optional | Brave Search API (2,000 free queries/mo). |
-| `SUPERCELL_API_KEY` | Optional | Official Supercell API token (Clash Royale / Brawl Stars). |
-| `STEAM_API_KEY` | Optional | Steam Web API key for live patch news retrieval. |
-
----
-
-## 🚢 Deployment Guide
-
-### Web Frontend (Vercel)
-1. Import the GitHub repository into your [Vercel Dashboard](https://vercel.com).
-2. Set Framework Preset to **Vite**.
-3. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to Environment Variables.
-4. Deploy. The bundled `vercel.json` automatically manages SPA rewrites and serverless proxy routes.
-
-### Supabase Edge Functions
-```bash
-# Push database schema & migrations
-supabase db push
-
-# Deploy chat proxy function
-supabase functions deploy chat-proxy --no-verify-jwt
-
-# Set runtime secrets
-supabase secrets set GOOGLE_API_KEY="your_api_key"
-```
-
----
-
-## 🧪 Automated Test & Regression Suite
-
-GameGuide-AI includes a comprehensive offline and live evaluation test suite:
+Run the tests:
 
 ```bash
-# Every suite: pure-logic assertions, the Discord handlers against a fake
-# client, and the quota SQL on an in-process Postgres (PGlite). No keys needed.
+(cd discord-bot && npm install)   # one suite reads discord.js's permission flags
 npm test
 ```
 
-### Verified Test Suites:
-- `detection.test.ts`: Game name parsing, installment number extraction, and alias resolution.
-- `behaviour.test.ts`: User correction acceptance and follow-up chip suppression.
-- `gemini.test.ts`: Multi-model quota rotation and load balancing.
-- `corroboration.test.ts`: Source-agreement scoring and claim confidence metrics.
-- `ssrf.test.mjs`: Fandom/Wiki proxy URL sanitization and SSRF prevention.
-- `eval/pipeline.test.mjs`: Golden-set retrieval and routing accuracy verification.
+## Deploy
+
+1. **Database:** `supabase db push` applies everything in `supabase/migrations`
+   (rate limits, provider health, player memory, request trace, public stats).
+   If you run the Discord bot, also run `discord-bot/schema.sql` and
+   `discord-bot/schema-v3.sql` in the SQL editor.
+2. **Backend:** `supabase functions deploy chat-proxy`, then add your keys under
+   *Project Settings → Edge Functions → Secrets*, plus `SUPABASE_JWT_SECRET` and
+   `RATE_LIMIT_SALT`.
+3. **Site:** import the repo into Vercel and set `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_ANON_KEY`. Optional: turn on Vercel Web Analytics and set
+   `VITE_ANALYTICS=vercel` (cookieless).
+4. **Discord bot:** see [`discord-bot/README.md`](discord-bot/README.md).
+
+## Repository layout
+
+```
+src/                     React app: landing page (site/), chat (codex/), hooks, utils
+api/                     Vercel functions: wiki search/article proxy, Steam art lookup
+supabase/functions/      chat-proxy: the whole answer pipeline
+supabase/migrations/     Postgres schema (rate limits, health, memory, trace, stats)
+discord-bot/             The Discord bot, its schema, billing and Watchtower
+tests/                   29 suites, including a golden-set retrieval eval (npm test)
+```
+
+## Known limits
+
+- It runs mostly on free model and search tiers. That keeps it free to use, but
+  quality and speed depend on which providers have headroom at the time.
+- Retrieval is only as good as what's indexed. Very new or very obscure games get
+  thinner answers, and it says so rather than guessing.
+- The player count is an approximation (see above).
+
+## Contributing and security
+
+Issues and PRs are welcome; see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Please report vulnerabilities privately as described in [`SECURITY.md`](SECURITY.md).
+
+## License
+
+Proprietary. © 2026 Tanmay Angarkar, all rights reserved. See [`LICENSE`](LICENSE).
 
 ---
-
-## 🔒 Security & Responsible Disclosure
-
-We take application security and user data privacy seriously:
-- **No Client-Side Secrets**: All third-party AI provider keys are strictly isolated inside Supabase Edge Functions.
-- **SSRF Hardening**: All proxy endpoints strictly validate incoming hosts and reject arbitrary or private IP ranges.
-- **Vulnerability Reporting**: If you find a security issue, please consult [SECURITY.md](SECURITY.md) or email [gameguideai.support@gmail.com](mailto:gameguideai.support@gmail.com).
-
----
-
-## 📄 License & Intellectual Property
-
-Copyright © 2026 Tanmay Angarkar. All rights reserved.
-
-This software, its source code, architecture, system prompts, and branding are proprietary. Unauthorized copying, distribution, modification, reverse engineering, model scraping, or training of competing AI models is strictly prohibited. See [LICENSE](LICENSE) for terms.
-
----
-
-## 📬 Contact & Support
 
 <div align="center">
 
-| Channel | Contact |
-|---|---|
-| **Product Support** | [gameguideai.support@gmail.com](mailto:gameguideai.support@gmail.com) |
-| **LinkedIn** | [Tanmay Angarkar](https://www.linkedin.com/in/tanmay-angarkar-4b8a47319/) |
-| **GitHub** | [@angarkartanmay-ops](https://github.com/angarkartanmay-ops) |
+Built by **Tanmay Angarkar** ·
+[LinkedIn](https://www.linkedin.com/in/tanmay-angarkar-4b8a47319/) ·
+[GitHub](https://github.com/angarkartanmay-ops) ·
+[gameguideai.support@gmail.com](mailto:gameguideai.support@gmail.com)
 
 </div>
