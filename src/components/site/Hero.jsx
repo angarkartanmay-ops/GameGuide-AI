@@ -4,6 +4,7 @@ import { HERO_GAMES, heroArt, coverArt } from '../../site/showcase';
 import { LINKS } from '../../site/links';
 import { gsap, useScene } from '../../site/motion';
 import { HudCorners, Overline } from './bits';
+import LiveCount from './LiveCount';
 
 const MOBILE_MQ = '(max-width: 767px)';
 const pad = (n) => String(n).padStart(2, '0');
@@ -137,6 +138,7 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
               Add to Discord
             </a>
           </div>
+          <div data-intro><LiveCount /></div>
         </div>
 
         <div className="s-hero__hud" data-intro>

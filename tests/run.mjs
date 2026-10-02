@@ -42,6 +42,7 @@ const SUITES = [
   ['discord-launch','discord-launch.test.mjs'],// invite perms, pings, intents, command wiring
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres
   ['quota-contract','quota-contract.test.mjs'],// quota.js against that same SQL
+  ['stats',         'stats.test.mjs'],         // landing live count: SQL on real Postgres + helpers
 ];
 
 try {
