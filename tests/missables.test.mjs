@@ -24,7 +24,18 @@ const withProgress = web.buildMissablesPrompt('Elden Ring', 'beat Margit');
 check('names the game', withProgress.includes('Elden Ring'));
 check('starts from where the player is', withProgress.includes("I'm currently at: beat Margit"));
 check('asks for what makes each one lost', /what makes each one lost/.test(withProgress));
-check('keeps it spoiler-safe past that point', /nothing about story events, bosses or twists past where I am/.test(withProgress));
+check('keeps it spoiler-safe past that point', /don’t name it in plain text/.test(withProgress) && /\|\|spoiler bars\|\|/.test(withProgress));
+check('asks for confirmed rewards only', /Only name items and rewards you are sure of/.test(withProgress));
+// The backend trusts a quoted phrase as the game's title: '"a later boss"' in
+// this prompt made the server think the game was "Later Boss", which dropped
+// the shield's progress and put "Later Boss" in the follow-up chips.
+check('no quoted phrases (read as a game title)', !/["“”]/.test(withProgress.replace(/^What can I permanently miss in [^?]+\?/, '')));
+// The backend's first-match persona regexes (chat-proxy INTENT_PATTERNS):
+// "story" → Loremaster (a story recap before the list), " or " → Coach.
+for (const [label, p] of [['with progress', withProgress], ['without progress', web.buildMissablesPrompt('Hollow Knight', null)]]) {
+  check(`${label}: does not trip the Loremaster persona`, !/(lore|story|backstory|canon|timeline|who is|what happened to|history of|ending)/i.test(p));
+  check(`${label}: does not trip the Coach persona`, !/(vs|versus|compared? to|or |which is better|difference between|better than)/i.test(p));
+}
 
 const noProgress = web.buildMissablesPrompt('Hollow Knight', null);
 check('without progress: opening hours only, then asks', /cover only the opening hours/.test(noProgress) && /ask me where I am/.test(noProgress));

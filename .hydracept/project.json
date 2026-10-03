@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "hydracept.workspace.v1",
+  "projectId": "cpr_5f1zurn6vfax",
+  "environment": "development",
+  "apiOrigin": "https://api.hydracept.com",
+  "verificationCapabilities": [
+    "image.generate.v1"
+  ],
+  "projectName": "GameGuide-AI",
+  "resolution": "created_from_repository",
+  "repository": {
+    "provider": "github",
+    "owner": "angarkartanmay-ops",
+    "name": "GameGuide-AI",
+    "url": "https://github.com/angarkartanmay-ops/GameGuide-AI.git"
+  }
+}

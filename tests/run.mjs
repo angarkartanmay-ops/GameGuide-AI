@@ -29,6 +29,7 @@ const SUITES = [
   ['site',          'site.test.mjs'],          // landing + info: konami, achievements, showcase, honest copy
   ['steam-art',     'steam-art.test.mjs'],     // backdrop art lookup: strict match, fixed host
   ['price',         'price.test.mjs'],         // /price game+version detection, web/Discord parity
+  ['price-proxy',   'price-proxy.test.mjs'],   // /api/price: narrow CheapShark proxy for filtered networks
   ['share',         'share.test.mjs'],         // spoiler-safe share links: round trip, hostile input, deflate bomb
   ['missables',     'missables.test.mjs'],     // /missables prompt + default game, web/Discord parity
   ['discord-format', 'discord-format.test.mjs'], // tables → phone-readable blocks, spoilers intact
@@ -38,6 +39,8 @@ const SUITES = [
   ['catalog',       'catalog.test.mjs'],       // live model discovery + filter safety
   ['quota',         'quota.test.mjs'],         // Discord freemium tiers + upsell copy
   ['search-health', 'search-health.test.ts'],  // /health must not relay vendor error text
+  ['stream-cut',    'stream-cut.test.ts'],     // a model cut off part-way is never sent as a whole answer
+  ['hydracept',     'hydracept.test.ts'],      // paid last-resort model: off by default, server-side key only
   ['billing',       'billing.test.mjs'],       // Stripe period-end + checkout ref linking
   ['discord-launch','discord-launch.test.mjs'],// invite perms, pings, intents, command wiring
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres

@@ -238,8 +238,8 @@ const TERMS = [
   },
 ];
 
-function Terms() {
-  const [active, setActive] = useState(TERMS[0].id);
+function Terms({ start }) {
+  const [active, setActive] = useState(start || TERMS[0].id);
   // Set when a contents entry is clicked. The last sections are too short to
   // reach the reading line, so the spy falls back to "the final one" at the
   // bottom of the page — which would otherwise overrule what you just picked.
@@ -301,6 +301,27 @@ function Terms() {
     el.focus({ preventScroll: true });
     setActive(id);
   };
+  // #privacy opens this page at the privacy section. Deferred a tick so it
+  // lands after the shell's scroll-to-top, which runs after this effect, and
+  // repeated once the web fonts are in — their swap reflows the page above
+  // the section and would leave its heading under the nav.
+  useEffect(() => {
+    if (!start) return undefined;
+    let live = true;
+    const go = () => {
+      const el = live && document.getElementById(start);
+      if (!el) return;
+      picked.current = true;
+      clearTimeout(pickedTimer.current);
+      pickedTimer.current = setTimeout(() => { picked.current = false; }, 1200);
+      el.scrollIntoView({ behavior: 'instant', block: 'start' });
+      setActive(start);
+    };
+    const t = setTimeout(go, 0);
+    document.fonts?.ready.then(() => requestAnimationFrame(go));
+    return () => { live = false; clearTimeout(t); };
+  }, [start]);
+
   const n = TERMS.findIndex(t => t.id === active) + 1;
 
   return (
@@ -424,6 +445,14 @@ const PAGES = {
     meta: 'Last updated: September 2026',
     Body: Terms,
   },
+  privacy: {
+    title: 'Privacy', label: 'Privacy',
+    heading: 'Privacy & terms.',
+    lead: 'What GameGuide stores, for how long, who it is shared with — and the rules for using it.',
+    meta: 'Last updated: September 2026',
+    Body: Terms,
+    start: 't-privacy',
+  },
   contacts: {
     title: 'Contact', label: 'Contact',
     heading: 'Contact & connect.',
@@ -473,7 +502,7 @@ export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
 
   const links = [
     { label: 'About', onClick: () => onNavigate?.('about'), current: kind === 'about' },
-    { label: 'Terms', onClick: () => onNavigate?.('terms'), current: kind === 'terms' },
+    { label: 'Terms', onClick: () => onNavigate?.('terms'), current: kind === 'terms' || kind === 'privacy' },
     { label: 'Contact', onClick: () => onNavigate?.('contacts'), current: kind === 'contacts' },
   ];
 
@@ -498,7 +527,7 @@ export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
       </div>
 
       <main id="main" tabIndex={-1} className="s-wrap s-page">
-        <Body />
+        <Body start={page.start} />
       </main>
 
       <SiteFooter onNavigate={onNavigate} onStart={() => onNavigate?.('chat')} />

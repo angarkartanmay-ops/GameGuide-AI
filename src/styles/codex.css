@@ -45,7 +45,21 @@
   font-family: var(--cx-body);
   transition: --cx-accent 900ms ease;
 }
-.codex.is-stealth { --cx-accent: color-mix(in srgb, var(--cx-ink) 82%, transparent); }
+/* Stealth: the screen goes off the record — a neutral monochrome palette
+   (no theme tint, no game colour), grey "accent", plus grain and a vignette
+   in the backdrop. The legacy theme variables are overridden too, so the
+   theme menu, price badge and feedback button lose their colour as well. */
+.codex.is-stealth {
+  --cx-bg: #0b0b0c;
+  --cx-ink: #e6e6e8;
+  --cx-ink-2: color-mix(in srgb, #e6e6e8 84%, transparent);
+  --cx-muted: #98989d;
+  --cx-muted-2: #b4b4b9;
+  --cx-glass: color-mix(in srgb, #131315 84%, transparent);
+  --cx-accent: #cfcfd3;
+  --accent-1: #cfcfd3;
+  --accent-2: #8c8c91;
+}
 
 .codex :focus-visible { outline: 2px solid var(--cx-accent); outline-offset: 2px; }
 
@@ -58,7 +72,22 @@
     radial-gradient(900px 620px at 104% 112%, color-mix(in srgb, var(--cx-accent) 9%, transparent), transparent 60%);
 }
 .is-stealth .cx-backdrop__ambient {
-  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--cx-ink) 3%, transparent) 0 10px, transparent 10px 20px);
+  background:
+    radial-gradient(130% 95% at 50% 38%, transparent 52%, rgba(0, 0, 0, 0.6) 100%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.016) 0 1px, transparent 1px 3px),
+    radial-gradient(900px 520px at 50% -12%, rgba(255, 255, 255, 0.06), transparent 70%);
+}
+/* Film grain under the transcript (never over the text). Jumps between six
+   offsets rather than scrolling, so it reads as grain, not motion. */
+.is-stealth .cx-backdrop::after {
+  content: ''; position: absolute; inset: -50%; opacity: 0.07; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: cx-grain 1.2s steps(6) infinite;
+}
+@keyframes cx-grain {
+  0% { transform: translate(0, 0); } 17% { transform: translate(-6%, 4%); } 33% { transform: translate(5%, -7%); }
+  50% { transform: translate(-3%, 8%); } 67% { transform: translate(7%, 2%); } 83% { transform: translate(-8%, -3%); }
+  100% { transform: translate(0, 0); }
 }
 .cx-backdrop__layer { position: absolute; inset: 0; animation: cx-fade-in 700ms ease both; }
 .cx-backdrop__layer.is-out { animation: cx-fade-out 600ms ease both; }
@@ -161,12 +190,89 @@
 /* ── Stealth ──────────────────────────────────────────────────────────── */
 .cx-stealth {
   position: relative; z-index: 2; align-self: center; box-sizing: border-box;
-  width: min(720px, calc(100% - 32px)); margin: 0 0 8px; padding: 10px 16px;
-  border-radius: 14px; border: 1px dashed color-mix(in srgb, var(--cx-ink) 30%, transparent);
-  background: repeating-linear-gradient(-45deg, color-mix(in srgb, var(--cx-ink) 5%, transparent) 0 8px, color-mix(in srgb, var(--cx-ink) 2%, transparent) 8px 16px);
-  font-size: 13.5px; line-height: 1.5;
+  width: min(720px, calc(100% - 32px)); margin: 0 0 8px; padding: 6px 6px 6px 16px;
+  display: flex; align-items: center; gap: 12px;
+  border-radius: 14px; border: 1px solid var(--cx-hair-2);
+  background: color-mix(in srgb, var(--cx-bg) 72%, transparent);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  animation: cx-rise 500ms var(--cx-ease) 420ms both;
 }
-.cx-stealth code { font-family: var(--cx-mono); font-size: 0.92em; }
+/* A record dot, struck through: nothing is being recorded. */
+.cx-stealth__rec,
+.cx-context__eye {
+  position: relative; flex-shrink: 0; width: 13px; height: 13px; box-sizing: border-box;
+  border-radius: 50%; border: 1.5px solid currentColor; color: var(--cx-ink-2);
+}
+.cx-stealth__rec::after,
+.cx-context__eye::after {
+  content: ''; position: absolute; left: 50%; top: -3px; width: 1.5px; height: calc(100% + 6px);
+  background: currentColor; transform: translateX(-50%) rotate(45deg);
+}
+.cx-context__eye { width: 10px; height: 10px; border-width: 1.25px; }
+.cx-stealth__kicker {
+  flex-shrink: 0; font-family: var(--cx-mono); font-size: 11px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--cx-ink);
+}
+.cx-stealth__text { flex: 1; min-width: 0; font-size: 13.5px; color: var(--cx-muted-2); }
+.cx-stealth__leave {
+  flex-shrink: 0; min-height: 36px; padding: 0 14px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--cx-hair-2); background: color-mix(in srgb, var(--cx-ink) 6%, transparent);
+  color: var(--cx-ink); font-family: var(--cx-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  transition: background-color 200ms ease, border-color 200ms ease;
+}
+.cx-stealth__leave:hover:not(:disabled) { background: color-mix(in srgb, var(--cx-ink) 12%, transparent); border-color: color-mix(in srgb, var(--cx-ink) 30%, transparent); }
+.cx-stealth__leave:disabled { opacity: 0.45; cursor: default; }
+@media (max-width: 560px) {
+  .cx-stealth__text, .cx-stealth__leave-hint { display: none; }
+  .cx-stealth { justify-content: space-between; }
+}
+
+.cx-context__game.is-stealth { display: flex; align-items: center; gap: 8px; color: var(--cx-ink); }
+.is-stealth .cx-mark--lg { background: transparent; box-shadow: inset 0 0 0 1.5px var(--cx-ink); }
+.is-stealth .cx-prose img,
+.is-stealth .cx-entry--user img,
+.is-stealth .cx-cover__art img,
+.is-stealth .cx-deal img { filter: grayscale(1) contrast(1.05); }
+
+/* The sweep: a scan line that crosses the screen as Stealth turns on (down,
+   draining the colour) or off (up, the colour returning). It rides the edge
+   of the view-transition shutter below, so it uses the same curve and time. */
+.cx-sweep {
+  position: absolute; inset: 0; z-index: 8; pointer-events: none;
+  animation-duration: 950ms; animation-timing-function: cubic-bezier(0.7, 0, 0.2, 1); animation-fill-mode: both;
+}
+.cx-sweep--down { animation-name: cx-sweep-down; background: linear-gradient(180deg, transparent 78%, color-mix(in srgb, var(--cx-ink) 7%, transparent)); }
+.cx-sweep--up { animation-name: cx-sweep-up; background: linear-gradient(0deg, transparent 78%, color-mix(in srgb, var(--cx-accent) 12%, transparent)); }
+.cx-sweep__line { position: absolute; left: 0; right: 0; height: 1px; }
+.cx-sweep--down .cx-sweep__line { bottom: 0; background: color-mix(in srgb, var(--cx-ink) 80%, transparent); box-shadow: 0 0 10px 1px rgba(255, 255, 255, 0.22); }
+.cx-sweep--up .cx-sweep__line { top: 0; background: var(--cx-accent); box-shadow: 0 0 10px 1px color-mix(in srgb, var(--cx-accent) 45%, transparent); }
+@keyframes cx-sweep-down {
+  0% { transform: translateY(-100%); opacity: 1; }
+  88% { opacity: 1; }
+  100% { transform: translateY(0); opacity: 0; }
+}
+@keyframes cx-sweep-up {
+  0% { transform: translateY(100%); opacity: 1; }
+  88% { opacity: 1; }
+  100% { transform: translateY(0); opacity: 0; }
+}
+
+/* The shutter itself — whole-document view transitions started by
+   utils/viewTransition.js with html[data-vt]. The only rules in this file
+   outside .codex, and they exist only for the length of one transition.
+   On: the old screen drains to grey while the monochrome one is revealed
+   from the top. Off: the coloured screen comes back from the bottom. */
+html[data-vt^="stealth"]::view-transition-old(root),
+html[data-vt^="stealth"]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html[data-vt="stealth-on"]::view-transition-old(root) { animation: cx-vt-drain 950ms ease-out both; }
+html[data-vt="stealth-on"]::view-transition-new(root) { animation: cx-vt-reveal-down 950ms cubic-bezier(0.7, 0, 0.2, 1) both; }
+html[data-vt="stealth-off"]::view-transition-new(root) { animation: cx-vt-reveal-up 950ms cubic-bezier(0.7, 0, 0.2, 1) both; }
+/* The accent would otherwise animate from the game colour to grey inside
+   the freshly revealed (supposedly monochrome) screen. */
+html[data-vt^="stealth"] .codex { transition: none; }
+@keyframes cx-vt-drain { to { filter: grayscale(1) brightness(0.62); } }
+@keyframes cx-vt-reveal-down { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0); } }
+@keyframes cx-vt-reveal-up { from { clip-path: inset(100% 0 0 0); } to { clip-path: inset(0); } }
 
 /* ── Transcript ───────────────────────────────────────────────────────── */
 .cx-main { position: relative; z-index: 1; flex: 1; min-height: 0; display: flex; }
@@ -672,8 +778,13 @@ html[data-low-power] .cx-palette,
 html[data-low-power] .cx-deal { animation: none; }
 html[data-low-power] .cx-skeleton span { animation: none; }
 html[data-low-power] .codex { transition: none; }
+html[data-low-power] .cx-sweep { display: none; }
+html[data-low-power] .is-stealth .cx-backdrop::after { animation: none; }
+html[data-low-power] .cx-stealth { animation: none; -webkit-backdrop-filter: none; backdrop-filter: none; background: #111113; }
 @media (prefers-reduced-motion: reduce) {
   .cx-entry--user, .cx-entry--ai, .cx-empty, .cx-palette, .cx-deal, .cx-skeleton span { animation: none; }
+  .cx-sweep { display: none; }
+  .is-stealth .cx-backdrop::after, .cx-stealth { animation: none; }
   .cx-backdrop__layer { animation-duration: 1ms !important; }
   .codex, .cx-cover__art, .cx-next__link svg { transition: none; }
 }

@@ -9,16 +9,17 @@ import {
 import { getDiscoveredModels } from './modelCatalog.ts';
 import { extractProfileFacts, buildProfileBlock } from './playerMemory.ts';
 import {
-  SseWriter, sseHeaders, streamOpenAICompat, streamGemini,
+  SseWriter, sseHeaders, streamOpenAICompat, streamGemini, StreamCutError,
 } from './streaming.ts';
 import { corroborate, CorroborationInput } from './corroboration.ts';
 import { stripReasoning, createReasoningFilter } from './reasoning.ts';
 import {
   resolveShield, buildShieldDirective, buildShieldReminder, buildSpoilItNote, shieldChips,
-  shieldPersonaOverlay,
+  shieldPersonaOverlay, isMissablesQuestion,
   ClientSpoilerContext, ShieldState,
 } from './spoilerShield.ts';
 import { guardShieldedReply } from './spoilerGuard.ts';
+import { hydraceptConfig, callHydracept, toHydraceptMessages, HYDRACEPT_CAPABILITY } from './hydracept.ts';
 import {
   checkRateLimit, anonBucket, userIdFromAuthHeader, botCallerFromHeaders,
   LIMITS_AUTHED, LIMITS_ANON, LIMITS_BOT, LIMITS_BOT_GLOBAL,
@@ -1901,6 +1902,12 @@ function omniBlocksToContextStrings(blocks: ScrapeBlock[]): string[] {
 //                Gemini held in reserve as the final safety net.
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Text answers run warm (0.72) for voice. A missables list is a factual
+// checklist where an invented reward is the failure, so it runs cooler.
+function textTemperature(rawPrompt?: string): number {
+  return isMissablesQuestion(rawPrompt || '') ? 0.35 : 0.72;
+}
+
 async function runGeminiAttempt(opts: {
   geminiAi: any;
   systemInstruction: string;
@@ -1910,6 +1917,7 @@ async function runGeminiAttempt(opts: {
   hasVision: boolean;
   errors: string[];
   meshState: MeshStateT;
+  rawPrompt?: string;
 }): Promise<MeshResult | null> {
   if (!opts.geminiAi) return null;
 
@@ -1938,7 +1946,7 @@ async function runGeminiAttempt(opts: {
             // tolerate creative padding.
             ...(opts.hasVision
               ? { temperature: 0.15, maxOutputTokens: 3500 }
-              : { temperature: 0.72, maxOutputTokens: 2400 }),
+              : { temperature: textTemperature(opts.rawPrompt), maxOutputTokens: 2400 }),
           },
         });
         if (result?.text) {
@@ -1993,6 +2001,7 @@ async function runPlannedMesh(opts: {
   attachments: any[];
   hasVision: boolean;
   errors: string[];
+  rawPrompt?: string;
 }): Promise<MeshResult | null> {
   const deadProviders = new Set<string>();
 
@@ -2011,7 +2020,7 @@ async function runPlannedMesh(opts: {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         console.log(`[MESH] ${provider.name} → ${model.id} (${reason}, attempt ${attempt})`);
-        const text = await callOpenAICompat(provider, model.id, messages);
+        const text = await callOpenAICompat(provider, model.id, messages, { temperature: textTemperature(opts.rawPrompt) });
         console.log(`[MESH] ✓ ${provider.name}/${model.id}`);
         reportProvider(provider.name, model.id, true);
         recordUsage(provider.name, model.id);
@@ -2070,6 +2079,14 @@ ACCURACY RULES:
 
 VOICE: Talk like a gamer. Contractions, opinions, no corporate filler. Skip "Great question!". Use markdown where it helps (a table for comparisons, steps for troubleshooting) but don't over-format a short answer.`;
 
+// A model id Groq no longer serves (HTTP 404 "does not exist or you do not
+// have access") fails identically on every request, adding a wasted round
+// trip before the real mesh even starts. Seen live: groq/compound-mini began
+// returning 404. After one such answer, agentic routing rests for a while
+// instead of paying for the same failure on every recency question.
+const AGENTIC_REST_MS = 6 * 60 * 60 * 1000;
+let agenticRestUntil = 0;
+
 async function tryAgentic(opts: {
   systemInstruction: string;
   chatHistory: any[];
@@ -2082,7 +2099,7 @@ async function tryAgentic(opts: {
   onCommit?: (provider: string, model: string) => void;
 }): Promise<MeshResult | null> {
   const mode = wantsAgentic(opts.need);
-  if (!mode) return null;
+  if (!mode || Date.now() < agenticRestUntil) return null;
   const provider = PROVIDERS.Groq;
   const key = Deno.env.get(provider.keyEnv);
   if (!key) return null;
@@ -2121,17 +2138,54 @@ async function tryAgentic(opts: {
     const raw = e.message || String(e);
     opts.errors.push(`agentic/${modelId}: ${raw.slice(0, 120)}`);
     console.warn(`[AGENTIC] ✗ ${modelId}: ${raw.slice(0, 160)}`);
-    const status = /HTTP_(d{3})/.exec(raw)?.[1];
+    // (Was /HTTP_(d{3})/ — a lost backslash, so the status never parsed.)
+    const status = /HTTP_(\d{3})/.exec(raw)?.[1];
     reportProvider(provider.name, modelId, false, status ? parseInt(status, 10) : undefined, raw);
+    if (status === '404' || /does not exist|model_not_found|decommissioned/i.test(raw)) {
+      agenticRestUntil = Date.now() + AGENTIC_REST_MS;
+      console.warn(`[AGENTIC] ${modelId} is not served on this account — agentic routing off for 6h. Update GROQ_AGENTIC in meshRouter.ts.`);
+    }
     return null;   // fall through to the normal mesh
   }
 }
 
+// ── Hydracept: paid last resort, and first for missables ───────────────────
+// See hydracept.ts. Text turns only; returns null (never throws) so the mesh
+// carries on exactly as it would without it.
+function hydraceptPlan(need: { vision: boolean }, rawPrompt?: string) {
+  const cfg = need.vision ? null : hydraceptConfig();
+  return { cfg, leads: !!cfg && cfg.missablesFirst && isMissablesQuestion(rawPrompt || '') };
+}
+
+async function tryHydracept(
+  cfg: NonNullable<ReturnType<typeof hydraceptConfig>>,
+  opts: { systemInstruction: string; chatHistory: any[]; userPrompt: string; errors: string[]; why: string },
+): Promise<MeshResult | null> {
+  try {
+    const messages = toHydraceptMessages(buildOpenAIMessages(opts.systemInstruction, opts.chatHistory, opts.userPrompt, [], false));
+    console.log(`[MESH] Hydracept → ${HYDRACEPT_CAPABILITY} (${opts.why})`);
+    const r = await callHydracept(cfg, messages, { maxTokens: 2048 });
+    reportProvider('Hydracept', r.model, true);
+    recordUsage('Hydracept', r.model);
+    console.log(`[MESH] ✓ Hydracept/${r.model}${r.costUsd != null ? ` ($${r.costUsd.toFixed(5)})` : ''}`);
+    return { text: r.text, provider: r.provider, model: r.model };
+  } catch (e: any) {
+    const raw = e?.message || String(e);
+    opts.errors.push(`Hydracept: ${raw.slice(0, 120)}`);
+    console.warn(`[MESH] ✗ Hydracept: ${raw.slice(0, 150)}`);
+    const status = /HTTP_(\d{3})/.exec(raw)?.[1];
+    reportProvider('Hydracept', HYDRACEPT_CAPABILITY, false, status ? parseInt(status, 10) : undefined, raw);
+    return null;
+  }
+}
+
 // ── Streaming variant ──────────────────────────────────────────────────────
-// Same plan, same fallback order, but a candidate may only be abandoned
-// BEFORE it emits its first token. Once text has reached the user we are
-// committed — silently switching models mid-answer would contradict what they
-// have already read.
+// Same plan, same fallback order. A candidate that fails before its first
+// token is simply skipped. One that is cut part-way (StreamCutError: dropped
+// connection, Gemini RECITATION/SAFETY stop) has already put text on screen,
+// so the client is sent a `reset` before the next candidate speaks — two
+// answers glued together would contradict each other. If nothing better
+// arrives, the longest cut answer is returned, marked as cut off.
 async function runNeuralMeshStreaming(opts: {
   systemInstruction: string;
   chatHistory: any[];
@@ -2144,6 +2198,8 @@ async function runNeuralMeshStreaming(opts: {
   rawPrompt?: string;
   onDelta: (t: string) => void;
   onCommit: (provider: string, model: string) => void;
+  /** Clear whatever this turn has shown so far (a cut answer). */
+  onReset?: () => void;
 }): Promise<MeshResult> {
   const errors: string[] = [];
   const need = {
@@ -2154,9 +2210,21 @@ async function runNeuralMeshStreaming(opts: {
   };
   const catalog = await getDiscoveredModels(buildRegistry());
   const route = planRoute(need, opts.meshState, buildRegistry(), catalog.models);
+
+  let shown = false;
+  let bestPartial: MeshResult | null = null;
+  const onDelta = (t: string) => { shown = true; opts.onDelta(t); };
+  const clearShown = () => { if (shown) { opts.onReset?.(); shown = false; } };
+  const recover = (e: unknown, provider: string, model: string) => {
+    clearShown();
+    if (e instanceof StreamCutError && e.partial.trim()
+      && (!bestPartial || e.partial.length > bestPartial.text.length)) {
+      bestPartial = { text: e.partial, provider, model };
+    }
+  };
   const visionCfg = need.vision
     ? { temperature: 0.15, maxTokens: 3500 }
-    : { temperature: 0.72, maxTokens: 2400 };
+    : { temperature: textTemperature(opts.rawPrompt), maxTokens: 2400 };
 
   const tryGemini = async (): Promise<MeshResult | null> => {
     if (!opts.geminiAi) return null;
@@ -2175,13 +2243,14 @@ async function runNeuralMeshStreaming(opts: {
         const text = await streamGemini(opts.geminiAi, model, contents, opts.systemInstruction, {
           temperature: visionCfg.temperature,
           maxOutputTokens: visionCfg.maxTokens,
-          onDelta: opts.onDelta,
+          onDelta,
           onFirstToken: () => { committed = true; opts.onCommit('Gemini', model); },
         });
         reportProvider('Gemini', model, true);
         recordUsage('Gemini', model);
         return { text, provider: 'Gemini', model };
       } catch (e: any) {
+        recover(e, 'Gemini', model);
         const raw = e.message || String(e);
         errors.push(`Gemini/${model}: ${raw.slice(0, 120)}`);
         console.warn(`[MESH-STREAM] ✗ Gemini/${model}: ${raw.slice(0, 150)}`);
@@ -2215,13 +2284,14 @@ async function runNeuralMeshStreaming(opts: {
           temperature: visionCfg.temperature,
           timeoutMs: provider.timeoutMs + 20_000,   // streams legitimately run longer
           extraHeaders: provider.extraHeaders,
-          onDelta: opts.onDelta,
+          onDelta,
           onFirstToken: () => opts.onCommit(provider.name, model.id),
         });
         reportProvider(provider.name, model.id, true);
         recordUsage(provider.name, model.id);
         return { text, provider: provider.name, model: model.id };
       } catch (e: any) {
+        recover(e, provider.name, model.id);
         const raw = e.message || String(e);
         errors.push(`${provider.name}/${model.id}: ${raw.slice(0, 120)}`);
         console.warn(`[MESH-STREAM] ✗ ${provider.name}/${model.id}: ${raw.slice(0, 180)}`);
@@ -2235,6 +2305,21 @@ async function runNeuralMeshStreaming(opts: {
     return null;
   };
 
+  // Hydracept answers in one piece (no token stream): commit, then send it
+  // as a single delta.
+  const paid = hydraceptPlan(need, opts.rawPrompt);
+  const viaHydracept = async (why: string): Promise<MeshResult | null> => {
+    if (!paid.cfg) return null;
+    clearShown();
+    const r = await tryHydracept(paid.cfg, { ...opts, errors, why });
+    if (r) { opts.onCommit(r.provider, r.model); onDelta(r.text); }
+    return r;
+  };
+  if (paid.leads) {
+    const first = await viaHydracept('missables');
+    if (first) return first;
+  }
+
   // Recency questions get the self-searching model first.
   const agentic = await tryAgentic({
     systemInstruction: opts.systemInstruction,
@@ -2243,17 +2328,29 @@ async function runNeuralMeshStreaming(opts: {
     rawPrompt: opts.rawPrompt,
     need,
     errors,
-    onDelta: opts.onDelta,
+    onDelta,
     onCommit: opts.onCommit,
   });
   if (agentic) return agentic;
+  clearShown();   // the agentic model may have been cut part-way, too
 
   const geminiLeads = geminiFirst(need, opts.meshState, route);
   const first = geminiLeads ? await tryGemini() : await tryMesh();
   if (first) return first;
   const second = geminiLeads ? await tryMesh() : await tryGemini();
   if (second) return second;
+  if (!paid.leads) {
+    const last = await viaHydracept('every free model failed');
+    if (last) return last;
+  }
 
+  const partial = bestPartial as MeshResult | null;
+  if (partial) {
+    console.warn(`[MESH-STREAM] every candidate failed; returning the longest cut answer (${partial.provider}/${partial.model})`);
+    return { ...partial, text: `${partial.text.trimEnd()}
+
+*This answer was cut off before the end — ask again for the rest.*` };
+  }
   throw new Error(`MESH_EXHAUSTED:${errors.join(' | ')}`);
 }
 
@@ -2285,6 +2382,12 @@ async function runNeuralMesh(opts: {
     console.warn('[MESH] plan is EMPTY — no configured provider can serve this request');
   }
 
+  const paid = hydraceptPlan(need, opts.rawPrompt);
+  if (paid.leads && paid.cfg) {
+    const first = await tryHydracept(paid.cfg, { ...opts, errors, why: 'missables' });
+    if (first) return first;
+  }
+
   const agenticResult = await tryAgentic({
     systemInstruction: opts.systemInstruction,
     chatHistory: opts.chatHistory,
@@ -2307,6 +2410,11 @@ async function runNeuralMesh(opts: {
     if (m) return m;
     const g = await runGeminiAttempt({ ...opts, hasVision: need.vision, errors });
     if (g) return g;
+  }
+
+  if (paid.cfg && !paid.leads) {
+    const last = await tryHydracept(paid.cfg, { ...opts, errors, why: 'every free model failed' });
+    if (last) return last;
   }
 
   console.error('[MESH] ALL PROVIDERS FAILED:', errors);
@@ -2468,6 +2576,13 @@ Deno.serve(async (req) => {
         fetchedAt: catalog.fetchedAt ? new Date(catalog.fetchedAt).toISOString() : null,
         paidFallback: Deno.env.get('ENABLE_PAID_FALLBACK') === '1' ? 'enabled' : 'disabled',
       },
+      // Configured or not, and how it's used. Never the key or project id.
+      hydracept: (() => {
+        const cfg = hydraceptConfig();
+        return cfg
+          ? { configured: true, capability: HYDRACEPT_CAPABILITY, role: 'last resort', missablesFirst: cfg.missablesFirst }
+          : { configured: false };
+      })(),
       agentic: {
         enabled: !!Deno.env.get('GROQ_API_KEY') && Deno.env.get('DISABLE_AGENTIC') !== '1',
         models: GROQ_AGENTIC,
@@ -3029,7 +3144,7 @@ async function runChatPipeline(
 
     // Spoiler Shield reminder goes LAST — after the INTEL, which is otherwise
     // the final thing the model reads and is full of late-game names.
-    const shieldReminder = buildShieldReminder(shield);
+    const shieldReminder = buildShieldReminder(shield, prompt);
     if (shieldReminder) contextBlocks.push(shieldReminder);
 
     const augmentedPrompt = contextBlocks.length > 0
@@ -3138,6 +3253,7 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
       ? await runNeuralMeshStreaming({
           ...meshArgs,
           onDelta: (t) => sse.send({ type: 'delta', text: t }),
+          onReset: () => sse.send({ type: 'reset' }),
           onCommit: (provider, model) => {
             // Tells the client generation actually started, so it can drop the
             // retrieval spinner and begin rendering.

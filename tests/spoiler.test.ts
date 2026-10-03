@@ -7,7 +7,7 @@
 
 import {
   detectSpoilerRisk, wantsSpoilers, explicitlyNoSpoilers, saysFinished,
-  extractProgress, sanitizeProgress, resolveShield, buildShieldDirective, buildShieldReminder,
+  extractProgress, sanitizeProgress, resolveShield, buildShieldDirective, buildShieldReminder, isMissablesQuestion,
   buildSpoilItNote, shieldChips, shieldPersonaOverlay,
 } from '../supabase/functions/chat-proxy/spoilerShield.ts';
 
@@ -191,6 +191,21 @@ check('inactive state -> empty directive', buildShieldDirective(resolveShield({ 
   check('reminder warns the INTEL is not all safe', /INTEL/.test(r));
   check('inactive -> no reminder', buildShieldReminder(resolveShield({ prompt: 'best settings', game: ER })) === '');
   check('public channel reminder keeps bars', buildShieldReminder(resolveShield({ prompt: 'spoil it', game: ER, client: { publicChannel: true } })).includes('||'));
+}
+
+// Missables: the answer is about what lies ahead, so the lock-out trigger is
+// the leak ("…if you defeat the boss of Crumbling Farum Azula").
+{
+  const q = 'What can I permanently miss in Elden Ring? I\'m currently at: beat Margit. Start from there.';
+  const r = buildShieldReminder(resolveShield({ prompt: q, game: ER, client: { progress: { 'elden ring': 'beat Margit' } } }), q);
+  check('missables: reminder says how to phrase a later trigger', /a later boss/.test(r) && /\|\|spoiler bars\|\|/.test(r));
+  check('missables: stops at the next point of no return', /point of no return/.test(r));
+  check('missables: confirmed rewards only', /certain of/.test(r));
+  const plain = buildShieldReminder(resolveShield({ prompt: 'I just beat Margit, hardest bosses?', game: ER }), 'I just beat Margit, hardest bosses?');
+  check('missables rule only on missables questions', !/a later boss/.test(plain));
+  check('missables detection: /missables prompt', isMissablesQuestion(q));
+  check('missables detection: casual phrasing', isMissablesQuestion('anything I can still miss before the castle?'));
+  check('missables detection: not a normal question', !isMissablesQuestion('how do I beat Godrick?'));
 }
 
 // ── persona: the Loremaster's "hidden connections" hook is a spoiler magnet ──

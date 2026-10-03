@@ -56,3 +56,10 @@ coverage/
 
 # Knowledge graph output
 graphify-out/
+
+# Hydracept local secrets
+.hydracept/secrets.json
+.hydracept/bootstrap-session.json
+.hydracept/*.env
+.env.hydracept
+.hydracept/agent-context.json

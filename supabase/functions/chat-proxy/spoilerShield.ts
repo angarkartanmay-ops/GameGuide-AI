@@ -340,6 +340,20 @@ This reply is posted in a Discord server channel where other members may not hav
 === END SPOILER SHIELD ===`;
 }
 
+// "What can I still miss?" is the one question whose whole answer lies AHEAD
+// of the player, and the leak is in the lock-out conditions: a /missables
+// reply to someone who had just beaten Margit said a questline ends "if you
+// defeat the boss of Crumbling Farum Azula" — a late-game area, in plain text,
+// with no bars anywhere. The same list also invented rewards. So for this
+// shape of question the reminder says how to phrase a trigger that is later.
+const MISSABLES_RX = /\b(?:(?:permanently|still|can\s+i|could\s+i)\s+miss|missables?|point\s+of\s+no\s+return|locks?\s+(?:you\s+)?out|locked\s+out)\b/i;
+
+export function isMissablesQuestion(prompt: string): boolean {
+  return MISSABLES_RX.test(prompt || '');
+}
+
+const MISSABLES_RULE = 'This is a missables list, so it is about what lies ahead. When the thing that locks an item or questline out is a boss, area, character or event past their point, never name it in plain text — write a later boss, a later area and so on, and put the real name in ||spoiler bars||. Stop at the next point of no return. Name only rewards the INTEL confirms or you are certain of; leave out anything you would be guessing.';
+
 /**
  * A short restatement placed at the very END of the user message, after the
  * live INTEL blocks. Those blocks carry full-game plot summaries and late-game
@@ -348,12 +362,13 @@ This reply is posted in a Discord server channel where other members may not hav
  * leak battery: list-shaped answers ("hardest bosses", "the lore of X") were
  * where compliance broke, so the reminder names that case.
  */
-export function buildShieldReminder(s: ShieldState): string {
+export function buildShieldReminder(s: ShieldState, prompt = ''): string {
   if (!s.active) return '';
   const g = s.game ? titleCase(s.game) : 'this game';
   const LISTS = 'That includes lists: if the answer is a list (hardest bosses, all endings, every region, the lore of the world), list only what is up to their point, or put each later item in its own ||bars||.';
   if (s.mode === 'progress') {
-    return `=== 🛡️ BEFORE YOU ANSWER ===\nThe player is at **${s.progress}** in ${g}. The INTEL above covers the whole game — it is not all safe to repeat. Anything past their point (bosses, areas, items, lore, endings, who characters really are) is either left out or put inside ||spoiler bars||. ${LISTS}\n=== END ===`;
+    const missables = isMissablesQuestion(prompt) ? ` ${MISSABLES_RULE}` : '';
+    return `=== 🛡️ BEFORE YOU ANSWER ===\nThe player is at **${s.progress}** in ${g}. The INTEL above covers the whole game — it is not all safe to repeat. Anything past their point (bosses, areas, items, lore, endings, who characters really are) is either left out or put inside ||spoiler bars||. ${LISTS}${missables}\n=== END ===`;
   }
   if (s.mode === 'unknown') {
     return `=== 🛡️ BEFORE YOU ANSWER ===\nThe player hasn't said how far they are in ${g}. Endings, final bosses, deaths, twists and true identities go inside ||spoiler bars||. ${LISTS}\n=== END ===`;

@@ -534,6 +534,29 @@ async function cheapSharkGet(url) {
 }
 
 /**
+ * CheapShark's /games endpoint, via our own /api/price first.
+ *
+ * Calling CheapShark straight from the browser failed for everyone on a
+ * network that filters it (college and office web filters), so every /price
+ * said "Couldn't reach CheapShark". The same-origin proxy only needs to reach
+ * us. Direct is kept as the fallback: local dev has no /api (the dev server
+ * answers with index.html, which fails the JSON parse), and it still works for
+ * anyone the proxy can't serve. The proxy's error is the one reported.
+ */
+async function cheapSharkGames(params) {
+  const qs = new URLSearchParams(params).toString();
+  try {
+    return await cheapSharkGet(`/api/price?${qs}`);
+  } catch (proxyErr) {
+    try {
+      return await cheapSharkGet(`https://www.cheapshark.com/api/1.0/games?${qs}`);
+    } catch {
+      throw proxyErr;
+    }
+  }
+}
+
+/**
  * Fetch price data from CheapShark.
  *
  * Strategy: try exact-match first (CheapShark's `exact=1`). If that returns
@@ -554,18 +577,14 @@ async function fetchGamePrice(gameTitle) {
   // fuzzy fallback below covers it and CheapShark itself 400s on some
   // exact-match queries that its own fuzzy search handles fine.
   try {
-    const exactGames = await cheapSharkGet(
-      `https://www.cheapshark.com/api/1.0/games?title=${encodeURIComponent(gameTitle)}&limit=5&exact=1`
-    );
+    const exactGames = await cheapSharkGames({ title: gameTitle, limit: 5, exact: 1 });
     if (Array.isArray(exactGames) && exactGames.length > 0) games = exactGames;
   } catch { /* fall through to fuzzy */ }
 
   // ── Step 1b: fuzzy fallback with smart scoring — a failure here IS a
   // real network problem, since exact match already had its chance.
   if (!games) {
-    const fuzzyGames = await cheapSharkGet(
-      `https://www.cheapshark.com/api/1.0/games?title=${encodeURIComponent(gameTitle)}&limit=8&exact=0`
-    );
+    const fuzzyGames = await cheapSharkGames({ title: gameTitle, limit: 8, exact: 0 });
     if (!Array.isArray(fuzzyGames) || fuzzyGames.length === 0) return null;
     games = fuzzyGames;
   }
@@ -577,7 +596,7 @@ async function fetchGamePrice(gameTitle) {
   // failure here is soft — we already have a usable price from step 1.
   let detail = null;
   try {
-    detail = await cheapSharkGet(`https://www.cheapshark.com/api/1.0/games?id=${topGame.gameID}`);
+    detail = await cheapSharkGames({ id: topGame.gameID });
   } catch { /* fall back to the summary-level fields below */ }
 
   if (!detail) {

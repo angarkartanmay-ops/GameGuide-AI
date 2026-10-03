@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.1",
+  "hosts": [
+    "claude"
+  ],
+  "ownedFiles": {
+    "claude": [
+      "D:\\Antigravity\\GameGuide-AI\\.claude\\plugins\\hydracept\\skills\\hydracept\\SKILL.md",
+      "D:\\Antigravity\\GameGuide-AI\\.claude\\plugins\\hydracept\\skills\\hydracept-setup\\SKILL.md",
+      "D:\\Antigravity\\GameGuide-AI\\.claude\\plugins\\hydracept\\skills\\hydracept-smoke\\SKILL.md",
+      "D:\\Antigravity\\GameGuide-AI\\.claude\\plugins\\hydracept\\skills\\hydracept-image\\SKILL.md",
+      "D:\\Antigravity\\GameGuide-AI\\.claude\\plugins\\hydracept\\skills\\hydracept-sheet\\SKILL.md",
+      "D:\\Antigravity\\GameGuide-AI\\.claude\\plugins\\hydracept\\hooks\\hooks.json",
+      "D:\\Antigravity\\GameGuide-AI\\.claude\\plugins\\hydracept\\README.md"
+    ]
+  }
+}
