@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "hydracept": {
+      "command": "C:\\Users\\angar\\AppData\\Local\\Python\\pythoncore-3.11-64\\python.exe",
+      "args": [
+        "-m",
+        "hydracept",
+        "mcp",
+        "serve",
+        "--workspace",
+        "D:\\Antigravity\\GameGuide-AI"
+      ],
+      "env": {
+        "HYDRACEPT_MCP_GENERATION": "504277f04e48",
+        "HYDRACEPT_WORKSPACE": "D:\\Antigravity\\GameGuide-AI"
+      }
+    }
+  }
+}

@@ -51,6 +51,9 @@ export const streamChatResponse = async (
     spoiler = null,
     onStage = () => {},
     onDelta = () => {},
+    // The server cut a model off part-way and is starting over on another:
+    // drop everything shown for this turn so far.
+    onReset = () => {},
     onFinal = () => {},
   } = {},
 ) => {
@@ -124,6 +127,9 @@ export const streamChatResponse = async (
             sawToken = true;
             accumulated += ev.text;
             onDelta(ev.text);
+          } else if (ev.type === 'reset') {
+            accumulated = '';
+            onReset();
           } else if (ev.type === 'final') {
             finalText = ev.text || accumulated;
             finalMeta = ev.meta || null;

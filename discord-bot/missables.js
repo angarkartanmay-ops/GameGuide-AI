@@ -15,7 +15,10 @@ function buildMissablesPrompt(game, where) {
     : "I haven't told you how far I am, so cover only the opening hours — then ask me where I am so you can go further.";
   return `What can I permanently miss in ${g}? ${scope} List missable items, side quests, NPC questlines, `
     + 'achievements/trophies and one-time choices I should handle before the next point of no return, and say '
-    + 'what makes each one lost. Keep it spoiler-safe: nothing about story events, bosses or twists past where I am.';
+    + 'what makes each one lost. Keep it spoiler-safe: when what locks something out is a boss, area, character, '
+    + 'item and so on that I haven’t reached yet, don’t name it in plain text — call it a later boss, a later area '
+    + 'and so on, with the real name inside ||spoiler bars||. Only name items and rewards you are sure of; leave out '
+    + 'anything you would have to guess.';
 }
 
 /**

@@ -11,6 +11,7 @@ import {
 } from '../utils/spoilerPrefs';
 import { pickMissablesGame, buildMissablesPrompt } from '../utils/missables';
 import { track } from '../utils/analytics';
+import { withViewTransition } from '../utils/viewTransition';
 
 // Two identical sends inside this window are a double Enter, not a question.
 const DOUBLE_SUBMIT_MS = 3000;
@@ -36,6 +37,9 @@ export default function useChat(user) {
   // held aside untouched and restored when stealth ends.
   const [stealthMode, setStealthMode] = useState(false);
   const [stealthMessages, setStealthMessages] = useState([]);
+  // Set only by the /stealth command (never on load), so the shell knows to
+  // play the going-dark / colour-returning sweep. `id` restarts it.
+  const [stealthFx, setStealthFx] = useState(null);
   const [priceData, setPriceData] = useState([]);
 
   // ─── Credit-saving refs ────────────────────────────────────────────────────
@@ -394,21 +398,32 @@ export default function useChat(user) {
       description: 'Toggle incognito mode — nothing is saved',
       emoji: '🥷',
       action: async () => {
+        // The mode flip runs inside a view transition (the screen drains to
+        // monochrome, or the colour comes back), which may apply it a frame
+        // later. Only the flip goes in there: the confirmation below is
+        // appended by the caller straight away, so anything that clears the
+        // transcript it lands in must happen first, synchronously.
         if (stealthMode) {
           // Leaving: destroy the throwaway transcript. The persistent
           // conversation was never touched, so it simply becomes visible again.
-          setStealthMessages([]);
-          setStealthMode(false);
+          withViewTransition('stealth-off', () => {
+            setStealthMessages([]);
+            setStealthMode(false);
+            setStealthFx({ dir: 'off', id: Date.now() });
+          });
           return {
-            text: `## 🥷 Stealth mode OFF\n\nThat conversation is gone — it was never written anywhere. Your normal chat is back.`,
+            text: `## Stealth off\n\nThat conversation is gone — it was never written anywhere. Your normal chat is back.`,
             images: [],
             isCommand: true,
           };
         }
         setStealthMessages([]);
-        setStealthMode(true);
+        withViewTransition('stealth-on', () => {
+          setStealthMode(true);
+          setStealthFx({ dir: 'on', id: Date.now() });
+        });
         return {
-          text: `## 🥷 Stealth mode ON\n\nThis is a throwaway conversation. While it's active:\n\n- **Nothing is saved** — no chat history, not even for signed-in accounts\n- **Nothing is learned** — your player profile won't be read or updated\n- **Nothing is logged** — no request tracing\n- **Your normal chat is untouched** and waiting when you're done\n\nClosing stealth destroys this transcript permanently. Run \`/stealth\` again to exit.\n\n*Note: rate limits still apply — that's abuse protection, not tracking.*`,
+          text: `## Off the record\n\nA throwaway conversation. While it's on:\n\n- **Nothing is saved** — no chat history, not even for signed-in accounts\n- **Nothing is learned** — your player profile won't be read or updated\n- **Nothing is logged** — no request tracing, no game-art lookups\n- **Your normal chat is untouched** and waiting when you're done\n\nLeaving destroys this transcript for good. Run \`/stealth\` again, or press **Leave**.\n\n*Rate limits still apply — that's abuse protection, not tracking.*`,
           images: [],
           isCommand: true,
         };
@@ -992,6 +1007,10 @@ export default function useChat(user) {
             return next;
           });
         },
+        onReset: () => {
+          if (!placeholderAdded) return;
+          setActiveMessages((prev) => prev.map((m) => (m.id === aiMessageId ? { ...m, text: '' } : m)));
+        },
       });
 
       setStreamStage(null);
@@ -1079,6 +1098,7 @@ export default function useChat(user) {
   return {
     messages: activeMessages,
     stealthMode,
+    stealthFx,
     isLoading,
     streamStage,
     sendMessage,

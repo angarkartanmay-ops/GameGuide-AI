@@ -32,6 +32,7 @@ export default function SiteFooter({ onNavigate, onStart }) {
             <p className="s-foot__head">Project</p>
             <button type="button" className="s-foot__link" onClick={go('about')}>About</button>
             <button type="button" className="s-foot__link" onClick={go('terms')}>Terms &amp; copyright</button>
+            <button type="button" className="s-foot__link" onClick={go('privacy')}>Privacy</button>
             <button type="button" className="s-foot__link" onClick={go('contacts')}>Contact</button>
           </div>
           <div>

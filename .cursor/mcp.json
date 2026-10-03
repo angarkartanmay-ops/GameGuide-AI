@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "hydracept": {
+      "command": "C:\\Users\\angar\\AppData\\Local\\Python\\pythoncore-3.11-64\\python.exe",
+      "args": [
+        "-m",
+        "hydracept",
+        "mcp",
+        "serve",
+        "--workspace",
+        "${workspaceFolder}"
+      ],
+      "env": {
+        "HYDRACEPT_MCP_GENERATION": "0eb3f4e7a5bc",
+        "HYDRACEPT_WORKSPACE": "${workspaceFolder}"
+      }
+    }
+  }
+}

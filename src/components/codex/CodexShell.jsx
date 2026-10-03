@@ -8,6 +8,7 @@ import LoadingScreen from '../LoadingScreen';
 import FeedbackButton from '../FeedbackButton';
 import CodexBackdrop from './CodexBackdrop';
 import ContextPill from './ContextPill';
+import StealthSweep from './StealthSweep';
 import useGameAmbience from '../../hooks/useGameAmbience';
 import { latestSpoilerMeta } from '../../utils/gameContext';
 import '../../styles/codex.css';
@@ -23,7 +24,7 @@ export default function CodexShell({
 }) {
   const {
     messages, isLoading, sendMessage, cancelRequest, redditActive, wikiActive, webActive,
-    priceActive, priceData, SLASH_COMMANDS, stealthMode, streamStage,
+    priceActive, priceData, SLASH_COMMANDS, stealthMode, stealthFx, streamStage,
   } = chat;
   const inputRef = useRef(null);
 
@@ -55,6 +56,7 @@ export default function CodexShell({
     <div className={`codex${stealthMode ? ' is-stealth' : ''}${ambience.hero ? ' has-art' : ''}`} style={style}>
       {showLoader && <LoadingScreen isExiting={exitingLoader} />}
       <CodexBackdrop src={stealthMode ? null : ambience.hero} />
+      {stealthFx && <StealthSweep key={stealthFx.id} dir={stealthFx.dir} />}
 
       <header className="cx-top">
         <button type="button" className="cx-brand" onClick={onHome} aria-label="GameGuide — return to home">
@@ -62,6 +64,7 @@ export default function CodexShell({
           <span className="cx-brand__name">GameGuide</span>
         </button>
         <ContextPill
+          stealth={stealthMode}
           game={ambience.name}
           spoiler={spoiler}
           wiki={wikiActive}
@@ -80,7 +83,12 @@ export default function CodexShell({
           guarantee. */}
       {stealthMode && (
         <div className="cx-stealth" role="status" aria-live="polite">
-          <strong>Stealth</strong> — nothing here is saved, learned or looked up. Run <code>/stealth</code> to leave and discard it.
+          <span className="cx-stealth__rec" aria-hidden="true" />
+          <span className="cx-stealth__kicker">Off the record</span>
+          <span className="cx-stealth__text">Nothing here is saved, learned or logged.</span>
+          <button type="button" className="cx-stealth__leave" onClick={() => ask('/stealth')} disabled={isLoading}>
+            Leave<span className="cx-stealth__leave-hint"> and discard</span>
+          </button>
         </div>
       )}
 

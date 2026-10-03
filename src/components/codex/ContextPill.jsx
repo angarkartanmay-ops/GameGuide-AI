@@ -7,7 +7,7 @@ import { REDDIT_ENABLED } from '../../services/redditScraper';
  * Spoiler Shield is holding back, and which live sources fed the last turn.
  * Not a live region — the research block announces progress.
  */
-function ContextPill({ game, spoiler, wiki, community, web, price }) {
+function ContextPill({ stealth, game, spoiler, wiki, community, web, price }) {
   const shield = spoiler?.active
     ? (spoiler.mode === 'progress' && spoiler.progress
         ? { label: 'Hidden past', value: spoiler.progress }
@@ -24,7 +24,9 @@ function ContextPill({ game, spoiler, wiki, community, web, price }) {
 
   return (
     <div className="cx-context" role="group" aria-label="Chat context">
-      <span className={`cx-context__game${game ? '' : ' is-empty'}`}>{game || 'No game yet'}</span>
+      {stealth
+        ? <span className="cx-context__game is-stealth"><span className="cx-context__eye" aria-hidden="true" />Stealth</span>
+        : <span className={`cx-context__game${game ? '' : ' is-empty'}`}>{game || 'No game yet'}</span>}
       {shield && (
         <>
           <span className="cx-context__sep" aria-hidden="true" />

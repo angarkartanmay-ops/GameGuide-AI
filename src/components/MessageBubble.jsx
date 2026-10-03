@@ -291,7 +291,9 @@ function MessageBubble({ message, question = '', onFollowUpClick, followUpsDisab
   // cut off by Stop, or a command's canned reply.
   const shareable = actions && !streaming && !message.isCommand && !!cleanText?.trim()
     && !message.meta?.error && !message.meta?.partial && !message.meta?.rateLimited;
-  const persona = meta?.persona || null;
+  // The generalist persona is itself named "GameGuide" — without this the
+  // overline read "GameGuide · GameGuide".
+  const persona = meta?.persona && !/^gameguide$/i.test(meta.persona) ? meta.persona : null;
 
   // Spoiler Shield: what it held back, shown under the answer.
   const shield = meta?.spoiler;
