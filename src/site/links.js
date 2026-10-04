@@ -12,6 +12,12 @@ export const LINKS = {
   github: 'https://github.com/angarkartanmay-ops',
   discordInvite: 'https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=277025508352&scope=bot+applications.commands',
   topgg: 'https://top.gg/bot/1499622566472712202?s=0c09d3395142b',
+  // Launch listings. The badge images are served by each platform, so their
+  // listing owner can verify the badge is on the live site.
+  launchbuff: 'https://launchbuff.com/products/gameguide-f9fwfb',
+  launchbuffBadge: 'https://launchbuff.com/badge-featured-dark.svg',
+  productHunt: 'https://www.producthunt.com/products/gameguide-ai?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-gameguide-ai',
+  productHuntBadge: 'https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1268238&theme=dark&t=1791088470703',
 };
 
 export const mailto = (subject) =>
