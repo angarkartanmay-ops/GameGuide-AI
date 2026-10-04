@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "npm:@google/genai";
 import { runPulse } from './pulseEngine.ts';
 import { enrichVisionAttachments, VisionEnrichment } from './visionPipeline.ts';
 import {
@@ -45,7 +44,33 @@ import {
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  // Without this the browser re-sends the CORS preflight on nearly every
+  // message (Chrome's default cache is 5 s), and each preflight boots this
+  // function — measured at 3.4–5.3 s before the real request even started.
+  'Access-Control-Max-Age': '86400',
 };
+
+// The Gemini SDK is a large npm tree. Imported at the top it was evaluated on
+// every cold boot, preflights included. Load it the first time a request
+// actually calls Gemini; callers only use these two methods.
+let geminiSdk: Promise<any> | null = null;
+function lazyGemini(apiKey: string) {
+  let client: any = null;
+  const get = async () => {
+    if (!client) {
+      geminiSdk ??= import('npm:@google/genai');
+      const { GoogleGenAI } = await geminiSdk;
+      client = new GoogleGenAI({ apiKey });
+    }
+    return client;
+  };
+  return {
+    models: {
+      generateContent: async (args: any) => (await get()).models.generateContent(args),
+      generateContentStream: async (args: any) => (await get()).models.generateContentStream(args),
+    },
+  };
+}
 
 function jsonResponse(payload: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(payload), {
@@ -332,7 +357,7 @@ function buildVisionPrompt(profile: QueryProfile): string {
 
   // Exact match
   for (const [k, v] of Object.entries(HUD_KNOWLEDGE)) {
-    if (game.includes(k) || k.includes(game)) {
+    if (game && (hasWords(game, k) || hasWords(k, game))) {
       hudBlock = v;
       break;
     }
@@ -488,7 +513,9 @@ const INTENT_PATTERNS: Array<{ intent: Intent; persona: keyof typeof PERSONAS; r
   { intent: 'speedrun', persona: 'speedrunner', rx: /\b(speedrun|world record|wr|any%|100%|glitchless|skip|frame perfect|tas|fastest|optim(al|ised|ized) route|sub.?\d+|splits?)\b/i },
   { intent: 'meta', persona: 'metaanalyst', rx: /\b(meta|tier list|current patch|nerf|buff|best (champ|hero|legend|operator|character|class|deck|loadout) (right now|this season|now|currently|2024|2025|2026)|pro play|tournament|s tier|dominat|broken (right now|currently)|patch \d|season \d)\b/i },
   { intent: 'build', persona: 'coach', rx: /\b(best build|optim(al|ised|ized) build|loadout|gear setup|stat priority|talent tree|skill tree|gem setup|rune page|aspect|paragon|paragon board|build guide|gear progression|min.?max)\b/i },
-  { intent: 'lore', persona: 'loremaster', rx: /\b(lore|story|backstory|canon|timeline|who is|what happened to|origin of|history of|mythology|prophecy|connection between|relationship between|family of|ending explained|secret ending|true ending|hidden meaning|symbol(ism)?|easter egg)\b/i },
+// No bare "who is": "who is the boss of Elysium?" is a fact question, and the
+// lore persona answered it with a story recap before getting to the boss.
+  { intent: 'lore', persona: 'loremaster', rx: /\b(lore|story|backstory|canon|timeline|what happened to|origin of|history of|mythology|prophecy|connection between|relationship between|family of|ending explained|secret ending|true ending|hidden meaning|symbol(ism)?|easter egg)\b/i },
   { intent: 'review', persona: 'critic', rx: /\b(should i (buy|get|play)|is .* worth it|is .* good|review|opinion on|thoughts on|what do you think of|rating|score)\b/i },
   { intent: 'comparison', persona: 'coach', rx: /\b(vs|versus|compared? to|or |which is better|difference between|better than)\b/i },
 ];
@@ -591,7 +618,9 @@ function extendWithInstallment(text: string, base: string): string {
 // Crucially the leading token may start with a DIGIT: 007, 2K25, 7 Days to
 // Die, 11 Bit. Requiring [A-Z] silently excluded that whole class of titles.
 const TITLE_TOKEN = String.raw`[A-Z0-9][\w'’&:.\-]*`;
-const TITLE_RUN = String.raw`${TITLE_TOKEN}(?:\s+(?:${TITLE_TOKEN}|of|the|and|to|de|la|no|ni|wa|&|:|-)){0,6}`;
+// The (?![\w'’]) stops a connector matching the start of a longer word: "la"
+// inside "latest" turned "Valorant's latest patch" into the game "valorant's la".
+const TITLE_RUN = String.raw`${TITLE_TOKEN}(?:\s+(?:${TITLE_TOKEN}|(?:of|the|and|to|de|la|no|ni|wa)(?![\w'’])|&|:|-)){0,6}`;
 
 // Only real quotation marks delimit a title. The straight apostrophe is
 // excluded on purpose: in English it is overwhelmingly a contraction, and
@@ -605,13 +634,15 @@ const BARE_TITLE_RX = new RegExp(String.raw`\b(${TITLE_RUN})`);
 
 // Words that are capitalised in normal prose but are never a game title on
 // their own. Without this, "Is The Game Good" yields "The Game".
-const STOP_FIRST = /^(I|I'?m|The|My|A|An|It|Its|This|That|These|Those|You|Your|We|They|He|She|What|When|Where|Why|How|Who|Which|Is|Are|Was|Were|Do|Does|Did|Can|Could|Should|Would|Will|Yeah|Yes|No|Ok|Okay|Thanks|Hey|Hi|Hello|PC|PS4|PS5|PS6|Xbox|Steam|Windows|Linux|Mac|Reddit|Discord|YouTube|Google|Twitch|Nvidia|AMD|Intel|GPU|CPU|RAM|FPS|DLC|AI)$/i;
+const STOP_FIRST = /^(I|I'?m|In|On|At|For|From|About|With|To|And|Or|But|So|If|Also|Any|Best|Top|Tips|Help|Please|The|My|A|An|It|Its|This|That|These|Those|You|Your|We|They|He|She|What|When|Where|Why|How|Who|Which|Is|Are|Was|Were|Do|Does|Did|Can|Could|Should|Would|Will|Yeah|Yes|No|Ok|Okay|Thanks|Hey|Hi|Hello|PC|PS4|PS5|PS6|Xbox|Steam|Windows|Linux|Mac|Reddit|Discord|YouTube|Google|Twitch|Nvidia|AMD|Intel|GPU|CPU|RAM|FPS|DLC|AI)$/i;
 
 function cleanTitle(raw: string): string | null {
   let cand = raw.trim()
     .replace(/[.,!?;:]+$/, '')
     // Drop trailing filler that gets swept up by the token run.
     .replace(/\s+(?:game|games|please|thanks|now|yet|too)$/i, '')
+    // "Valorant's latest patch" names Valorant, not "Valorant's".
+    .replace(/['’]s$/i, '')
     .trim();
   if (cand.length < 3 || cand.length > 60) return null;
 
@@ -1330,11 +1361,20 @@ function gameToSteamAppId(game: string): number | null {
   if (STEAM_APPIDS[lower] !== undefined) {
     return STEAM_APPIDS[lower] || null;
   }
-  // Partial match
-  for (const [k, v] of Object.entries(STEAM_APPIDS)) {
-    if (lower.includes(k) || k.includes(lower)) return v || null;
+  // Partial match, whole words only and longest key first. Plain substring
+  // matching sent ARK's news into Dark Souls answers ("d-ark souls").
+  const keys = Object.keys(STEAM_APPIDS).sort((a, b) => b.length - a.length);
+  for (const k of keys) {
+    if (hasWords(lower, k) || hasWords(k, lower)) return STEAM_APPIDS[k] || null;
   }
   return null;
+}
+
+/** True when `needle` appears in `hay` as whole words ("ow" is not in "hollow"). */
+function hasWords(hay: string, needle: string): boolean {
+  if (!needle.trim()) return false;
+  const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9])${esc}($|[^a-z0-9])`, 'i').test(hay);
 }
 
 // ─── Wikipedia REST API ────────────────────────────────────────────────────
@@ -1765,6 +1805,21 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
   return results;
 }
 
+// Retrieval deadlines (ms). Measured: the full fan-out takes 8-9 s at worst,
+// but Wikipedia, Steam and the paid search APIs land in 1-3 s.
+const PULSE_BUDGET_MS = 4500;
+const OMNI_BUDGET_MS = 4000;
+const OMNI_BUDGET_DEEP_MS = 6000;
+const OMNI_CONTEXT_CHARS = 3500;
+
+/** Resolve with `fallback` if `p` has not settled within `ms`. */
+function withDeadline<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>(resolve => {
+    const t = setTimeout(() => resolve(fallback), ms);
+    p.then(v => { clearTimeout(t); resolve(v); }, () => { clearTimeout(t); resolve(fallback); });
+  });
+}
+
 // Sort by authority score desc, dedup by source, hard-cap total chars.
 function rankAndCapContext(blocks: ScrapeBlock[], maxChars: number): ScrapeBlock[] {
   const seen = new Set<string>();
@@ -1902,10 +1957,24 @@ function omniBlocksToContextStrings(blocks: ScrapeBlock[]): string[] {
 //                Gemini held in reserve as the final safety net.
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Text answers run warm (0.72) for voice. A missables list is a factual
-// checklist where an invented reward is the failure, so it runs cooler.
+// Text answers used to run at 0.72 for voice; at that heat the free models
+// filled gaps with plausible inventions (item names, boss order). 0.5 keeps
+// the voice and cuts the guessing. A missables list is a factual checklist
+// where an invented reward is the failure, so it runs cooler still.
 function textTemperature(rawPrompt?: string): number {
-  return isMissablesQuestion(rawPrompt || '') ? 0.35 : 0.72;
+  return isMissablesQuestion(rawPrompt || '') ? 0.3 : 0.5;
+}
+
+// Output budget by question size. Groq's free tier counts max_tokens against
+// its tokens-per-minute ceiling up front, so asking for 2400 on every turn
+// pushed ordinary requests over it and got them rejected (HTTP 413).
+function answerTokens(complexity: 'simple' | 'medium' | 'deep'): number {
+  return complexity === 'simple' ? 1100 : complexity === 'medium' ? 1500 : 2000;
+}
+
+/** "Request too large" for the provider's tokens-per-minute ceiling: about this request, not the model. */
+function isTooLarge(raw: string): boolean {
+  return /HTTP_413|request too large|tokens per minute|TPM|context_length|maximum context/i.test(raw);
 }
 
 async function runGeminiAttempt(opts: {
@@ -1918,6 +1987,7 @@ async function runGeminiAttempt(opts: {
   errors: string[];
   meshState: MeshStateT;
   rawPrompt?: string;
+  complexity?: 'simple' | 'medium' | 'deep';
 }): Promise<MeshResult | null> {
   if (!opts.geminiAi) return null;
 
@@ -1946,7 +2016,7 @@ async function runGeminiAttempt(opts: {
             // tolerate creative padding.
             ...(opts.hasVision
               ? { temperature: 0.15, maxOutputTokens: 3500 }
-              : { temperature: textTemperature(opts.rawPrompt), maxOutputTokens: 2400 }),
+              : { temperature: textTemperature(opts.rawPrompt), maxOutputTokens: answerTokens(opts.complexity ?? 'medium') }),
           },
         });
         if (result?.text) {
@@ -2002,6 +2072,7 @@ async function runPlannedMesh(opts: {
   hasVision: boolean;
   errors: string[];
   rawPrompt?: string;
+  complexity?: 'simple' | 'medium' | 'deep';
 }): Promise<MeshResult | null> {
   const deadProviders = new Set<string>();
 
@@ -2020,7 +2091,10 @@ async function runPlannedMesh(opts: {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         console.log(`[MESH] ${provider.name} → ${model.id} (${reason}, attempt ${attempt})`);
-        const text = await callOpenAICompat(provider, model.id, messages, { temperature: textTemperature(opts.rawPrompt) });
+        const text = await callOpenAICompat(provider, model.id, messages, {
+          temperature: textTemperature(opts.rawPrompt),
+          maxTokens: opts.hasVision ? 3500 : answerTokens(opts.complexity ?? 'medium'),
+        });
         console.log(`[MESH] ✓ ${provider.name}/${model.id}`);
         reportProvider(provider.name, model.id, true);
         recordUsage(provider.name, model.id);
@@ -2029,6 +2103,8 @@ async function runPlannedMesh(opts: {
         const raw = err.message || String(err);
         opts.errors.push(`${provider.name}/${model.id}#${attempt}: ${raw.slice(0, 120)}`);
         console.warn(`[MESH] ✗ ${provider.name}/${model.id} (try ${attempt}): ${raw.slice(0, 200)}`);
+        // Too large for this provider's per-minute ceiling — see runNeuralMeshStreaming.
+        if (isTooLarge(raw)) { deadProviders.add(provider.name); break; }
 
         const status = /HTTP_(\d{3})/.exec(raw)?.[1];
         const code = status ? parseInt(status, 10) : undefined;
@@ -2038,7 +2114,7 @@ async function runPlannedMesh(opts: {
 
         // A bad key or a suspended account kills the whole provider, not just
         // this model — stop wasting attempts on its siblings.
-        if (isProviderFatal(raw)) {
+        if (isProviderFatal(raw) || code === 402) {
           deadProviders.add(provider.name);
           break;
         }
@@ -2119,6 +2195,7 @@ async function tryAgentic(opts: {
         // Tool calls happen server-side before the first token, so this needs
         // considerably more headroom than a plain completion.
         timeoutMs: 60_000,
+        firstTokenMs: 25_000,
         extraHeaders: provider.extraHeaders,
         onDelta: opts.onDelta,
         onFirstToken: () => opts.onCommit?.(provider.name, modelId),
@@ -2200,8 +2277,22 @@ async function runNeuralMeshStreaming(opts: {
   onCommit: (provider: string, model: string) => void;
   /** Clear whatever this turn has shown so far (a cut answer). */
   onReset?: () => void;
+  /** Tell the reader this turn is taking the slow, careful path. */
+  onDeep?: () => void;
 }): Promise<MeshResult> {
   const errors: string[] = [];
+  // "Thinking in depth" — said once, either because the route is known to be
+  // slow (deep question, verified missables list, live search) or because
+  // nothing has started streaming after a few seconds of fallbacks.
+  let saidDeep = false;
+  const sayDeep = () => { if (!saidDeep) { saidDeep = true; opts.onDeep?.(); } };
+  let committed = false;
+  const deepTimer = setTimeout(() => { if (!committed) sayDeep(); }, 6000);
+  const onCommit = (provider: string, model: string) => {
+    committed = true;
+    clearTimeout(deepTimer);
+    opts.onCommit(provider, model);
+  };
   const need = {
     vision: opts.profile.hasVision,
     complexity: opts.profile.complexity,
@@ -2224,7 +2315,7 @@ async function runNeuralMeshStreaming(opts: {
   };
   const visionCfg = need.vision
     ? { temperature: 0.15, maxTokens: 3500 }
-    : { temperature: textTemperature(opts.rawPrompt), maxTokens: 2400 };
+    : { temperature: textTemperature(opts.rawPrompt), maxTokens: answerTokens(need.complexity) };
 
   const tryGemini = async (): Promise<MeshResult | null> => {
     if (!opts.geminiAi) return null;
@@ -2239,12 +2330,11 @@ async function runNeuralMeshStreaming(opts: {
     const contents = buildGeminiContents(opts.chatHistory, opts.userPrompt, opts.attachments);
     for (const model of models) {
       try {
-        let committed = false;
         const text = await streamGemini(opts.geminiAi, model, contents, opts.systemInstruction, {
           temperature: visionCfg.temperature,
           maxOutputTokens: visionCfg.maxTokens,
           onDelta,
-          onFirstToken: () => { committed = true; opts.onCommit('Gemini', model); },
+          onFirstToken: () => onCommit('Gemini', model),
         });
         reportProvider('Gemini', model, true);
         recordUsage('Gemini', model);
@@ -2283,9 +2373,10 @@ async function runNeuralMeshStreaming(opts: {
           maxTokens: visionCfg.maxTokens,
           temperature: visionCfg.temperature,
           timeoutMs: provider.timeoutMs + 20_000,   // streams legitimately run longer
+          firstTokenMs: 15_000,
           extraHeaders: provider.extraHeaders,
           onDelta,
-          onFirstToken: () => opts.onCommit(provider.name, model.id),
+          onFirstToken: () => onCommit(provider.name, model.id),
         });
         reportProvider(provider.name, model.id, true);
         recordUsage(provider.name, model.id);
@@ -2295,11 +2386,16 @@ async function runNeuralMeshStreaming(opts: {
         const raw = e.message || String(e);
         errors.push(`${provider.name}/${model.id}: ${raw.slice(0, 120)}`);
         console.warn(`[MESH-STREAM] ✗ ${provider.name}/${model.id}: ${raw.slice(0, 180)}`);
+        // Too large for this provider's per-minute ceiling: the model is
+        // fine, this request is not — so no cooldown, but its siblings share
+        // the same ceiling and would refuse it too.
+        if (isTooLarge(raw)) { dead.add(provider.name); continue; }
         const status = /HTTP_(\d{3})/.exec(raw)?.[1];
         reportProvider(provider.name, model.id, false, status ? parseInt(status, 10) : undefined, raw);
         recordUsage(provider.name, model.id, 0, 0, true);
         noteLocalFailure(provider.name, model.id);
-        if (isProviderFatal(raw)) dead.add(provider.name);
+        // 402: the account needs payment — every model on it will say the same.
+        if (isProviderFatal(raw) || status === '402') dead.add(provider.name);
       }
     }
     return null;
@@ -2312,9 +2408,12 @@ async function runNeuralMeshStreaming(opts: {
     if (!paid.cfg) return null;
     clearShown();
     const r = await tryHydracept(paid.cfg, { ...opts, errors, why });
-    if (r) { opts.onCommit(r.provider, r.model); onDelta(r.text); }
+    if (r) { onCommit(r.provider, r.model); onDelta(r.text); }
     return r;
   };
+  // Known-slow routes announce themselves straight away.
+  if (paid.leads || (wantsAgentic(need) && Date.now() >= agenticRestUntil) || need.complexity === 'deep') sayDeep();
+  try {
   if (paid.leads) {
     const first = await viaHydracept('missables');
     if (first) return first;
@@ -2329,7 +2428,7 @@ async function runNeuralMeshStreaming(opts: {
     need,
     errors,
     onDelta,
-    onCommit: opts.onCommit,
+    onCommit,
   });
   if (agentic) return agentic;
   clearShown();   // the agentic model may have been cut part-way, too
@@ -2352,6 +2451,9 @@ async function runNeuralMeshStreaming(opts: {
 *This answer was cut off before the end — ask again for the rest.*` };
   }
   throw new Error(`MESH_EXHAUSTED:${errors.join(' | ')}`);
+  } finally {
+    clearTimeout(deepTimer);
+  }
 }
 
 async function runNeuralMesh(opts: {
@@ -2401,14 +2503,14 @@ async function runNeuralMesh(opts: {
   const geminiLeads = geminiFirst(need, opts.meshState, route);
 
   if (geminiLeads) {
-    const g = await runGeminiAttempt({ ...opts, hasVision: need.vision, errors });
+    const g = await runGeminiAttempt({ ...opts, hasVision: need.vision, errors, complexity: need.complexity });
     if (g) return g;
-    const m = await runPlannedMesh({ route, ...opts, hasVision: need.vision, errors });
+    const m = await runPlannedMesh({ route, ...opts, hasVision: need.vision, errors, complexity: need.complexity });
     if (m) return m;
   } else {
-    const m = await runPlannedMesh({ route, ...opts, hasVision: need.vision, errors });
+    const m = await runPlannedMesh({ route, ...opts, hasVision: need.vision, errors, complexity: need.complexity });
     if (m) return m;
-    const g = await runGeminiAttempt({ ...opts, hasVision: need.vision, errors });
+    const g = await runGeminiAttempt({ ...opts, hasVision: need.vision, errors, complexity: need.complexity });
     if (g) return g;
   }
 
@@ -2840,7 +2942,7 @@ async function runChatPipeline(
     pruneCache();
 
     const geminiKey = Deno.env.get('GOOGLE_API_KEY');
-    const geminiAi = geminiKey ? new GoogleGenAI({ apiKey: geminiKey }) : null;
+    const geminiAi = geminiKey ? lazyGemini(geminiKey) : null;
 
     // ── Image generation path (Gemini-only) ──
     if (wantsImage && geminiAi) {
@@ -2946,10 +3048,14 @@ async function runChatPipeline(
     // gets fresh facts to fuse with its training-side reasoning.
     const todayISO = new Date().toISOString().slice(0, 10);
     stage('searching', resolvedGame || undefined);
-    const pulse = await runPulse(prompt, resolvedGame, todayISO);
-    if (pulse.fired) {
-      console.log(`[PULSE] fired (${pulse.diagnostics.mode}) — sources=${pulse.sourcesUsed.join(',')} blocks=${pulse.diagnostics.blocksUsed}/${pulse.diagnostics.blocksFound}`);
-    }
+    // PULSE and the omni-scraper used to run one after the other (~2.5 s, then
+    // up to 8 s). They are independent, so they now run side by side, each
+    // under a deadline: whatever has landed by then is used, the rest dropped.
+    const pulsePromise = withDeadline(
+      runPulse(prompt, resolvedGame, todayISO),
+      PULSE_BUDGET_MS,
+      { fired: false, contextBlock: '', sourcesUsed: [], diagnostics: { reason: 'deadline' } } as unknown as Awaited<ReturnType<typeof runPulse>>,
+    );
 
     // ── STAGE 2: OMNI-SCRAPER (server-side, parallel, 8s ceiling) ──────
     // A ceiling, not a delay: the fetches are raced against it and return the
@@ -3023,14 +3129,24 @@ async function runChatPipeline(
       // not spend the scarcer flagship quota.
       if (shield.risk || shield.mode === 'unknown') profile.complexity = 'deep';
     }
-    const omniBlocks = shouldScrape
+    // Deep turns may spend a little longer gathering; everything else answers
+    // sooner from whatever the fast sources returned.
+    const omniBudget = profile.complexity === 'deep' ? OMNI_BUDGET_DEEP_MS : OMNI_BUDGET_MS;
+    const omniPromise: Promise<ScrapeBlock[]> = shouldScrape
       ? (subjects.length
-          ? (await Promise.all(subjects.map(s => omniScrape(s, prompt, 8000)))).flat()
-          : await omniScrape(null, prompt, 8000))
-      : [];
+          ? Promise.all(subjects.map(s => omniScrape(s, prompt, omniBudget))).then(r => r.flat())
+          : omniScrape(null, prompt, omniBudget))
+      : Promise.resolve([]);
+    const [pulse, omniBlocks] = await Promise.all([pulsePromise, omniPromise]);
+    if (pulse.fired) {
+      console.log(`[PULSE] fired (${pulse.diagnostics.mode}) — sources=${pulse.sourcesUsed.join(',')} blocks=${pulse.diagnostics.blocksUsed}/${pulse.diagnostics.blocksFound}`);
+    }
     // Cap scales with how many games are in play so a second title cannot be
-    // squeezed out of the context window by the first one's research.
-    const rankedOmni = rankAndCapContext(omniBlocks, subjects.length > 1 ? 9000 : 6000);
+    // squeezed out of the context window by the first one's research. Kept
+    // small on purpose: the whole request has to fit Groq's free-tier
+    // tokens-per-minute ceiling, or every fast model rejects it (HTTP 413)
+    // and the turn falls through to the slow tail of the mesh.
+    const rankedOmni = rankAndCapContext(omniBlocks, subjects.length > 1 ? 6000 : OMNI_CONTEXT_CHARS);
     const omniContextStrings = omniBlocksToContextStrings(rankedOmni);
 
     // ── Build augmented prompt with all live context blocks + game card ──
@@ -3144,6 +3260,15 @@ async function runChatPipeline(
 
     // Spoiler Shield reminder goes LAST — after the INTEL, which is otherwise
     // the final thing the model reads and is full of late-game names.
+    // Specific facts — names, numbers, locations, rewards, boss order — are
+    // where a confident wrong answer does the most harm. One short rule, read
+    // last, instead of the old ACCURACY LOCK (which was appended after the
+    // prompt had already been built and so never reached any model).
+    if (!emotionalTurn) {
+      contextBlocks.push(`=== ACCURACY ===
+Answer from the INTEL above wherever it covers the question. For any specific name, number, location, reward or step that neither the INTEL nor well-established knowledge confirms, say you are not sure instead of guessing. Never invent one.
+=== END ACCURACY ===`);
+    }
     const shieldReminder = buildShieldReminder(shield, prompt);
     if (shieldReminder) contextBlocks.push(shieldReminder);
 
@@ -3163,17 +3288,6 @@ async function runChatPipeline(
       ...(pulse.fired && pulse.sourcesUsed.some(s => s.startsWith('official:')) ? ['official-api'] : []),
       ...(pulse.fired && pulse.sourcesUsed.some(s => s.startsWith('web:')) ? ['web-search'] : []),
     ];
-
-    // ── ACCURACY LOCK: when high-authority sources confirmed a game, append a
-    // hard final reminder so the model can't override them with training bias.
-    // Suppressed while the user is correcting us: the lock's "do NOT suggest it
-    // is a different game" clause would otherwise override the very correction
-    // the user just made.
-    const hasHighAuthority = rankedOmni.some(b => b.score >= 8);
-    if (hasHighAuthority && resolvedGame && !userIsCorrecting) {
-      const lockMsg = `\n\n=== 🔒 ACCURACY LOCK ===\nThe game **${resolvedGame}** has been confirmed by ${rankedOmni.filter(b => b.score >= 8).map(b => b.source).join(' + ')} (authority score ≥ 8). You MUST treat this game identification as ground truth. Do NOT suggest it is a different game. Do NOT deny features that appear in the live blocks above. If your training data conflicts with the live data, the live data wins.\n=== END ACCURACY LOCK ===`;
-      contextBlocks.push(lockMsg);
-    }
 
     // ── LAYER 5 (early): cache check ──
     const cKey = await cacheKey(prompt, boundedHistory, redditContext, wikiContext, priceContext, cleanAttachments, personalization);
@@ -3254,6 +3368,7 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
           ...meshArgs,
           onDelta: (t) => sse.send({ type: 'delta', text: t }),
           onReset: () => sse.send({ type: 'reset' }),
+          onDeep: () => stage('deep'),
           onCommit: (provider, model) => {
             // Tells the client generation actually started, so it can drop the
             // retrieval spinner and begin rendering.

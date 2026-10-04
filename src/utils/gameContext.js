@@ -9,8 +9,13 @@ export const STAGE_COPY = {
   'reading-image': 'Reading your screenshot…',
   'identifying-game': 'Identifying the game…',
   'generating': 'Thinking…',
+  'deep': 'Thinking in depth…',
   'streaming': 'Writing…',
 };
+
+// Past this many seconds with no answer, the wait is named for what it is
+// even if the server never said so (a slow fallback, a cold start).
+export const DEEP_AFTER_SECONDS = 6;
 
 /**
  * useChat encodes an optional detail as "stage:detail". Split on the FIRST

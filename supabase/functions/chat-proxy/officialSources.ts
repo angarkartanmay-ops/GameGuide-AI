@@ -138,9 +138,13 @@ export function findOfficial(game: string | null): OfficialSource | null {
     if (src.game === lower) return src;
     if (src.aliases.includes(lower)) return src;
   }
-  // Loose containment match for things like "clash royale season 83"
+  // Loose containment match for things like "clash royale season 83" — on
+  // whole words only. Plain substring matching read "hollow knight" as
+  // Overwatch (alias "ow") and fed Overwatch news into Hollow Knight answers.
+  const word = (needle: string) =>
+    new RegExp(`(^|[^a-z0-9])${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9])`).test(lower);
   for (const src of OFFICIAL_SOURCES) {
-    if (lower.includes(src.game) || src.aliases.some(a => lower.includes(a))) return src;
+    if (word(src.game) || src.aliases.some(word)) return src;
   }
   return null;
 }

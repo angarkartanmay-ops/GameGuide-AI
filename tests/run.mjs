@@ -41,6 +41,7 @@ const SUITES = [
   ['search-health', 'search-health.test.ts'],  // /health must not relay vendor error text
   ['stream-cut',    'stream-cut.test.ts'],     // a model cut off part-way is never sent as a whole answer
   ['hydracept',     'hydracept.test.ts'],      // paid last-resort model: off by default, server-side key only
+  ['official',      'official-sources.test.ts'], // official news feed matches whole words ("ow" is not in "hollow")
   ['billing',       'billing.test.mjs'],       // Stripe period-end + checkout ref linking
   ['discord-launch','discord-launch.test.mjs'],// invite perms, pings, intents, command wiring
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres
