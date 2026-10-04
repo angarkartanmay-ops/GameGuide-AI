@@ -11,6 +11,27 @@ function Ext({ href, children }) {
   );
 }
 
+/** The "Featured on" badges the launch platforms ask for, kept at their native sizes. */
+function Featured() {
+  return (
+    <div className="s-foot__featured">
+      <p className="s-foot__head">Featured on</p>
+      <div className="s-foot__badges">
+        <a href={LINKS.launchbuff} target="_blank" rel="noopener noreferrer" title="Featured on LaunchBuff">
+          <img src={LINKS.launchbuffBadge} alt="Featured on LaunchBuff" width="256" height="80" loading="lazy" />
+        </a>
+        <a href={LINKS.productHunt} target="_blank" rel="noopener noreferrer">
+          <img
+            src={LINKS.productHuntBadge}
+            alt="GameGuide-AI - Ask any game anything, minus the spoilers | Product Hunt"
+            width="250" height="54" loading="lazy"
+          />
+        </a>
+      </div>
+    </div>
+  );
+}
+
 /** Shared footer for the landing and the info pages. */
 export default function SiteFooter({ onNavigate, onStart }) {
   const go = (view) => () => onNavigate?.(view);
@@ -25,6 +46,7 @@ export default function SiteFooter({ onNavigate, onStart }) {
           {onStart && (
             <button type="button" className="s-btn s-btn--primary s-btn--sm" onClick={onStart}>Press Start</button>
           )}
+          <Featured />
         </div>
 
         <nav className="s-foot__cols" aria-label="Footer">

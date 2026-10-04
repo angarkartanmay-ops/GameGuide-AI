@@ -863,6 +863,15 @@ html[data-low-power] .site .s-livecount__dot { animation: none; }
 .s-foot__inner { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr); gap: 48px; }
 .s-foot__logo { display: flex; align-items: center; gap: 11px; margin: 0 0 12px; font-weight: 600; font-size: 18px; }
 .s-foot__tag { max-width: 36ch; margin: 0 0 22px; font-size: 14.5px; line-height: 1.6; color: var(--s-muted); }
+.s-foot__featured { margin-top: 30px; }
+.s-foot__badges { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; }
+.s-foot__badges a {
+  display: block; line-height: 0; border-radius: 10px; opacity: 0.88;
+  outline-offset: 4px; transition: opacity 0.2s, transform 0.2s;
+}
+.s-foot__badges a:hover, .s-foot__badges a:focus-visible { opacity: 1; transform: translateY(-2px); }
+.s-foot__badges img { display: block; max-width: 100%; height: auto; }
+@media (prefers-reduced-motion: reduce) { .s-foot__badges a { transition: none; } .s-foot__badges a:hover { transform: none; } }
 .s-foot__cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
 .s-foot__head { margin: 0 0 8px; font: 500 10.5px var(--s-mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--s-muted); }
 .s-foot__link {

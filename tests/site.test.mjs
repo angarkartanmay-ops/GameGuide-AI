@@ -103,6 +103,10 @@ check('every line belongs to a real milestone', SHIELD_LINES.every(l => l.stage 
 
 // ── Links ──────────────────────────────────────────────────────────────────
 check('external links are https', ['linkedin', 'github', 'discordInvite', 'topgg'].every(k => LINKS[k].startsWith('https://')));
+check('launch badge links are https and unmodified',
+  LINKS.launchbuff === 'https://launchbuff.com/products/gameguide-f9fwfb'
+  && /^https:\/\/www\.producthunt\.com\/products\/gameguide-ai\?/.test(LINKS.productHunt)
+  && LINKS.launchbuffBadge.startsWith('https://launchbuff.com/') && LINKS.productHuntBadge.startsWith('https://api.producthunt.com/'));
 check('mailto without a subject', mailto() === `mailto:${LINKS.email}`);
 check('mailto encodes the subject', mailto('Bug & idea') === `mailto:${LINKS.email}?subject=Bug%20%26%20idea`);
 
