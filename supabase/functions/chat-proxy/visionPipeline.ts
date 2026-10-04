@@ -23,7 +23,14 @@
 //  drop by an estimated 55–70%.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { decode, Image } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
+// imagescript compiles a WASM decoder when it loads. Only screenshot turns
+// need it, so it is loaded on first use instead of on every cold boot.
+type Image = any;
+let imagescript: Promise<any> | null = null;
+const decode = async (bytes: Uint8Array) => {
+  imagescript ??= import("https://deno.land/x/imagescript@1.2.17/mod.ts");
+  return (await imagescript).decode(bytes);
+};
 
 export interface VisionAttachment {
   mimeType: string;

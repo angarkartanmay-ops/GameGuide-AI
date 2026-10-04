@@ -117,10 +117,17 @@ export async function streamOpenAICompat(
     onDelta: (text: string) => void;
     onFirstToken?: () => void;
     signal?: AbortSignal;
+    /**
+     * Give up if nothing visible has arrived by then. A free model stuck in a
+     * provider queue otherwise holds the turn for the whole timeoutMs (measured
+     * at 80 s on OpenRouter) before the next model gets a chance.
+     */
+    firstTokenMs?: number;
   },
 ): Promise<string> {
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 45_000);
+  const firstTokenTimer = opts.firstTokenMs ? setTimeout(() => ctrl.abort(), opts.firstTokenMs) : null;
   opts.signal?.addEventListener('abort', () => ctrl.abort(), { once: true });
   // Outside the try so the catch can tell a failure before the first token
   // (swap models) from one after it (a cut — the client must be reset).
@@ -189,7 +196,11 @@ export async function streamOpenAICompat(
                 // Only count a token as "first" once something real is shown —
                 // otherwise the UI drops its progress indicator while the model
                 // is still silently thinking.
-                if (!sawToken) { sawToken = true; opts.onFirstToken?.(); }
+                if (!sawToken) {
+                  sawToken = true;
+                  if (firstTokenTimer) clearTimeout(firstTokenTimer);
+                  opts.onFirstToken?.();
+                }
                 opts.onDelta(visible);
               }
             }
@@ -218,6 +229,7 @@ export async function streamOpenAICompat(
     throw e;
   } finally {
     clearTimeout(timeout);
+    if (firstTokenTimer) clearTimeout(firstTokenTimer);
   }
 }
 

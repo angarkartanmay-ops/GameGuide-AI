@@ -103,6 +103,10 @@ const MAX_HISTORY_DISPLAY = 50;
 // training. Discord does not stream, so the whole pipeline must fit here.
 const PROXY_TIMEOUT_MS = 90_000;
 const TYPING_PULSE_MS = 8_000;
+// Past this with no answer, say the bot is thinking in depth instead of
+// leaving only the typing dots (verified missables lists take ~15 s).
+const DEEP_AFTER_MS = 6_000;
+const DEEP_NOTE = '🧠 Thinking in depth — checking the details so the answer is right…';
 
 // Vote rewards grant CREDITS, never a tier — see entitlements.grantBonusCredits
 // for why the old "12h of Pro per vote" was a hole rather than a perk.
@@ -635,6 +639,27 @@ async function runChatRequest({ userId, guildId, prompt, attachments, replyTarge
     typingTimer = setInterval(() => channel.sendTyping().catch(() => {}), TYPING_PULSE_MS);
   }
 
+  // A slow turn says so: a deferred slash command gets its "thinking…" line
+  // replaced; an @-mention gets a short note that is removed once the answer
+  // lands. The answer always waits for this write, so the note can never
+  // overwrite it.
+  let answered = false;
+  let deepNote = null;
+  let deepWrite = Promise.resolve();
+  const deepTimer = setTimeout(() => {
+    if (answered) return;
+    deepWrite = (async () => {
+      if (replyTarget.editReply) await replyTarget.editReply(DEEP_NOTE);
+      else if (replyTarget.reply) deepNote = await replyTarget.reply({ content: DEEP_NOTE, allowedMentions: { parse: [], repliedUser: false } });
+    })().catch(() => {});
+  }, DEEP_AFTER_MS);
+  const settleDeepNote = async () => {
+    answered = true;
+    clearTimeout(deepTimer);
+    await deepWrite;
+    if (deepNote) { await deepNote.delete().catch(() => {}); deepNote = null; }
+  };
+
   try {
     // Price is opt-in, not "opt-out to never": only messages that plausibly
     // ask about buying, cost, or a discount pay for a CheapShark round trip
@@ -714,14 +739,17 @@ async function runChatRequest({ userId, guildId, prompt, attachments, replyTarge
         name: `gameguide-${Date.now()}-${i}.${(img.mimeType.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '')}`,
       }));
 
+    await settleDeepNote();
     await sendLongResponse(replyTarget, decorated, footer, files);
   } catch (err) {
     console.error(`[chat-proxy] user=${userId}:`, err.message);
+    await settleDeepNote();
     const friendly = userFacingError(err);
     if (replyTarget.editReply) await replyTarget.editReply(friendly).catch(() => {});
     else await replyTarget.reply(friendly).catch(() => {});
   } finally {
     if (typingTimer) clearInterval(typingTimer);
+    clearTimeout(deepTimer);
   }
 }
 

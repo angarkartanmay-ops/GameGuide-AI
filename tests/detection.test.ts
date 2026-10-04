@@ -27,6 +27,12 @@ const cases: Array<[string, string | null]> = [
   // Must not fire on platform / vendor nouns.
   ["I'm playing on PC", null],
   ['this crashes for me', null],
+
+  // A sentence-initial preposition is not part of the title: "In Hollow
+  // Knight" was researched as the game "in hollow knight".
+  ['In Hollow Knight, which charm makes you heal faster?', 'hollow knight'],
+  // Nor is a possessive.
+  ["What changed in Valorant's latest patch?", 'valorant'],
 ];
 
 let pass = 0, fail = 0;

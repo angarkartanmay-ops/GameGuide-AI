@@ -506,6 +506,13 @@ html[data-vt^="stealth"] .codex { transition: none; }
   margin: 18px 0 0; font-family: var(--cx-display); font-weight: 400;
   font-size: clamp(21px, 2.6vw, 26px); line-height: 1.25; letter-spacing: -0.01em; color: var(--cx-ink);
 }
+.cx-research__clock {
+  font-family: var(--cx-mono, 'Geist Mono', ui-monospace, monospace); font-size: 11px;
+  letter-spacing: 0.08em; color: var(--cx-muted); font-variant-numeric: tabular-nums;
+}
+.cx-research__note {
+  margin: 8px 0 0; font-size: 14.5px; line-height: 1.55; color: var(--cx-muted); max-width: 52ch;
+}
 .cx-skeleton { margin-top: 22px; display: flex; flex-direction: column; gap: 12px; }
 .cx-skeleton span {
   display: block; height: 12px; border-radius: 6px;

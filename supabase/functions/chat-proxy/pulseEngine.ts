@@ -142,7 +142,9 @@ export async function runPulse(
 
   // ── Stage 3: Rank + compact ──────────────────────────────────────────
   const ranked = rankBlocks(blocks);
-  const top = topNCompact(ranked, 5, 900); // Increased from 3→5 blocks, 800→900 chars
+  // 4 × 700 chars: the whole request must fit the fast models' tokens-per-minute
+  // ceiling, or they reject it outright and the turn waits on slower models.
+  const top = topNCompact(ranked, 4, 700);
 
   const headerLine = isTemporal
     ? `The user's query asks about CURRENT / NEW / LATEST state. Live data below OVERRIDES your training on any fact it covers.`
