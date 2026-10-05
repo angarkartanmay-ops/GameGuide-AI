@@ -69,7 +69,7 @@ INSERT INTO public.discord_quota_tiers
   (tier, label, msgs_day, burst_min, vision_day, imagegen_day, guild_pool_day, history_len, context_turns, priority, soft_cap_day) VALUES
   ('free',     'Free',            15,  5,  3,  1, NULL, 10,  6, FALSE, NULL),
   ('pro',      'Pro',            200, 20, 40, 15, NULL, 50, 24, TRUE,   120),
-  ('lifetime', 'Pro (Lifetime)', 200, 20, 40, 15, NULL, 50, 24, TRUE,   120),
+  ('lifetime', 'Pro Lifetime',   200, 20, 40, 15, NULL, 50, 24, TRUE,   120),
   ('server',   'Premium Server',  60, 10, 10,  5,  800, 25, 12, TRUE,  NULL)
 ON CONFLICT (tier) DO NOTHING;
 
@@ -286,7 +286,9 @@ BEGIN
   SELECT e.tier INTO v_user_tier
     FROM public.discord_entitlements e
    WHERE e.user_id = p_user_id
-     AND e.status = 'active'
+     -- past_due keeps access while Stripe retries the card, but only until
+     -- the paid period (plus the webhook's grace) runs out.
+     AND e.status IN ('active', 'past_due')
      AND (e.current_period_end IS NULL OR e.current_period_end > now())
    LIMIT 1;
   v_user_tier := COALESCE(v_user_tier, 'free');

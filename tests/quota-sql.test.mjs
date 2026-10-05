@@ -316,5 +316,42 @@ check('spoiler migration is idempotent over schema-v3', true);
 await db.exec(readFileSync(`${ROOT}/migrations/20260926_watchtower.sql`, 'utf8'));
 check('watchtower migration is idempotent over schema-v3', true);
 
+// -- 2026-10-05: final tiers, Lifetime, past_due, closed stats read ---------
+await db.exec(readFileSync(`${ROOT}/migrations/20261005_billing_final.sql`, 'utf8'));
+await db.exec(readFileSync(`${ROOT}/migrations/20261005_billing_final.sql`, 'utf8'));   // idempotent
+check('billing migration is re-runnable', true);
+{
+  const tiers = Object.fromEntries((await db.query('select * from discord_quota_tiers')).rows.map(r => [r.tier, r]));
+  check('final tiers: free 15 / pro 200 / server 60 (800 pool)',
+    tiers.free.msgs_day === 15 && tiers.pro.msgs_day === 200 && tiers.server.msgs_day === 60 && tiers.server.guild_pool_day === 800);
+  check('lifetime mirrors pro limits', tiers.lifetime.msgs_day === tiers.pro.msgs_day && tiers.lifetime.vision_day === tiers.pro.vision_day && tiers.lifetime.label === 'Pro Lifetime');
+
+  const L = '444444444444444441', P = '444444444444444442', X = '444444444444444443';
+  await db.exec(`insert into discord_entitlements (user_id, tier, source, status, current_period_end) values
+    (${L}, 'lifetime', 'stripe', 'active', null),
+    (${P}, 'pro', 'stripe', 'past_due', now() + interval '3 days'),
+    (${X}, 'pro', 'stripe', 'past_due', now() - interval '1 hour')`);
+  check('lifetime resolves, never expires', (await q(L, { dry: true })).tier === 'lifetime');
+  check('past_due keeps Pro inside the paid period', (await q(P, { dry: true })).tier === 'pro');
+  check('past_due past its period end is free', (await q(X, { dry: true })).tier === 'free');
+
+  const cols = (await db.query(`select column_name from information_schema.columns where table_name = 'discord_premium_servers'`)).rows.map(r => r.column_name);
+  check('server plans carry their subscription ref', cols.includes('provider_ref'));
+
+  await db.exec(`insert into discord_billing_events (event_id, type) values ('evt_1', 'checkout.session.completed')`);
+  let dup = false;
+  try { await db.exec(`insert into discord_billing_events (event_id, type) values ('evt_1', 'checkout.session.completed')`); } catch { dup = true; }
+  check('a Stripe event id is claimed once', dup);
+
+  const pol = (await db.query(`select count(*)::int c from pg_policies where tablename = 'discord_usage_stats'`)).rows[0].c;
+  check('per-user usage stats are no longer public', pol === 0);
+  for (const t of ['discord_entitlements', 'discord_billing_events', 'discord_usage_stats', 'discord_chat_messages']) {
+    const r = await db.query(`select has_table_privilege('anon', 'public.${t}', 'select') s, has_table_privilege('anon', 'public.${t}', 'insert') i`);
+    check(`anon has no privileges on ${t}`, r.rows[0].s === false && r.rows[0].i === false);
+  }
+  const tr = await db.query(`select has_table_privilege('anon', 'public.discord_quota_tiers', 'select') s, has_table_privilege('anon', 'public.discord_quota_tiers', 'update') u`);
+  check('tier pricing stays readable, never writable', tr.rows[0].s === true && tr.rows[0].u === false);
+}
+
 console.log(`\nSQL: ${pass} passed${fail ? `, ${fail} FAILED` : ''}`);
 process.exit(fail ? 1 : 0);

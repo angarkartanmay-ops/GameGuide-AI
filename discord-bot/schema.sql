@@ -69,7 +69,6 @@ ALTER TABLE public.discord_premium_servers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discord_usage_stats     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discord_votes           ENABLE ROW LEVEL SECURITY;
 
--- Aggregate stats are safe to expose publicly (no PII).
+-- No public policy on discord_usage_stats: its rows are per Discord user id.
+-- The site's public counter reads totals through gg_public_stats() instead.
 DROP POLICY IF EXISTS "Public can read aggregate usage" ON public.discord_usage_stats;
-CREATE POLICY "Public can read aggregate usage"
-  ON public.discord_usage_stats FOR SELECT TO anon USING (TRUE);

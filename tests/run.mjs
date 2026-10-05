@@ -43,6 +43,7 @@ const SUITES = [
   ['hydracept',     'hydracept.test.ts'],      // paid last-resort model: off by default, server-side key only
   ['official',      'official-sources.test.ts'], // official news feed matches whole words ("ow" is not in "hollow")
   ['billing',       'billing.test.mjs'],       // Stripe period-end + checkout ref linking
+  ['http-security', 'http-security.test.mjs'], // bot webhooks: constant-time auth, vote validation, flood limit
   ['discord-launch','discord-launch.test.mjs'],// invite perms, pings, intents, command wiring
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres
   ['quota-contract','quota-contract.test.mjs'],// quota.js against that same SQL

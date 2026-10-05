@@ -501,6 +501,12 @@ interface QueryProfile {
   isMetaQuery: boolean;
   /** "what's new / latest / current" — routes to a self-searching model. */
   temporal: boolean;
+  /**
+   * A paying Discord user (Pro, Lifetime or a premium server), vouched for by
+   * the bot's service token. Gets the accurate paid model on deep questions
+   * and never waits in a free model's queue. Set in runChatPipeline.
+   */
+  priority: boolean;
 }
 
 // Recency signal available at classification time, before PULSE has run.
@@ -956,6 +962,7 @@ function classifyQuery(prompt: string, attachments: any[], history: any[]): Quer
     // Cheap lexical check; PULSE runs the authoritative detector later, but
     // routing has to decide before that result exists.
     temporal: TEMPORAL_HINT_RX.test(prompt),
+    priority: false,
   };
 }
 
@@ -1807,6 +1814,8 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
 
 // Retrieval deadlines (ms). Measured: the full fan-out takes 8-9 s at worst,
 // but Wikipedia, Steam and the paid search APIs land in 1-3 s.
+const PAID_BOT_TIERS = new Set(['pro', 'lifetime', 'server']);
+
 const PULSE_BUDGET_MS = 4500;
 const OMNI_BUDGET_MS = 4000;
 const OMNI_BUDGET_DEEP_MS = 6000;
@@ -2229,9 +2238,20 @@ async function tryAgentic(opts: {
 // ── Hydracept: paid last resort, and first for missables ───────────────────
 // See hydracept.ts. Text turns only; returns null (never throws) so the mesh
 // carries on exactly as it would without it.
-function hydraceptPlan(need: { vision: boolean }, rawPrompt?: string) {
+// Paid tiers also get it first on deep questions: those are where the free
+// models invent details, and a paying user is owed the careful answer.
+function hydraceptPlan(need: { vision: boolean; complexity?: string; priority?: boolean }, rawPrompt?: string) {
   const cfg = need.vision ? null : hydraceptConfig();
-  return { cfg, leads: !!cfg && cfg.missablesFirst && isMissablesQuestion(rawPrompt || '') };
+  const missables = !!cfg && cfg.missablesFirst && isMissablesQuestion(rawPrompt || '');
+  const priorityDeep = !!cfg && !!need.priority && need.complexity === 'deep';
+  return { cfg, leads: missables || priorityDeep, why: missables ? 'missables' : 'priority, deep question' };
+}
+
+// Priority routing: for paying users, models that QUEUE (OpenRouter's free
+// pool, measured at up to 80 s) move behind the paid model instead of ahead of it.
+function splitForPriority<T extends { model: { cost: number } }>(route: T[], priority?: boolean) {
+  if (!priority) return { now: route, later: [] as T[] };
+  return { now: route.filter(r => r.model.cost === 0), later: route.filter(r => r.model.cost !== 0) };
 }
 
 async function tryHydracept(
@@ -2298,6 +2318,7 @@ async function runNeuralMeshStreaming(opts: {
     complexity: opts.profile.complexity,
     intent: opts.profile.intent,
     temporal: opts.profile.temporal,
+    priority: opts.profile.priority,
   };
   const catalog = await getDiscoveredModels(buildRegistry());
   const route = planRoute(need, opts.meshState, buildRegistry(), catalog.models);
@@ -2357,9 +2378,9 @@ async function runNeuralMeshStreaming(opts: {
     return null;
   };
 
-  const tryMesh = async (): Promise<MeshResult | null> => {
+  const tryMesh = async (list = route): Promise<MeshResult | null> => {
     const dead = new Set<string>();
-    for (const { provider, model, reason } of route) {
+    for (const { provider, model, reason } of list) {
       if (!provider || dead.has(provider.name)) continue;
       const key = Deno.env.get(provider.keyEnv);
       if (!key) continue;
@@ -2415,7 +2436,7 @@ async function runNeuralMeshStreaming(opts: {
   if (paid.leads || (wantsAgentic(need) && Date.now() >= agenticRestUntil) || need.complexity === 'deep') sayDeep();
   try {
   if (paid.leads) {
-    const first = await viaHydracept('missables');
+    const first = await viaHydracept(paid.why);
     if (first) return first;
   }
 
@@ -2433,14 +2454,19 @@ async function runNeuralMeshStreaming(opts: {
   if (agentic) return agentic;
   clearShown();   // the agentic model may have been cut part-way, too
 
-  const geminiLeads = geminiFirst(need, opts.meshState, route);
-  const first = geminiLeads ? await tryGemini() : await tryMesh();
+  const { now: fastRoute, later: queueRoute } = splitForPriority(route, need.priority);
+  const geminiLeads = geminiFirst(need, opts.meshState, fastRoute);
+  const first = geminiLeads ? await tryGemini() : await tryMesh(fastRoute);
   if (first) return first;
-  const second = geminiLeads ? await tryMesh() : await tryGemini();
+  const second = geminiLeads ? await tryMesh(fastRoute) : await tryGemini();
   if (second) return second;
   if (!paid.leads) {
-    const last = await viaHydracept('every free model failed');
+    const last = await viaHydracept(need.priority ? 'priority, before the queue' : 'every free model failed');
     if (last) return last;
+  }
+  if (queueRoute.length) {
+    const queued = await tryMesh(queueRoute);
+    if (queued) return queued;
   }
 
   const partial = bestPartial as MeshResult | null;
@@ -2473,6 +2499,7 @@ async function runNeuralMesh(opts: {
     complexity: opts.profile.complexity,
     intent: opts.profile.intent,
     temporal: opts.profile.temporal,
+    priority: opts.profile.priority,
   };
 
   // Live catalog supersedes the static OpenRouter ids, which rot within days.
@@ -2486,7 +2513,7 @@ async function runNeuralMesh(opts: {
 
   const paid = hydraceptPlan(need, opts.rawPrompt);
   if (paid.leads && paid.cfg) {
-    const first = await tryHydracept(paid.cfg, { ...opts, errors, why: 'missables' });
+    const first = await tryHydracept(paid.cfg, { ...opts, errors, why: paid.why });
     if (first) return first;
   }
 
@@ -2500,23 +2527,28 @@ async function runNeuralMesh(opts: {
   });
   if (agenticResult) return agenticResult;
 
-  const geminiLeads = geminiFirst(need, opts.meshState, route);
+  const { now: fastRoute, later: queueRoute } = splitForPriority(route, need.priority);
+  const geminiLeads = geminiFirst(need, opts.meshState, fastRoute);
 
   if (geminiLeads) {
     const g = await runGeminiAttempt({ ...opts, hasVision: need.vision, errors, complexity: need.complexity });
     if (g) return g;
-    const m = await runPlannedMesh({ route, ...opts, hasVision: need.vision, errors, complexity: need.complexity });
+    const m = await runPlannedMesh({ route: fastRoute, ...opts, hasVision: need.vision, errors, complexity: need.complexity });
     if (m) return m;
   } else {
-    const m = await runPlannedMesh({ route, ...opts, hasVision: need.vision, errors, complexity: need.complexity });
+    const m = await runPlannedMesh({ route: fastRoute, ...opts, hasVision: need.vision, errors, complexity: need.complexity });
     if (m) return m;
     const g = await runGeminiAttempt({ ...opts, hasVision: need.vision, errors, complexity: need.complexity });
     if (g) return g;
   }
 
   if (paid.cfg && !paid.leads) {
-    const last = await tryHydracept(paid.cfg, { ...opts, errors, why: 'every free model failed' });
+    const last = await tryHydracept(paid.cfg, { ...opts, errors, why: need.priority ? 'priority, before the queue' : 'every free model failed' });
     if (last) return last;
+  }
+  if (queueRoute.length) {
+    const q = await runPlannedMesh({ route: queueRoute, ...opts, hasVision: need.vision, errors, complexity: need.complexity });
+    if (q) return q;
   }
 
   console.error('[MESH] ALL PROVIDERS FAILED:', errors);
@@ -2957,6 +2989,10 @@ async function runChatPipeline(
 
     // ── LAYER 1: QUERY CORTEX ──────────────────────────────────────────
     const profile = classifyQuery(prompt, cleanAttachments, boundedHistory);
+    // Paid Discord tier. Trusted ONLY behind a verified bot token: anyone can
+    // send the header, and it buys a paid model. 'free' is also what the bot
+    // sends for a paying user past their daily fair-use point.
+    profile.priority = !!botCaller && PAID_BOT_TIERS.has((req.headers.get('x-gg-bot-tier') || '').toLowerCase());
     const userIsCorrecting = isCorrection(prompt, boundedHistory);
     console.log(`[CORTEX] intent=${profile.intent} game=${profile.game || 'none'} complexity=${profile.complexity} persona=${profile.persona.name} correction=${userIsCorrecting}`);
 
