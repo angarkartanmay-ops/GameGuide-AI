@@ -75,6 +75,19 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
     return () => { tween.kill(); clearTimeout(t); el.textContent = game.name; };
   }, [idx, calm]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Drop the outgoing art once the 1.2 s crossfade has finished. It used to
+  // stay mounted under the current game for as long as the page was open:
+  // a second full-screen image layer that only cost GPU memory, and whose
+  // stale texture is what showed through when Chrome ran short while the
+  // page was scrolled back up.
+  // Only after the incoming art has loaded, or the hero would go blank.
+  const currentReady = !!ready[game.appid];
+  useEffect(() => {
+    if (prev == null || !currentReady) return undefined;
+    const t = setTimeout(() => setPrev(null), 1400);
+    return () => clearTimeout(t);
+  }, [prev, currentReady]);
+
   // Pause while the hero is out of view.
   useEffect(() => {
     const el = rootRef.current;

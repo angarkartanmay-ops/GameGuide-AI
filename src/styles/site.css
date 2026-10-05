@@ -167,18 +167,18 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
 .s-hud i:nth-child(3) { bottom: 0; left: 0; border-bottom-width: 1px; border-left-width: 1px; }
 .s-hud i:nth-child(4) { bottom: 0; right: 0; border-bottom-width: 1px; border-right-width: 1px; }
 
-/* Film grain: one small SVG noise tile, moved in steps (compositor only). */
+/* Film grain: one small SVG noise tile, still.
+   It used to be a layer 180% of the hero on each side (inset: -40%), shaken
+   by an endless animation — at 1.25x DPR a 6.4-megapixel texture of
+   rasterised SVG noise, the largest thing on the page, for an effect drawn
+   at 6% opacity. With the scrubbed hero art on top of it, Chrome ran out of
+   raster budget while scrolling back up: tiles went missing, stale art from
+   the previous game showed through, and text vanished. Still grain at the
+   hero's own size reads the same. */
 .s-grain {
-  position: absolute; inset: -40%; pointer-events: none; z-index: 0;
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
   opacity: 0.06;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  animation: s-grain 0.9s steps(3) infinite;
-}
-@keyframes s-grain {
-  0% { transform: translate(0, 0); }
-  33% { transform: translate(-3%, 2%); }
-  66% { transform: translate(2%, -3%); }
-  100% { transform: translate(0, 0); }
 }
 
 @keyframes s-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -293,14 +293,22 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
     radial-gradient(ellipse 70% 60% at 72% 30%, color-mix(in srgb, var(--s-accent) 20%, transparent), transparent 70%),
     var(--s-bg);
 }
-.s-hero__art { position: absolute; inset: 0; z-index: -2; transform-origin: 50% 35%; }
+.s-hero__art {
+  position: absolute; inset: 0; z-index: -2; transform-origin: 50% 35%;
+  /* The scroll scrub changes this element's scale every frame. Without a
+     standing layer Chrome re-rasterised two 3840-px images at each new scale
+     while scrolling — the work that fell behind and broke the page. With it,
+     the art is rasterised once and the scrub is a compositor transform. */
+  will-change: transform;
+}
 .s-hero__layer { position: absolute; inset: 0; opacity: 0; transition: opacity 1.2s var(--s-ease); }
 .s-hero__layer.is-ready { opacity: 1; }
 .s-hero__layer img {
   width: 100%; height: 100%; object-fit: cover; object-position: 62% 30%;
 }
-.s-hero__layer.is-ready img { animation: s-drift 16s ease-out both; }
-@keyframes s-drift { from { transform: scale(1.07); } to { transform: scale(1); } }
+/* No per-image drift animation: it scaled each image inside the already
+   scaled .s-hero__art — nested transforms on full-screen images, re-rastered
+   as both changed. The scroll scrub (scale 1.08 → 1) gives the same depth. */
 .s-hero__scrim {
   position: absolute; inset: 0; z-index: -1; opacity: 0.9;
   background:
@@ -1086,7 +1094,6 @@ html[data-arcade] .s-closing__title {
 /* ── Low power / reduced motion ──────────────────────────────────────────── */
 html[data-low-power] .site .s-grain,
 html[data-low-power] .site .s-frame__art img { display: none; }
-html[data-low-power] .site .s-hero__layer img { animation: none; }
 html[data-low-power] .site .s-nav.is-scrolled { backdrop-filter: none; -webkit-backdrop-filter: none; background: color-mix(in srgb, #0c0f15 96%, transparent); }
 html[data-low-power] .site .s-arcade { animation: none; }
 html[data-low-power] .site .s-page-head__art img { display: none; }
