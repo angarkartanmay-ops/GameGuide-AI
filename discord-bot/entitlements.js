@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  ENTITLEMENTS — who has paid, and for what.
 //  ───────────────────────────────────────────────────────────────────────
-//  Provider-agnostic on purpose. Stripe writes `discord_entitlements` today;
+//  Provider-agnostic on purpose. Stripe writes `discord_entitlements` today
+//  (billing-stripe.js, through its own repository);
 //  Discord's own App Subscriptions will write the same table later, as would
 //  Patreon or Ko-fi. Nothing downstream of this file knows which rail was used.
 //
@@ -62,61 +63,6 @@ async function syncEnvOverrides(supabase, { userIds = [], guildIds = [] } = {}) 
 }
 
 /**
- * Grant or refresh a paid entitlement. Called by the Stripe webhook.
- * `currentPeriodEnd` null means it never lapses (lifetime / manual).
- */
-async function upsertEntitlement(supabase, {
-  userId,
-  tier = 'pro',
-  source = 'stripe',
-  providerRef = null,
-  status = 'active',
-  currentPeriodEnd = null,
-}) {
-  const { error } = await supabase.from('discord_entitlements').upsert({
-    user_id: String(userId),
-    tier,
-    source,
-    provider_ref: providerRef,
-    status,
-    current_period_end: currentPeriodEnd,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id' });
-
-  if (error) throw new Error(`entitlement upsert failed: ${error.message}`);
-  return true;
-}
-
-/**
- * Downgrade. We flip `status` rather than deleting so the row keeps its
- * provider_ref — a resubscribe then reuses the same record, and support
- * questions ("I definitely paid in March") stay answerable.
- */
-async function cancelEntitlement(supabase, { userId = null, providerRef = null, status = 'canceled' }) {
-  if (!userId && !providerRef) throw new Error('cancelEntitlement needs userId or providerRef');
-
-  let q = supabase
-    .from('discord_entitlements')
-    .update({ tier: 'free', status, updated_at: new Date().toISOString() });
-
-  q = userId ? q.eq('user_id', String(userId)) : q.eq('provider_ref', providerRef);
-
-  const { error } = await q;
-  if (error) throw new Error(`entitlement cancel failed: ${error.message}`);
-  return true;
-}
-
-/** Resolve the Discord user behind a Stripe subscription id. */
-async function findByProviderRef(supabase, providerRef) {
-  const { data } = await supabase
-    .from('discord_entitlements')
-    .select('user_id, tier, status')
-    .eq('provider_ref', providerRef)
-    .maybeSingle();
-  return data || null;
-}
-
-/**
  * Top.gg vote reward.
  *
  * Credits, NOT a tier. The old code upserted `tier:'pro'` with a 12-hour
@@ -142,8 +88,5 @@ async function grantBonusCredits(supabase, userId, { credits = 10, hours = 24, c
 
 module.exports = {
   syncEnvOverrides,
-  upsertEntitlement,
-  cancelEntitlement,
-  findByProviderRef,
   grantBonusCredits,
 };

@@ -106,6 +106,9 @@ restarts, is shared across instances, and cannot disagree with itself. Limits
 live in the `discord_quota_tiers` **table** — retune them with an `UPDATE`, no
 redeploy. A vision turn costs 1 message *and* 1 screenshot.
 
+Prices live in `plans.js` (the webhook checks purchases against them); limits
+live in the table. Pro Lifetime ($39.99 once) has exactly the Pro column.
+
 | | 🆓 Free | ⭐ Pro — $4.99/mo | 🌟 Server — $14.99/mo |
 |---|---|---|---|
 | Messages / day | **15** | **200** | **60 per member** |
@@ -117,6 +120,8 @@ redeploy. A vision turn costs 1 message *and* 1 screenshot.
 | Context sent to model | 6 turns | 24 turns | 12 turns |
 | Priority routing | — | ✅ | ✅ |
 | At global capacity | waits | never queued | protected |
+| Paid model first on deep questions | — | ✅ | ✅ |
+| Watchtower games per server | 3 | 3 | 25 |
 
 **Why 15/day free:** median engaged use is 3–5 messages/day, so 15 clears
 roughly 88% of users untouched while the heaviest ~12% — the only group that
@@ -133,14 +138,26 @@ Users check their own balance with `/quota`.
 
 ## Monetization
 
-### 1. Stripe (paid Pro + Server) — fully wired
+### 1. Stripe (Pro, Pro Lifetime, Server) — fully wired
 
-Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, create two recurring
-[Payment Links](https://dashboard.stripe.com/payment-links), and point a
+Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, create three
+[Payment Links](https://dashboard.stripe.com/payment-links) (Pro and Server
+recurring, Lifetime one-time), put their price ids in `STRIPE_PRICE_PRO`,
+`STRIPE_PRICE_SERVER` and `STRIPE_PRICE_LIFETIME`, and point a
 [webhook](https://stripe.com/docs/webhooks) at
-`https://<your-bot-host>/stripe-webhook` subscribed to
-`checkout.session.completed`, `customer.subscription.updated`,
-`customer.subscription.deleted` and `invoice.payment_failed`.
+`https://<your-bot-host>/stripe-webhook` subscribed to the events listed in
+`.env.example`. Then run `migrations/20261005_billing_final.sql`.
+
+**What the webhook trusts.** The `client_reference_id` on a Payment Link is
+editable by the buyer, so it only says *who* (and which server) to credit. The
+plan comes from the Stripe price that was paid: a Pro link edited to look like a
+server purchase still buys Pro. Each event id is claimed once in
+`discord_billing_events` (retries and replays apply once), the work runs before
+the 200 so a database outage makes Stripe retry instead of losing a grant, server
+plans renew and cancel with their subscription, a full refund or dispute takes
+Lifetime back, and a Lifetime account is never overwritten by a later
+subscription. Signature checks use the raw body; error replies never echo
+internals; both webhooks sit behind a per-IP flood limit.
 
 The bot appends `?client_reference_id=<discord id>` to the payment link, so the
 buyer is joined to their Discord account automatically — no "paste your Discord

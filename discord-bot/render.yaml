@@ -43,3 +43,12 @@ services:
         sync: false
       - key: STRIPE_SERVER_PAYMENT_LINK
         sync: false
+      - key: STRIPE_LIFETIME_PAYMENT_LINK
+        sync: false
+      # Price ids the webhook checks purchases against (see .env.example).
+      - key: STRIPE_PRICE_PRO
+        sync: false
+      - key: STRIPE_PRICE_SERVER
+        sync: false
+      - key: STRIPE_PRICE_LIFETIME
+        sync: false

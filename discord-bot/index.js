@@ -46,6 +46,8 @@ const watchtower = require('./watchtower');
 const quota = require('./quota');
 const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
 const { mountStripeWebhook, buildCheckoutUrl, stripeConfigured } = require('./billing-stripe');
+const { priceLabel } = require('./plans');
+const { safeEqual, secureHeaders, rateLimiter, parseTopggVote } = require('./httpSecurity');
 const { splitForDiscord } = require('./textsplit');
 const { forDiscord } = require('./discordFormat');
 
@@ -69,6 +71,7 @@ const PATREON_URL = process.env.PATREON_URL || '';
 const KOFI_URL = process.env.KOFI_URL || '';
 const STRIPE_PAYMENT_LINK = process.env.STRIPE_PAYMENT_LINK || '';
 const STRIPE_SERVER_PAYMENT_LINK = process.env.STRIPE_SERVER_PAYMENT_LINK || '';
+const STRIPE_LIFETIME_PAYMENT_LINK = process.env.STRIPE_LIFETIME_PAYMENT_LINK || '';
 const TOPGG_VOTE_URL = process.env.TOPGG_VOTE_URL || '';
 const HUMBLE_AFFILIATE = process.env.HUMBLE_AFFILIATE || ''; // ?partner=YOUR_ID
 const GMG_AFFILIATE = process.env.GMG_AFFILIATE || '';       // mw_aref=YOUR_ID
@@ -114,8 +117,11 @@ const VOTE_BONUS_CREDITS = 10;
 const VOTE_BONUS_HOURS = 24;
 const VOTE_BONUS_CAP = 20;
 
-const PRO_PRICE = '$4.99';
-const SERVER_PRICE = '$14.99';
+// Prices come from plans.js — the table the Stripe webhook checks purchases
+// against, so a button can never quote a price the webhook would reject.
+const PRO_PRICE = priceLabel('pro');            // "$4.99/mo"
+const SERVER_PRICE = priceLabel('server');      // "$14.99/mo"
+const LIFETIME_PRICE = priceLabel('lifetime');  // "$39.99 once"
 
 // ─── In-memory state ───────────────────────────────────────────────────────
 // Rate limiting used to live here in a Map. It now lives in Postgres, because
@@ -582,7 +588,7 @@ function sendBlocked(replyTarget, decision, userId) {
   if (decision.tier === 'free' && STRIPE_PAYMENT_LINK) {
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setLabel(`Upgrade to Pro — ${PRO_PRICE}/mo`)
+        .setLabel(`Upgrade to Pro — ${PRO_PRICE}`)
         .setStyle(ButtonStyle.Link)
         .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })),
     ));
@@ -901,7 +907,7 @@ const client = new Client({
 client.once('clientReady', async () => {
   console.log(`🎮 GameGuide-AI Bot online as ${client.user.tag}`);
   console.log(`   Proxy: ${CHAT_PROXY_URL}`);
-  console.log(`   Service role key: ${supabaseHasServiceRole ? 'configured' : 'NOT configured (history disabled)'}`);
+  console.log(`   Service role key: ${supabaseHasServiceRole ? 'configured' : 'NOT configured — history off, and daily quotas and paid tiers are NOT enforced (the quota function only runs for the service role)'}`);
   console.log(`   Billing: ${stripeConfigured ? 'Stripe enabled' : 'disabled (no STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET)'}`);
 
   // Mirror the env overrides into the database. Tier is resolved inside the
@@ -1381,7 +1387,7 @@ client.on('interactionCreate', async (interaction) => {
         if (isFree && STRIPE_PAYMENT_LINK) {
           components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setLabel(`Upgrade to Pro — ${PRO_PRICE}/mo`)
+              .setLabel(`Upgrade to Pro — ${PRO_PRICE}`)
               .setStyle(ButtonStyle.Link)
               .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })),
           ));
@@ -1400,8 +1406,9 @@ client.on('interactionCreate', async (interaction) => {
         // "0 of undefined messages left". Keep in step with discord_quota_tiers.
         const free = { msgs_day: 15, vision_day: 3, burst_min: 5, ...(tiers.free || {}) };
         const pro = { msgs_day: 200, vision_day: 40, burst_min: 20, ...(tiers.pro || {}) };
-        const srv = { msgs_day: 60, ...(tiers.server || {}) };
+        const srv = { msgs_day: 60, guild_pool_day: 800, ...(tiers.server || {}) };
         const isPremium = d.tier !== 'free';
+        const isLifetime = d.tier === 'lifetime';
 
         const embed = new EmbedBuilder()
           .setColor(isPremium ? 0xFFD700 : 0x00FFD1)
@@ -1411,9 +1418,10 @@ client.on('interactionCreate', async (interaction) => {
           embed.setDescription(
             'Thank you for supporting GameGuide-AI — you\'re the reason it stays free for everyone else.\n\n' +
             `• **${d.messages?.limit ?? pro.msgs_day} messages/day** · **${d.vision?.limit ?? pro.vision_day} screenshots**\n` +
-            '• Priority routing — never queued when the free pool is exhausted\n' +
-            '• Longer memory of your conversation\n\n' +
-            'Track it any time with `/quota`.',
+            '• Priority routing — the most accurate models first, never queued when the free pool is exhausted\n' +
+            '• Longer memory of your conversation\n' +
+            (isLifetime ? '• Yours for good — no renewals\n' : '') +
+            '\nTrack it any time with `/quota`.',
           );
         } else {
           embed
@@ -1430,13 +1438,18 @@ client.on('interactionCreate', async (interaction) => {
                 inline: false,
               },
               {
-                name: `⭐ Pro — ${PRO_PRICE}/mo`,
+                name: `⭐ Pro — ${PRO_PRICE}`,
                 value: `**${pro.msgs_day}** messages/day · **${pro.vision_day}** screenshots/day · ${pro.burst_min}/min · priority routing`,
                 inline: false,
               },
               {
-                name: `🌟 Server — ${SERVER_PRICE}/mo`,
-                value: `**${srv.msgs_day}**/day for **every member** — best value for communities`,
+                name: `💎 Pro Lifetime — ${LIFETIME_PRICE}`,
+                value: 'Everything in Pro, for good — no subscription',
+                inline: false,
+              },
+              {
+                name: `🌟 Server — ${SERVER_PRICE}`,
+                value: `**${srv.msgs_day}**/day for **every member** (${srv.guild_pool_day} shared) · ${watchtower.WATCH_LIMITS.server} Watchtower games — best value for communities`,
                 inline: false,
               },
             )
@@ -1448,13 +1461,19 @@ client.on('interactionCreate', async (interaction) => {
           // Carries the Discord id into checkout, so the webhook can grant Pro
           // without ever asking the buyer what their snowflake is.
           buttons.push(new ButtonBuilder()
-            .setLabel(`⭐ Go Pro — ${PRO_PRICE}/mo`)
+            .setLabel(`⭐ Go Pro — ${PRO_PRICE}`)
             .setStyle(ButtonStyle.Link)
             .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })));
         }
+        if (STRIPE_LIFETIME_PAYMENT_LINK && !isLifetime) {
+          buttons.push(new ButtonBuilder()
+            .setLabel(`💎 Lifetime — ${LIFETIME_PRICE}`)
+            .setStyle(ButtonStyle.Link)
+            .setURL(buildCheckoutUrl(STRIPE_LIFETIME_PAYMENT_LINK, { userId })));
+        }
         if (STRIPE_SERVER_PAYMENT_LINK && guildId && d.tier !== 'server') {
           buttons.push(new ButtonBuilder()
-            .setLabel(`🌟 Upgrade this server — ${SERVER_PRICE}/mo`)
+            .setLabel(`🌟 Upgrade this server — ${SERVER_PRICE}`)
             .setStyle(ButtonStyle.Link)
             .setURL(buildCheckoutUrl(STRIPE_SERVER_PAYMENT_LINK, { userId, guildId })));
         }
@@ -1521,6 +1540,16 @@ client.on('interactionCreate', async (interaction) => {
 const express = require('express');
 const app = express();
 
+// Render terminates TLS one proxy in front of us; trust exactly that hop so
+// req.ip is the caller (for the webhook limiter) and cannot be spoofed with a
+// forged X-Forwarded-For chain.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(secureHeaders);
+// Webhooks are a few calls a minute in real life. Anything past this is a
+// flood of forged requests, each costing a signature check or a DB read.
+const webhookGuard = rateLimiter({ windowMs: 60_000, max: 60 });
+
 // `verify` stashes the exact bytes before parsing. Stripe signs the raw body,
 // so a re-serialised object never validates — and doing it here, rather than
 // with a route-specific express.raw(), means signature verification cannot be
@@ -1560,12 +1589,16 @@ app.get('/health', (_req, res) => {
 app.get('/ping', (_req, res) => res.type('text/plain').send('pong'));
 
 if (TOPGG_WEBHOOK_AUTH) {
-  app.post('/topgg-webhook', async (req, res) => {
-    if (req.headers.authorization !== TOPGG_WEBHOOK_AUTH) {
+  app.post('/topgg-webhook', webhookGuard, async (req, res) => {
+    // Constant-time: a plain !== leaks how much of a guess was right.
+    if (!safeEqual(req.headers.authorization, TOPGG_WEBHOOK_AUTH)) {
       return res.status(401).json({ error: 'unauthorized' });
     }
-    const { user, isWeekend, bot } = req.body || {};
-    if (!user) return res.status(400).json({ error: 'missing user' });
+    const vote = parseTopggVote(req.body, { botId: client.user?.id });
+    if (vote.error) return res.status(400).json({ error: vote.error });
+    if (vote.test) return res.json({ ok: true, test: true });
+    const { userId: user, weekend: isWeekend } = vote;
+    const bot = client.user?.id || null;
 
     // Credits, NOT a tier — and capped.
     //
@@ -1575,6 +1608,14 @@ if (TOPGG_WEBHOOK_AUTH) {
     // upsert was keyed on user_id, a LIFETIME customer who voted had their row
     // overwritten and was silently downgraded to a 12-hour expiry.
     try {
+      // Top.gg allows one vote per 12 hours, so a second call inside 11 is a
+      // retry or a replay of the same vote — acknowledge it, grant nothing.
+      const { data: recent } = await supabase.from('discord_votes')
+        .select('id').eq('user_id', user)
+        .gte('voted_at', new Date(Date.now() - 11 * 3600_000).toISOString())
+        .limit(1);
+      if (recent && recent.length) return res.json({ ok: true, duplicate: true });
+
       await supabase.from('discord_votes').insert({
         user_id: user, bot_id: bot || null, source: 'topgg', is_weekend: !!isWeekend,
       });
@@ -1601,7 +1642,7 @@ if (TOPGG_WEBHOOK_AUTH) {
   });
 }
 
-mountStripeWebhook(app, { supabase, client });
+mountStripeWebhook(app, { supabase, client, guard: webhookGuard });
 
 const httpServer = app.listen(HTTP_PORT, '0.0.0.0', () => {
   console.log(`🌐 HTTP health server listening on :${HTTP_PORT} (/, /health, /ping${TOPGG_WEBHOOK_AUTH ? ', /topgg-webhook' : ''})`);
