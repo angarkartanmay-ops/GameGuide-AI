@@ -45,8 +45,11 @@ const { buildMissablesPrompt, pickMissablesGame } = require('./missables');
 const watchtower = require('./watchtower');
 const quota = require('./quota');
 const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
-const { mountStripeWebhook, buildCheckoutUrl, stripeConfigured } = require('./billing-stripe');
-const { priceLabel } = require('./plans');
+const { mountStripeWebhook, stripeConfigured } = require('./billing-stripe');
+const { mountRazorpayWebhook, createCheckout: createRazorpayCheckout, razorpayConfig } = require('./billing-razorpay');
+const { mountLemonWebhook } = require('./billing-lemon');
+const { globalProvider, globalCheckoutUrl, razorpayPlans } = require('./checkout');
+const { priceLabel, inrLabel } = require('./plans');
 const { safeEqual, secureHeaders, rateLimiter, parseTopggVote } = require('./httpSecurity');
 const { splitForDiscord } = require('./textsplit');
 const { forDiscord } = require('./discordFormat');
@@ -69,9 +72,6 @@ const PREMIUM_USER_IDS = (process.env.PREMIUM_USER_IDS || '').split(',').map(s =
 const PREMIUM_GUILD_IDS = (process.env.PREMIUM_GUILD_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
 const PATREON_URL = process.env.PATREON_URL || '';
 const KOFI_URL = process.env.KOFI_URL || '';
-const STRIPE_PAYMENT_LINK = process.env.STRIPE_PAYMENT_LINK || '';
-const STRIPE_SERVER_PAYMENT_LINK = process.env.STRIPE_SERVER_PAYMENT_LINK || '';
-const STRIPE_LIFETIME_PAYMENT_LINK = process.env.STRIPE_LIFETIME_PAYMENT_LINK || '';
 const TOPGG_VOTE_URL = process.env.TOPGG_VOTE_URL || '';
 const HUMBLE_AFFILIATE = process.env.HUMBLE_AFFILIATE || ''; // ?partner=YOUR_ID
 const GMG_AFFILIATE = process.env.GMG_AFFILIATE || '';       // mw_aref=YOUR_ID
@@ -581,17 +581,118 @@ function userFacingError(err) {
 //  CORE — handle a chat-style request (mention or /ask)
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ─── Payment buttons ───────────────────────────────────────────────────────
+// Three providers can be live at once (see checkout.js). Hosted links (Stripe
+// or Lemon Squeezy) are plain link buttons; Razorpay checkouts are created when
+// the button is pressed, so those buttons carry a custom id.
+
+const PAY_ID = 'pay:rzp:';
+
+const rzpButton = (plan) => {
+  const label = {
+    pro: `🇮🇳 Pro ${inrLabel('pro')}`,
+    lifetime: `🇮🇳 Lifetime ${inrLabel('lifetime')}`,
+    server: `🇮🇳 Server ${inrLabel('server')}`,
+  }[plan];
+  return new ButtonBuilder().setCustomId(`${PAY_ID}${plan}`).setLabel(label).setStyle(ButtonStyle.Secondary);
+};
+
+/** One "Upgrade to Pro" button for a quota wall, from whichever rail is live. */
+function upgradeRow(userId) {
+  const url = globalCheckoutUrl('pro', { userId });
+  if (url) {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel(`Upgrade to Pro — ${PRO_PRICE}`).setStyle(ButtonStyle.Link).setURL(url));
+  }
+  if (razorpayPlans().includes('pro')) return new ActionRowBuilder().addComponents(rzpButton('pro'));
+  return null;
+}
+
+/** Rows for /premium: global links, then the rupee buttons, then support links. */
+function premiumRows({ userId, guildId, isPremium, isLifetime, tier }) {
+  const rows = [];
+  const link = (label, plan) => {
+    const url = globalCheckoutUrl(plan, { userId, guildId }, process.env);
+    return url ? new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(url) : null;
+  };
+
+  // Carries the Discord id into checkout, so the webhook can grant the plan
+  // without ever asking the buyer what their snowflake is.
+  const global = [
+    !isPremium && link(`⭐ Go Pro — ${PRO_PRICE}`, 'pro'),
+    !isLifetime && link(`💎 Lifetime — ${LIFETIME_PRICE}`, 'lifetime'),
+    guildId && tier !== 'server' && link(`🌟 Upgrade this server — ${SERVER_PRICE}`, 'server'),
+  ].filter(Boolean);
+  if (global.length) rows.push(new ActionRowBuilder().addComponents(global));
+
+  const offered = razorpayPlans();
+  const rupees = [
+    !isPremium && offered.includes('pro') && rzpButton('pro'),
+    !isLifetime && offered.includes('lifetime') && rzpButton('lifetime'),
+    guildId && tier !== 'server' && offered.includes('server') && rzpButton('server'),
+  ].filter(Boolean);
+  if (rupees.length) rows.push(new ActionRowBuilder().addComponents(rupees));
+
+  const support = [
+    PATREON_URL && new ButtonBuilder().setLabel('🎨 Patreon').setStyle(ButtonStyle.Link).setURL(PATREON_URL),
+    KOFI_URL && new ButtonBuilder().setLabel('☕ Ko-fi').setStyle(ButtonStyle.Link).setURL(KOFI_URL),
+    TOPGG_VOTE_URL && new ButtonBuilder().setLabel(`🗳️ Vote for +${VOTE_BONUS_CREDITS} messages`).setStyle(ButtonStyle.Link).setURL(TOPGG_VOTE_URL),
+  ].filter(Boolean);
+  if (support.length) rows.push(new ActionRowBuilder().addComponents(support));
+  return rows.slice(0, 5);
+}
+
+const payCooldown = new Map();   // userId → last press, so a button cannot be used to spam Razorpay
+const PAY_COOLDOWN_MS = 8_000;
+
+/** A rupee button was pressed: create that buyer's Razorpay checkout and hand over the link. */
+async function handleRazorpayButton(interaction) {
+  const reply = (content, extra = {}) => (interaction.deferred || interaction.replied
+    ? interaction.editReply({ content, ...extra })
+    : interaction.reply({ content, flags: MessageFlags.Ephemeral, ...extra }));
+  const plan = interaction.customId.slice(PAY_ID.length);
+  const userId = interaction.user.id;
+  const guildId = interaction.guildId;
+
+  if (!razorpayPlans().includes(plan)) return reply('That option is not available right now.');
+  if (plan === 'server' && !guildId) return reply('Open `/premium` in the server you want to upgrade, then press the server button there.');
+  const last = payCooldown.get(userId) || 0;
+  if (Date.now() - last < PAY_COOLDOWN_MS) return reply('One moment — your last checkout link is still being made.');
+  payCooldown.set(userId, Date.now());
+  if (payCooldown.size > 2000) for (const [k, t] of payCooldown) if (Date.now() - t > PAY_COOLDOWN_MS) payCooldown.delete(k);
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    // Do not sell a plan someone already holds (a stale button, a second click).
+    const now = await quota.checkQuota(supabase, { userId, guildId, kind: 'chat', dryRun: true });
+    if (!now.degraded && now.tier === 'lifetime') return interaction.editReply('You already have **Pro Lifetime** — nothing more to buy. Thank you!');
+    if (!now.degraded && now.tier === 'pro' && plan === 'pro') return interaction.editReply('You already have **Pro**. Check `/quota` — or press the Lifetime button to stop renewing.');
+    const co = await createRazorpayCheckout({ plan, userId, guildId }, { config: razorpayConfig() });
+    const what = { pro: `Pro — ${inrLabel('pro')}`, lifetime: `Pro Lifetime — ${inrLabel('lifetime')}`, server: `Server plan — ${inrLabel('server')}` }[plan];
+    return interaction.editReply({
+      content:
+        `**${what}**\n` +
+        'This checkout is made for your Discord account — pay with UPI, cards or netbanking. ' +
+        `Your plan switches on within a minute of paying${plan === 'lifetime' ? '.' : ', and renews monthly until you cancel from the link Razorpay emails you.'}\n` +
+        (plan === 'server' ? 'It applies to **this server** and is shared by every member.\n' : '') +
+        '-# The link stays valid for a few days.',
+      components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setLabel('Pay securely').setStyle(ButtonStyle.Link).setURL(co.url))],
+    });
+  } catch (e) {
+    console.error(`[razorpay] checkout for user=${userId} plan=${plan} failed:`, e.message);
+    payCooldown.delete(userId);
+    return interaction.editReply('Could not start the payment just now. Please try again in a minute, or use another option from `/premium`.');
+  }
+}
+
 /** Reply with a quota-block message plus, for free users, an upgrade button. */
 function sendBlocked(replyTarget, decision, userId) {
   const content = quota.blockedMessage(decision);
   const components = [];
-  if (decision.tier === 'free' && STRIPE_PAYMENT_LINK) {
-    components.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setLabel(`Upgrade to Pro — ${PRO_PRICE}`)
-        .setStyle(ButtonStyle.Link)
-        .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })),
-    ));
+  if (decision.tier === 'free') {
+    const row = upgradeRow(userId);
+    if (row) components.push(row);
   }
   const payload = { content, components, allowedMentions: { parse: [] } };
   return replyTarget.editReply ? replyTarget.editReply(payload) : replyTarget.reply(payload);
@@ -908,7 +1009,7 @@ client.once('clientReady', async () => {
   console.log(`🎮 GameGuide-AI Bot online as ${client.user.tag}`);
   console.log(`   Proxy: ${CHAT_PROXY_URL}`);
   console.log(`   Service role key: ${supabaseHasServiceRole ? 'configured' : 'NOT configured — history off, and daily quotas and paid tiers are NOT enforced (the quota function only runs for the service role)'}`);
-  console.log(`   Billing: ${stripeConfigured ? 'Stripe enabled' : 'disabled (no STRIPE_SECRET_KEY/STRIPE_WEBHOOK_SECRET)'}`);
+  console.log(`   Billing: stripe ${stripeConfigured ? 'on' : 'off'} · razorpay ${razorpayConfig() ? 'on' : 'off'} · global checkout ${globalProvider() || 'none'}`);
 
   // Mirror the env overrides into the database. Tier is resolved inside the
   // quota function, which cannot read process.env — without this sync an
@@ -1023,6 +1124,10 @@ client.on('messageCreate', async (message) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 client.on('interactionCreate', async (interaction) => {
+  if (interaction.isButton?.() && interaction.customId.startsWith(PAY_ID)) {
+    await handleRazorpayButton(interaction).catch((e) => console.error('[razorpay] button failed:', e.message));
+    return;
+  }
   if (!interaction.isChatInputCommand()) return;
   const userId = interaction.user.id;
   const guildId = interaction.guildId;
@@ -1384,13 +1489,9 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         const components = [];
-        if (isFree && STRIPE_PAYMENT_LINK) {
-          components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setLabel(`Upgrade to Pro — ${PRO_PRICE}`)
-              .setStyle(ButtonStyle.Link)
-              .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })),
-          ));
+        if (isFree) {
+          const row = upgradeRow(userId);
+          if (row) components.push(row);
         }
         return interaction.reply({ embeds: [embed], components, flags: MessageFlags.Ephemeral });
       }
@@ -1454,35 +1555,16 @@ client.on('interactionCreate', async (interaction) => {
               },
             )
             .setFooter({ text: 'Cancel any time. Supports a solo dev keeping the bot free for everyone.' });
+          if (razorpayPlans().length) {
+            embed.addFields({
+              name: '🇮🇳 In India?',
+              value: `Pay in rupees with UPI, cards or netbanking — Pro ${inrLabel('pro')} · Lifetime ${inrLabel('lifetime')} · Server ${inrLabel('server')} (buttons below).`,
+              inline: false,
+            });
+          }
         }
 
-        const buttons = [];
-        if (STRIPE_PAYMENT_LINK && !isPremium) {
-          // Carries the Discord id into checkout, so the webhook can grant Pro
-          // without ever asking the buyer what their snowflake is.
-          buttons.push(new ButtonBuilder()
-            .setLabel(`⭐ Go Pro — ${PRO_PRICE}`)
-            .setStyle(ButtonStyle.Link)
-            .setURL(buildCheckoutUrl(STRIPE_PAYMENT_LINK, { userId })));
-        }
-        if (STRIPE_LIFETIME_PAYMENT_LINK && !isLifetime) {
-          buttons.push(new ButtonBuilder()
-            .setLabel(`💎 Lifetime — ${LIFETIME_PRICE}`)
-            .setStyle(ButtonStyle.Link)
-            .setURL(buildCheckoutUrl(STRIPE_LIFETIME_PAYMENT_LINK, { userId })));
-        }
-        if (STRIPE_SERVER_PAYMENT_LINK && guildId && d.tier !== 'server') {
-          buttons.push(new ButtonBuilder()
-            .setLabel(`🌟 Upgrade this server — ${SERVER_PRICE}`)
-            .setStyle(ButtonStyle.Link)
-            .setURL(buildCheckoutUrl(STRIPE_SERVER_PAYMENT_LINK, { userId, guildId })));
-        }
-        if (PATREON_URL) buttons.push(new ButtonBuilder().setLabel('🎨 Patreon').setStyle(ButtonStyle.Link).setURL(PATREON_URL));
-        if (KOFI_URL) buttons.push(new ButtonBuilder().setLabel('☕ Ko-fi').setStyle(ButtonStyle.Link).setURL(KOFI_URL));
-        if (TOPGG_VOTE_URL) buttons.push(new ButtonBuilder().setLabel(`🗳️ Vote for +${VOTE_BONUS_CREDITS} messages`).setStyle(ButtonStyle.Link).setURL(TOPGG_VOTE_URL));
-
-        // Discord allows at most 5 buttons per action row.
-        const components = buttons.length ? [new ActionRowBuilder().addComponents(buttons.slice(0, 5))] : [];
+        const components = premiumRows({ userId, guildId, isPremium, isLifetime, tier: d.tier });
         return interaction.reply({ embeds: [embed], components });
       }
 
@@ -1643,10 +1725,21 @@ if (TOPGG_WEBHOOK_AUTH) {
 }
 
 mountStripeWebhook(app, { supabase, client, guard: webhookGuard });
+mountRazorpayWebhook(app, { supabase, client, guard: webhookGuard });
+mountLemonWebhook(app, { supabase, client, guard: webhookGuard });
 
 const httpServer = app.listen(HTTP_PORT, '0.0.0.0', () => {
   console.log(`🌐 HTTP health server listening on :${HTTP_PORT} (/, /health, /ping${TOPGG_WEBHOOK_AUTH ? ', /topgg-webhook' : ''})`);
 });
+// Any error that reaches Express (a malformed webhook body, say) is answered in
+// one short line — never the default page, which can carry a stack trace.
+// Express only treats a four-argument function as an error handler.
+// eslint-disable-next-line no-unused-vars
+app.use((err, _req, res, _next) => {
+  const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+  if (!res.headersSent) res.status(status).json({ error: status === 413 ? 'payload too large' : 'bad request' });
+});
+
 httpServer.on('error', (err) => console.error('[http server error]', err));
 
 // ═══════════════════════════════════════════════════════════════════════════

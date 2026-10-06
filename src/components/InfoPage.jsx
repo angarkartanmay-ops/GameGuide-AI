@@ -197,7 +197,7 @@ const TERMS = [
           <li>usage counts, to apply daily limits and show <strong>/stats</strong>;</li>
           <li>your Spoiler Shield setting and the game progress you tell it, so answers stay spoiler-safe;</li>
           <li>for servers using <strong>/watch</strong>: the server and channel IDs and the games to post patch notes or deals for — no user IDs. These are deleted with <strong>/watch remove</strong>, when the channel is deleted, or when the bot is removed from the server.</li>
-          <li>if you buy Pro, Pro Lifetime or a server plan: which plan you hold, its status and renewal date, and the Stripe reference for it. Payment is handled entirely by Stripe — we never see or store card details.</li>
+          <li>if you buy Pro, Pro Lifetime or a server plan: which plan you hold, its status and renewal date, and the Stripe reference for it. Payment is handled entirely by our payment providers (Stripe, Razorpay or Lemon Squeezy, depending on how you pay) — we never see or store card or UPI details.</li>
         </ul>
         <p>
           The bot only reads messages that <strong>@mention it</strong>, direct messages sent to it, and its slash

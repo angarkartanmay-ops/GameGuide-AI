@@ -44,6 +44,9 @@ const SUITES = [
   ['official',      'official-sources.test.ts'], // official news feed matches whole words ("ow" is not in "hollow")
   ['billing',       'billing.test.mjs'],       // Stripe period-end + checkout ref linking
   ['http-security', 'http-security.test.mjs'], // bot webhooks: constant-time auth, vote validation, flood limit
+  ['stripe-http',   'stripe-webhook-http.test.mjs'], // the real webhook route: signatures, replays, outages, floods
+  ['providers',     'billing-providers.test.mjs'], // razorpay + lemon squeezy: meaning of each webhook, checkouts, which buttons exist
+  ['providers-http','providers-http.test.mjs'],   // their real routes, plus index.js wiring
   ['discord-launch','discord-launch.test.mjs'],// invite perms, pings, intents, command wiring
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres
   ['quota-contract','quota-contract.test.mjs'],// quota.js against that same SQL

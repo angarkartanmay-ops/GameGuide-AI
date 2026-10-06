@@ -52,3 +52,29 @@ services:
         sync: false
       - key: STRIPE_PRICE_LIFETIME
         sync: false
+      # Razorpay (India) — see .env.example for where each value comes from.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: RAZORPAY_PLAN_PRO
+        sync: false
+      - key: RAZORPAY_PLAN_SERVER
+        sync: false
+      # Lemon Squeezy (worldwide, merchant of record).
+      - key: LEMONSQUEEZY_WEBHOOK_SECRET
+        sync: false
+      - key: LEMON_VARIANT_PRO
+        sync: false
+      - key: LEMON_VARIANT_SERVER
+        sync: false
+      - key: LEMON_VARIANT_LIFETIME
+        sync: false
+      - key: LEMON_CHECKOUT_PRO
+        sync: false
+      - key: LEMON_CHECKOUT_SERVER
+        sync: false
+      - key: LEMON_CHECKOUT_LIFETIME
+        sync: false

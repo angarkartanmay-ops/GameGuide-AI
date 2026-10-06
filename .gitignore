@@ -63,3 +63,8 @@ graphify-out/
 .hydracept/*.env
 .env.hydracept
 .hydracept/agent-context.json
+
+# Screen recordings & local captures
+/*.mp4
+Desktop *.mp4
+

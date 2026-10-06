@@ -353,5 +353,20 @@ check('billing migration is re-runnable', true);
   check('tier pricing stays readable, never writable', tr.rows[0].s === true && tr.rows[0].u === false);
 }
 
+// -- 2026-10-06: providers migration -----------------------------------------
+await db.exec(readFileSync(`${ROOT}/migrations/20261006_billing_providers.sql`, 'utf8'));
+await db.exec(readFileSync(`${ROOT}/migrations/20261006_billing_providers.sql`, 'utf8'));   // idempotent
+{
+  const cols = (await db.query(`select column_name from information_schema.columns where table_name = 'discord_billing_events'`)).rows.map(r => r.column_name);
+  check('billing events track completion', cols.includes('completed_at'));
+  const old = (await db.query(`select completed_at from discord_billing_events where event_id = 'evt_1'`)).rows[0];
+  check('events from before the column are marked completed', !!old?.completed_at);
+  await db.exec(`insert into discord_billing_events (event_id, type, received_at) values ('evt_old', 'x', now() - interval '200 days'), ('evt_new', 'x', now())`);
+  const pruned = (await db.query('select public.gg_discord_prune_billing_events() n')).rows[0].n;
+  check('old billing events are pruned, recent ones kept', pruned === 1 && Number((await db.query(`select count(*)::int c from discord_billing_events where event_id = 'evt_new'`)).rows[0].c) === 1);
+  const r = await db.query(`select has_function_privilege('anon', 'public.gg_discord_prune_billing_events()', 'execute') a`);
+  check('the prune function is not executable by anon', r.rows[0].a === false);
+}
+
 console.log(`\nSQL: ${pass} passed${fail ? `, ${fail} FAILED` : ''}`);
 process.exit(fail ? 1 : 0);

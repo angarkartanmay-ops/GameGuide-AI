@@ -175,6 +175,51 @@ stripe listen --forward-to localhost:3000/stripe-webhook
 stripe trigger checkout.session.completed
 ```
 
+### 1b. Razorpay (India — UPI, cards, netbanking)
+
+Runs beside Stripe; nothing about Stripe changes. `/premium` shows rupee buttons
+(🇮🇳 Pro ₹399/mo · Lifetime ₹3,299 · Server ₹1,199/mo) whenever the Razorpay keys
+are set. Pressing one makes the bot create that buyer's checkout through the
+Razorpay API — a subscription for Pro/Server, a payment link for Lifetime — with
+their Discord id (and server id) in `notes` the **server** wrote, so there is no
+hand-editable URL involved.
+
+Setup: Razorpay Dashboard → (1) API Keys → generate, (2) Subscriptions → Plans →
+create two monthly INR plans matching `plans.js` and copy their `plan_…` ids,
+(3) Webhooks → add `https://<bot-host>/razorpay-webhook` with a secret of your
+choosing and the events listed in `.env.example`. Put the five values in the
+environment (`RAZORPAY_*`). Start with **Test mode** keys and test cards/UPI.
+
+How it is checked: the plan comes from the subscription's `plan_id` (or, for
+Lifetime, the exact rupee amount paid on a link the bot made), never from notes
+alone. Cancelling keeps access to the end of the paid month; a failed charge keeps
+Pro while Razorpay retries; a full refund or a dispute takes Lifetime back.
+Subscription refunds are not auto-revoked — cancel the subscription in Razorpay.
+
+### 1c. Lemon Squeezy (worldwide — and it handles sales tax for you)
+
+Lemon Squeezy is the merchant of record: it sells to the buyer, collects and
+files VAT/sales tax in every country, and pays you out. Create three products
+(Pro and Server monthly, Lifetime one-off) at the `plans.js` prices, copy each
+**buy link** and **variant id**, and add a webhook to
+`https://<bot-host>/lemonsqueezy-webhook` (events in `.env.example`). If Stripe
+links are also set, `PAYMENT_GLOBAL=lemon` makes Lemon Squeezy the card option
+`/premium` shows. The bot appends `checkout[custom][discord_user_id]=…`; the plan
+comes from the **variant id** Lemon Squeezy reports. Test-mode purchases are
+ignored unless `LEMON_ALLOW_TEST=1`, because anyone can make one for free.
+
+### Shared rules (all providers — `billing-core.js`)
+- One set of rules, three dialects: a webhook is verified, mapped to *who* paid
+  for *which plan*, then handed to the same core.
+- An active plan is never displaced by a different subscription (a stranger
+  buying "for" someone else's id or server changes nothing; the payer is told).
+- Lifetime beats subscriptions; nothing displaces Lifetime.
+- Every event is claimed once (`discord_billing_events`); a failure answers 5xx
+  and un-claims it; a claim that never completed is retried after five minutes.
+- A subscription always has an end date (a missing one is a 3-day provisional
+  grant, never "forever"); a renewal thanks the buyer once, not monthly.
+- Run `migrations/20261005_billing_final.sql` then `20261006_billing_providers.sql`.
+
 ### 2. Top.gg votes (free traffic)
 List the bot at [Top.gg](https://top.gg). A vote grants **+10 bonus messages for
 24h**, capped at 20 banked, spent before the daily allowance.
@@ -313,6 +358,11 @@ The bot doesn't run any LLM logic itself — it's a thin gateway to the existing
 | [index.js](index.js) | Production bot — mention listener, slash handlers, HTTP server, login supervisor, watchdog, vote webhook |
 | [register-commands.js](register-commands.js) | One-time slash command registration with Discord |
 | [schema.sql](schema.sql) | Supabase tables (run once in SQL Editor) |
+| [billing-core.js](billing-core.js) | The payment rules shared by every provider (grant, renew, end, revoke, apply-once) |
+| [billing-stripe.js](billing-stripe.js) · [billing-razorpay.js](billing-razorpay.js) · [billing-lemon.js](billing-lemon.js) | One adapter per provider: signature check + its webhook dialect → the core |
+| [checkout.js](checkout.js) | Which payment buttons exist and where each goes |
+| [plans.js](plans.js) | Plan prices (USD and INR) — the one place they live |
+| [httpSecurity.js](httpSecurity.js) | Constant-time secrets, flood limiter, security headers, vote validation |
 | [.env.example](.env.example) | Template for all env vars — copy to `.env` |
 | `.env` | Your local secrets (never commit — `.gitignore`'d) |
 | [Dockerfile](Dockerfile) | Container build (with `HEALTHCHECK`) |
