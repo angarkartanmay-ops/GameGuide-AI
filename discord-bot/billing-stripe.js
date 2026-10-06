@@ -338,14 +338,16 @@ const NOTICE = {
  * Mount POST /stripe-webhook. Requires `req.rawBody` (captured by the `verify`
  * hook on express.json() in index.js): Stripe signs the exact bytes it sent.
  */
-function mountStripeWebhook(app, { supabase, client, guard = (_req, _res, next) => next() }) {
+function mountStripeWebhook(app, { supabase, client, guard = (_req, _res, next) => next(), stripeApi = null }) {
   if (!stripeConfigured) {
     console.log('[stripe] billing disabled (need STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET)');
     return false;
   }
 
   const repo = supabaseRepo(supabase);
-  const api = {
+  // `stripeApi` lets a test stand in for the two Stripe calls the handlers
+  // make, so the real route, signature check and handlers run without a network.
+  const api = stripeApi || {
     retrieveSubscription: (id) => stripe.subscriptions.retrieve(id),
     async listLineItemPriceIds(sessionId) {
       const items = await stripe.checkout.sessions.listLineItems(sessionId, { limit: 10 });
