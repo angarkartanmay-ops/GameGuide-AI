@@ -37,8 +37,8 @@ const iso = (unix) => (Number.isFinite(unix) ? new Date(unix * 1000).toISOString
  * Settings from the environment, or null when Razorpay is not set up.
  *   RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET   API keys (Dashboard → API Keys)
  *   RAZORPAY_WEBHOOK_SECRET                 the secret you type when adding the webhook
- *   RAZORPAY_PLAN_PRO / RAZORPAY_PLAN_SERVER  plan ids (plan_…) you create once, monthly,
- *                                           for the amounts in plans.js
+ *   RAZORPAY_PLAN_PRO / RAZORPAY_PLAN_SERVER  plan ids (plan_…), monthly, for the amounts in plans.js
+ *   RAZORPAY_PLAN_PRO_YEARLY / _SERVER_YEARLY  the yearly ones (optional)
  */
 function razorpayConfig(env = process.env) {
   const keyId = (env.RAZORPAY_KEY_ID || '').trim();
@@ -47,7 +47,14 @@ function razorpayConfig(env = process.env) {
   if (!keyId || !keySecret || !webhookSecret) return null;
   return {
     keyId, keySecret, webhookSecret,
-    plans: { pro: (env.RAZORPAY_PLAN_PRO || '').trim(), server: (env.RAZORPAY_PLAN_SERVER || '').trim() },
+    // Monthly and yearly plan ids (plan_…). A yearly one is optional: without
+    // it the plans page simply does not offer yearly in rupees.
+    plans: {
+      pro: (env.RAZORPAY_PLAN_PRO || '').trim(),
+      pro_yearly: (env.RAZORPAY_PLAN_PRO_YEARLY || '').trim(),
+      server: (env.RAZORPAY_PLAN_SERVER || '').trim(),
+      server_yearly: (env.RAZORPAY_PLAN_SERVER_YEARLY || '').trim(),
+    },
   };
 }
 
@@ -66,14 +73,31 @@ function verifySignature(rawBody, header, secret) {
  * Throws on bad input or any Razorpay failure; callers show a generic message
  * (the detail in the error is for the server log only).
  */
-async function createCheckout({ plan, userId, guildId = null }, {
+/** The Razorpay plan id that sells `plan` on `interval`, or ''. */
+function razorpayPlanId(config, plan, interval) {
+  if (!config || plan === 'lifetime') return '';
+  return config.plans[interval === 'year' ? `${plan}_yearly` : plan] || '';
+}
+
+/** Which plan/interval combinations Razorpay can sell with this config. */
+function razorpayOffers(config) {
+  if (!config) return [];
+  const out = [{ plan: 'lifetime', interval: 'once' }];
+  for (const plan of ['pro', 'server']) {
+    for (const interval of ['month', 'year']) if (razorpayPlanId(config, plan, interval)) out.push({ plan, interval });
+  }
+  return out;
+}
+
+async function createCheckout({ plan, interval = null, userId, guildId = null, callbackUrl = '' }, {
   config, fetchImpl = globalThis.fetch, now = Date.now, timeoutMs = 8000,
 } = {}) {
   if (!config) throw new Error('razorpay not configured');
   if (!PLANS[plan] || !PLANS[plan].inr) throw new Error(`unknown plan ${plan}`);
   if (!isSnowflake(String(userId))) throw new Error('bad user id');
   if (plan === 'server' && !isSnowflake(String(guildId))) throw new Error('server plan needs a server id');
-  if (plan !== 'lifetime' && !config.plans[plan]) throw new Error(`no Razorpay plan id set for ${plan}`);
+  interval = plan === 'lifetime' ? 'once' : (interval || 'month');
+  if (plan !== 'lifetime' && !razorpayPlanId(config, plan, interval)) throw new Error(`no Razorpay plan id set for ${plan}/${interval}`);
 
   const notes = { discord_user_id: String(userId), plan };
   if (plan === 'server') notes.discord_guild_id = String(guildId);
@@ -90,12 +114,14 @@ async function createCheckout({ plan, userId, guildId = null }, {
       reminder_enable: false,
       expire_by: Math.floor(now() / 1000) + 3 * 86400,
       notes,
+      ...(callbackUrl ? { callback_url: callbackUrl, callback_method: 'get' } : {}),
     };
   } else {
     path = '/subscriptions';
     body = {
-      plan_id: config.plans[plan],
-      total_count: 120,                            // billing cycles allowed; cancel any time
+      plan_id: razorpayPlanId(config, plan, interval),
+      // Billing cycles Razorpay may charge (a cap, not a commitment — cancel any time).
+      total_count: interval === 'year' ? 10 : 120,
       quantity: 1,
       customer_notify: 1,
       notes,
@@ -131,7 +157,11 @@ async function createCheckout({ plan, userId, guildId = null }, {
 
 function createRazorpayHandlers({ repo, notify = async () => {}, config, log = console }) {
   const core = createBillingCore({ repo, notify, log });
-  const planFor = (planId) => Object.entries(config.plans).find(([, id]) => id && id === planId)?.[0] || null;
+  // pro and pro_yearly are both Pro; the period itself comes from the subscription.
+  const planFor = (planId) => {
+    const key = Object.entries(config.plans).find(([, id]) => id && id === planId)?.[0];
+    return key ? key.replace(/_yearly$/, '') : null;
+  };
 
   async function subscriptionEvent(name, sub) {
     if (!sub?.id) return 'ignored';
@@ -254,4 +284,5 @@ function mountRazorpayWebhook(app, { supabase, client, guard = (_req, _res, next
 
 module.exports = {
   razorpayConfig, verifySignature, createCheckout, createRazorpayHandlers, mountRazorpayWebhook,
+  razorpayOffers, razorpayPlanId,
 };

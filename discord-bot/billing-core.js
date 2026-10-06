@@ -225,7 +225,8 @@ function createBillingCore({ repo, notify = async () => {}, log = console }) {
     const end = until || row.current_period_end || provisionalEnd(now);
     await repo.putUser({
       userId: row.user_id, tier: 'pro', source: row.source || 'stripe', providerRef,
-      status: state === 'past_due' ? 'past_due' : 'active', periodEnd: end,
+      // 'ending': cancelled, still paid up — /quota says "until <date>", not "renews".
+      status: state === 'past_due' ? 'past_due' : state === 'ended' ? 'ending' : 'active', periodEnd: end,
     });
     log.log(`[billing] ${providerRef} → ${state} until ${end} (user=${row.user_id})`);
     return state === 'ended' ? 'pro-ending' : state === 'past_due' ? 'past-due' : 'pro-renewed';

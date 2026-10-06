@@ -78,3 +78,24 @@ services:
         sync: false
       - key: LEMON_CHECKOUT_LIFETIME
         sync: false
+      # /upgrade → website plans page (see .env.example).
+      - key: UPGRADE_LINK_SECRET
+        sync: false
+      - key: SITE_URL
+        sync: false
+      - key: STRIPE_PRICE_PRO_YEARLY
+        sync: false
+      - key: STRIPE_PRICE_SERVER_YEARLY
+        sync: false
+      - key: RAZORPAY_PLAN_PRO_YEARLY
+        sync: false
+      - key: RAZORPAY_PLAN_SERVER_YEARLY
+        sync: false
+      - key: LEMON_VARIANT_PRO_YEARLY
+        sync: false
+      - key: LEMON_VARIANT_SERVER_YEARLY
+        sync: false
+      - key: LEMONSQUEEZY_API_KEY
+        sync: false
+      - key: LEMONSQUEEZY_STORE_ID
+        sync: false

@@ -367,6 +367,15 @@ await db.exec(readFileSync(`${ROOT}/migrations/20261006_billing_providers.sql`, 
   const r = await db.query(`select has_function_privilege('anon', 'public.gg_discord_prune_billing_events()', 'execute') a`);
   check('the prune function is not executable by anon', r.rows[0].a === false);
 }
+// -- 2026-10-07: a cancelled plan stays on until its paid period ends --------
+{
+  const E1 = '555555555555555551', E2 = '555555555555555552';
+  await db.exec(`insert into discord_entitlements (user_id, tier, source, status, current_period_end) values
+    (${E1}, 'pro', 'stripe', 'ending', now() + interval '5 days'),
+    (${E2}, 'pro', 'stripe', 'ending', now() - interval '1 minute')`);
+  check('an ending (cancelled, paid-up) plan is still Pro', (await q(E1, { dry: true })).tier === 'pro');
+  check('an ending plan past its date is Free', (await q(E2, { dry: true })).tier === 'free');
+}
 
 console.log(`\nSQL: ${pass} passed${fail ? `, ${fail} FAILED` : ''}`);
 process.exit(fail ? 1 : 0);

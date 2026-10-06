@@ -4,7 +4,7 @@
 //  Full feature-parity with the web app + monetization hooks.
 //
 //  Slash commands:    /ask /price /discover /konami /clear /history /quota
-//                     /stats /premium /help /progress /spoilers /watch
+//                     /stats /upgrade (/premium) /help /progress /spoilers /watch
 //  Watchtower:        patch-note + deal alerts posted into server channels
 //                     (watchtower.js; polled from this process every 15 min)
 //  Mention chat:      @GameGuide <question> [+ image attachments], or a DM
@@ -18,7 +18,7 @@
 //                     Tier resolution: Stripe-driven Supabase row OR env override
 //  Affiliate:         CheapShark deal URLs decorated with affiliate tags
 //                     (Humble, GreenManGaming, Fanatical) when env keys set
-//  Monetization:      /premium command, vote-rewards Top.gg webhook
+//  Monetization:      /upgrade → website plans page, vote-rewards Top.gg webhook
 //  Analytics:         per-user call counters → Supabase (discord_usage_stats)
 //  Resilience:        SIGTERM, AbortController timeouts, structured errors
 // ═══════════════════════════════════════════════════════════════════════════
@@ -46,10 +46,13 @@ const watchtower = require('./watchtower');
 const quota = require('./quota');
 const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
 const { mountStripeWebhook, stripeConfigured } = require('./billing-stripe');
-const { mountRazorpayWebhook, createCheckout: createRazorpayCheckout, razorpayConfig } = require('./billing-razorpay');
+const { mountRazorpayWebhook, razorpayConfig } = require('./billing-razorpay');
 const { mountLemonWebhook } = require('./billing-lemon');
-const { globalProvider, globalCheckoutUrl, razorpayPlans } = require('./checkout');
-const { priceLabel, inrLabel } = require('./plans');
+const { globalProvider, globalCheckoutUrl } = require('./checkout');
+const { priceLabel } = require('./plans');
+const { upgradeUrl } = require('./upgradeLink');
+const { loadMembership, describeMembership } = require('./membership');
+const { mountBillingApi, availableRails } = require('./billingApi');
 const { safeEqual, secureHeaders, rateLimiter, parseTopggVote } = require('./httpSecurity');
 const { splitForDiscord } = require('./textsplit');
 const { forDiscord } = require('./discordFormat');
@@ -581,109 +584,34 @@ function userFacingError(err) {
 //  CORE — handle a chat-style request (mention or /ask)
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ─── Payment buttons ───────────────────────────────────────────────────────
-// Three providers can be live at once (see checkout.js). Hosted links (Stripe
-// or Lemon Squeezy) are plain link buttons; Razorpay checkouts are created when
-// the button is pressed, so those buttons carry a custom id.
+// ─── Upgrading ─────────────────────────────────────────────────────────────
+// Viewing your plan (/quota) and buying one (/upgrade) are separate. Buying
+// happens on the website's plans page — monthly, yearly or once; card or UPI —
+// reached through a signed, one-hour link that already knows who is buying
+// (upgradeLink.js). If that is not configured yet, the older direct checkout
+// links (checkout.js) are used instead.
 
-const PAY_ID = 'pay:rzp:';
+const nameOf = (user) => user?.globalName || user?.username || '';
 
-const rzpButton = (plan) => {
-  const label = {
-    pro: `🇮🇳 Pro ${inrLabel('pro')}`,
-    lifetime: `🇮🇳 Lifetime ${inrLabel('lifetime')}`,
-    server: `🇮🇳 Server ${inrLabel('server')}`,
-  }[plan];
-  return new ButtonBuilder().setCustomId(`${PAY_ID}${plan}`).setLabel(label).setStyle(ButtonStyle.Secondary);
-};
-
-/** One "Upgrade to Pro" button for a quota wall, from whichever rail is live. */
-function upgradeRow(userId) {
-  const url = globalCheckoutUrl('pro', { userId });
-  if (url) {
-    return new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setLabel(`Upgrade to Pro — ${PRO_PRICE}`).setStyle(ButtonStyle.Link).setURL(url));
-  }
-  if (razorpayPlans().includes('pro')) return new ActionRowBuilder().addComponents(rzpButton('pro'));
-  return null;
+/** The plans-page link for this user, or a direct Pro checkout link as a fallback, or ''. */
+function upgradeLinkFor({ userId, guildId = null, name = '' }) {
+  return upgradeUrl({ userId, guildId, name }) || globalCheckoutUrl('pro', { userId });
 }
 
-/** Rows for /premium: global links, then the rupee buttons, then support links. */
-function premiumRows({ userId, guildId, isPremium, isLifetime, tier }) {
-  const rows = [];
-  const link = (label, plan) => {
-    const url = globalCheckoutUrl(plan, { userId, guildId }, process.env);
-    return url ? new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(url) : null;
-  };
-
-  // Carries the Discord id into checkout, so the webhook can grant the plan
-  // without ever asking the buyer what their snowflake is.
-  const global = [
-    !isPremium && link(`⭐ Go Pro — ${PRO_PRICE}`, 'pro'),
-    !isLifetime && link(`💎 Lifetime — ${LIFETIME_PRICE}`, 'lifetime'),
-    guildId && tier !== 'server' && link(`🌟 Upgrade this server — ${SERVER_PRICE}`, 'server'),
-  ].filter(Boolean);
-  if (global.length) rows.push(new ActionRowBuilder().addComponents(global));
-
-  const offered = razorpayPlans();
-  const rupees = [
-    !isPremium && offered.includes('pro') && rzpButton('pro'),
-    !isLifetime && offered.includes('lifetime') && rzpButton('lifetime'),
-    guildId && tier !== 'server' && offered.includes('server') && rzpButton('server'),
-  ].filter(Boolean);
-  if (rupees.length) rows.push(new ActionRowBuilder().addComponents(rupees));
-
-  const support = [
-    PATREON_URL && new ButtonBuilder().setLabel('🎨 Patreon').setStyle(ButtonStyle.Link).setURL(PATREON_URL),
-    KOFI_URL && new ButtonBuilder().setLabel('☕ Ko-fi').setStyle(ButtonStyle.Link).setURL(KOFI_URL),
-    TOPGG_VOTE_URL && new ButtonBuilder().setLabel(`🗳️ Vote for +${VOTE_BONUS_CREDITS} messages`).setStyle(ButtonStyle.Link).setURL(TOPGG_VOTE_URL),
-  ].filter(Boolean);
-  if (support.length) rows.push(new ActionRowBuilder().addComponents(support));
-  return rows.slice(0, 5);
+/** A one-button row: "Upgrade" for free users, "Manage plan" for paying ones. */
+function upgradeRow({ userId, guildId = null, name = '', paid = false }) {
+  // A paying user is never sent to a fresh checkout; only to the plans page.
+  const url = paid ? upgradeUrl({ userId, guildId, name }) : upgradeLinkFor({ userId, guildId, name });
+  if (!url) return null;
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setLabel(paid ? 'View or change plan' : 'Upgrade').setStyle(ButtonStyle.Link).setURL(url));
 }
 
-const payCooldown = new Map();   // userId → last press, so a button cannot be used to spam Razorpay
-const PAY_COOLDOWN_MS = 8_000;
-
-/** A rupee button was pressed: create that buyer's Razorpay checkout and hand over the link. */
-async function handleRazorpayButton(interaction) {
-  const reply = (content, extra = {}) => (interaction.deferred || interaction.replied
-    ? interaction.editReply({ content, ...extra })
-    : interaction.reply({ content, flags: MessageFlags.Ephemeral, ...extra }));
-  const plan = interaction.customId.slice(PAY_ID.length);
-  const userId = interaction.user.id;
-  const guildId = interaction.guildId;
-
-  if (!razorpayPlans().includes(plan)) return reply('That option is not available right now.');
-  if (plan === 'server' && !guildId) return reply('Open `/premium` in the server you want to upgrade, then press the server button there.');
-  const last = payCooldown.get(userId) || 0;
-  if (Date.now() - last < PAY_COOLDOWN_MS) return reply('One moment — your last checkout link is still being made.');
-  payCooldown.set(userId, Date.now());
-  if (payCooldown.size > 2000) for (const [k, t] of payCooldown) if (Date.now() - t > PAY_COOLDOWN_MS) payCooldown.delete(k);
-
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  try {
-    // Do not sell a plan someone already holds (a stale button, a second click).
-    const now = await quota.checkQuota(supabase, { userId, guildId, kind: 'chat', dryRun: true });
-    if (!now.degraded && now.tier === 'lifetime') return interaction.editReply('You already have **Pro Lifetime** — nothing more to buy. Thank you!');
-    if (!now.degraded && now.tier === 'pro' && plan === 'pro') return interaction.editReply('You already have **Pro**. Check `/quota` — or press the Lifetime button to stop renewing.');
-    const co = await createRazorpayCheckout({ plan, userId, guildId }, { config: razorpayConfig() });
-    const what = { pro: `Pro — ${inrLabel('pro')}`, lifetime: `Pro Lifetime — ${inrLabel('lifetime')}`, server: `Server plan — ${inrLabel('server')}` }[plan];
-    return interaction.editReply({
-      content:
-        `**${what}**\n` +
-        'This checkout is made for your Discord account — pay with UPI, cards or netbanking. ' +
-        `Your plan switches on within a minute of paying${plan === 'lifetime' ? '.' : ', and renews monthly until you cancel from the link Razorpay emails you.'}\n` +
-        (plan === 'server' ? 'It applies to **this server** and is shared by every member.\n' : '') +
-        '-# The link stays valid for a few days.',
-      components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setLabel('Pay securely').setStyle(ButtonStyle.Link).setURL(co.url))],
-    });
-  } catch (e) {
-    console.error(`[razorpay] checkout for user=${userId} plan=${plan} failed:`, e.message);
-    payCooldown.delete(userId);
-    return interaction.editReply('Could not start the payment just now. Please try again in a minute, or use another option from `/premium`.');
-  }
+/** How to pay, in one line, from what is configured. */
+function payMethodsLine() {
+  const rails = availableRails();
+  const ways = [rails.card && 'card (worldwide)', rails.upi && 'UPI or Indian cards'].filter(Boolean);
+  return ways.length ? `Pay by ${ways.join(' or ')}.` : '';
 }
 
 /** Reply with a quota-block message plus, for free users, an upgrade button. */
@@ -691,7 +619,7 @@ function sendBlocked(replyTarget, decision, userId) {
   const content = quota.blockedMessage(decision);
   const components = [];
   if (decision.tier === 'free') {
-    const row = upgradeRow(userId);
+    const row = upgradeRow({ userId });
     if (row) components.push(row);
   }
   const payload = { content, components, allowedMentions: { parse: [] } };
@@ -949,7 +877,7 @@ async function addWatch(interaction, target) {
     return interaction.editReply(
       `📡 This server already watches **${existing.length}/${limit}** games${premium ? '' : ' (the free limit)'}. ` +
       `Free one up with \`/watch remove\`` +
-      (premium ? '.' : `, or upgrade the server with \`/premium\` to watch up to ${watchtower.WATCH_LIMITS.server}.`));
+      (premium ? '.' : `, or upgrade the server with \`/upgrade\` to watch up to ${watchtower.WATCH_LIMITS.server}.`));
   }
   await watchRepo.upsertWatch({
     guild_id: interaction.guildId,
@@ -1124,10 +1052,6 @@ client.on('messageCreate', async (message) => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 client.on('interactionCreate', async (interaction) => {
-  if (interaction.isButton?.() && interaction.customId.startsWith(PAY_ID)) {
-    await handleRazorpayButton(interaction).catch((e) => console.error('[razorpay] button failed:', e.message));
-    return;
-  }
   if (!interaction.isChatInputCommand()) return;
   const userId = interaction.user.id;
   const guildId = interaction.guildId;
@@ -1469,7 +1393,11 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       case 'quota': {
-        const d = await quota.checkQuota(supabase, { userId, guildId, kind: 'chat', dryRun: true });
+        // Your plan and today's usage. Viewing only — buying is /upgrade.
+        const [d, m] = await Promise.all([
+          quota.checkQuota(supabase, { userId, guildId, kind: 'chat', dryRun: true }),
+          loadMembership(supabase, { userId, guildId }),
+        ]);
 
         if (d.degraded) {
           return interaction.reply({
@@ -1478,94 +1406,71 @@ client.on('interactionCreate', async (interaction) => {
           });
         }
 
-        const isFree = d.tier === 'free';
+        const plan = describeMembership({ tier: d.tier, entitlement: m.entitlement, server: m.server });
         const embed = new EmbedBuilder()
-          .setColor(isFree ? 0x00FFD1 : 0xFFD700)
-          .setTitle(`${d.tier_label} — today's usage`)
+          .setColor(plan.badge.color)
+          .setAuthor({ name: `${plan.badge.text} · ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL?.() || undefined })
+          .setTitle(`${plan.title} — your plan`)
+          .setDescription(plan.lines.join('\n'))
           .addFields(quota.quotaFields(d));
 
         if (d.limits?.soft_capped) {
           embed.setFooter({ text: 'Past your daily fair-use point — answers keep coming, from the standard model pool.' });
         }
 
-        const components = [];
-        if (isFree) {
-          const row = upgradeRow(userId);
-          if (row) components.push(row);
-        }
-        return interaction.reply({ embeds: [embed], components, flags: MessageFlags.Ephemeral });
+        const row = upgradeRow({ userId, guildId, name: nameOf(interaction.user), paid: d.tier !== 'free' });
+        return interaction.reply({ embeds: [embed], components: row ? [row] : [], flags: MessageFlags.Ephemeral });
       }
 
+      // /premium is the old name, kept so existing habits and top.gg docs work.
+      case 'upgrade':
       case 'premium': {
         // dryRun so opening the upgrade page never costs the user a message.
-        const [d, tiers] = await Promise.all([
+        const [d, m] = await Promise.all([
           quota.checkQuota(supabase, { userId, guildId, kind: 'chat', dryRun: true }),
-          fetchTiers(),
+          loadMembership(supabase, { userId, guildId }),
         ]);
-        // Defaults matter here: if the tier table is briefly unreachable this
-        // page still has to quote correct prices and limits rather than
-        // "0 of undefined messages left". Keep in step with discord_quota_tiers.
-        const free = { msgs_day: 15, vision_day: 3, burst_min: 5, ...(tiers.free || {}) };
-        const pro = { msgs_day: 200, vision_day: 40, burst_min: 20, ...(tiers.pro || {}) };
-        const srv = { msgs_day: 60, guild_pool_day: 800, ...(tiers.server || {}) };
-        const isPremium = d.tier !== 'free';
-        const isLifetime = d.tier === 'lifetime';
+        const paid = !d.degraded && d.tier !== 'free';
+        const url = paid
+          ? upgradeUrl({ userId, guildId, name: nameOf(interaction.user) })
+          : upgradeLinkFor({ userId, guildId, name: nameOf(interaction.user) });
+        const plan = describeMembership({ tier: d.degraded ? 'free' : d.tier, entitlement: m.entitlement, server: m.server });
 
-        const embed = new EmbedBuilder()
-          .setColor(isPremium ? 0xFFD700 : 0x00FFD1)
-          .setTitle(isPremium ? `${d.tier_label} — active` : '⭐ Upgrade to GameGuide Pro');
-
-        if (isPremium) {
-          embed.setDescription(
-            'Thank you for supporting GameGuide-AI — you\'re the reason it stays free for everyone else.\n\n' +
-            `• **${d.messages?.limit ?? pro.msgs_day} messages/day** · **${d.vision?.limit ?? pro.vision_day} screenshots**\n` +
-            '• Priority routing — the most accurate models first, never queued when the free pool is exhausted\n' +
-            '• Longer memory of your conversation\n' +
-            (isLifetime ? '• Yours for good — no renewals\n' : '') +
-            '\nTrack it any time with `/quota`.',
-          );
+        const embed = new EmbedBuilder().setColor(plan.badge.color);
+        if (paid) {
+          embed
+            .setTitle(`${plan.title} — you're on a paid plan`)
+            .setDescription(
+              `${plan.lines.join('\n')}\n\n` +
+              'Open the plans page to switch to yearly, go Lifetime, or upgrade this server.\n' +
+              '-# To cancel or update your card, use the link in your receipt email — or write to gameguideai.support@gmail.com.',
+            );
         } else {
           embed
-            .setDescription(d.degraded
-              ? `You're on **Free**.`
-              : `You're on **${d.tier_label || 'Free'}** — ${d.messages?.remaining ?? 0} of ${d.messages?.limit || free.msgs_day} messages left today.`)
-            // Stacked, not inline: three inline fields share one row, which on
-            // a phone is about thirteen characters each — "**150** messages/"
-            // then a wrap. Full-width rows read the same on both.
-            .addFields(
-              {
-                name: `🆓 Free`,
-                value: `**${free.msgs_day}** messages/day · **${free.vision_day}** screenshots/day · ${free.burst_min}/min`,
-                inline: false,
-              },
-              {
-                name: `⭐ Pro — ${PRO_PRICE}`,
-                value: `**${pro.msgs_day}** messages/day · **${pro.vision_day}** screenshots/day · ${pro.burst_min}/min · priority routing`,
-                inline: false,
-              },
-              {
-                name: `💎 Pro Lifetime — ${LIFETIME_PRICE}`,
-                value: 'Everything in Pro, for good — no subscription',
-                inline: false,
-              },
-              {
-                name: `🌟 Server — ${SERVER_PRICE}`,
-                value: `**${srv.msgs_day}**/day for **every member** (${srv.guild_pool_day} shared) · ${watchtower.WATCH_LIMITS.server} Watchtower games — best value for communities`,
-                inline: false,
-              },
-            )
-            .setFooter({ text: 'Cancel any time. Supports a solo dev keeping the bot free for everyone.' });
-          if (razorpayPlans().length) {
-            embed.addFields({
-              name: '🇮🇳 In India?',
-              value: `Pay in rupees with UPI, cards or netbanking — Pro ${inrLabel('pro')} · Lifetime ${inrLabel('lifetime')} · Server ${inrLabel('server')} (buttons below).`,
-              inline: false,
-            });
-          }
+            .setTitle('⭐ Upgrade GameGuide')
+            .setDescription([
+              `**Pro** — 200 messages a day, 40 screenshots and the most accurate answers. **${PRO_PRICE}**, or **${priceLabel('pro', { interval: 'year' })}** (two months free), or **${LIFETIME_PRICE}**.`,
+              `**Server** — 60 a day for every member and ${watchtower.WATCH_LIMITS.server} Watchtower games. **${SERVER_PRICE}** or **${priceLabel('server', { interval: 'year' })}**.`,
+              ...[
+                payMethodsLine(),
+                url ? '-# The button opens the plans page, already linked to your Discord account. The link is just for you and works for an hour.' : '',
+              ].filter(Boolean).map((line, i) => (i === 0 ? `\n${line}` : line)),
+            ].join('\n'));
         }
 
-        const components = premiumRows({ userId, guildId, isPremium, isLifetime, tier: d.tier });
-        return interaction.reply({ embeds: [embed], components });
+        const components = [];
+        if (url) {
+          components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel(paid ? 'View or change plan' : 'Choose a plan').setStyle(ButtonStyle.Link).setURL(url)));
+        } else if (!paid) {
+          embed.setFooter({ text: 'Paid plans open soon. Vote on top.gg for bonus messages meanwhile.' });
+        }
+        if (TOPGG_VOTE_URL && !paid) {
+          (components[0] || (components[0] = new ActionRowBuilder())).addComponents(
+            new ButtonBuilder().setLabel(`🗳️ Vote for +${VOTE_BONUS_CREDITS} messages`).setStyle(ButtonStyle.Link).setURL(TOPGG_VOTE_URL));
+        }
+        // Ephemeral: the link is signed for this user.
+        return interaction.reply({ embeds: [embed], components, flags: MessageFlags.Ephemeral });
       }
 
       case 'help': {
@@ -1590,15 +1495,15 @@ client.on('interactionCreate', async (interaction) => {
                 '`/watch add <game>` — post its patch notes (and deals) in a channel\n' +
                 '`/watch list` · `/watch remove <game>`', inline: false },
             { name: '🛠️ Utility', value:
-                '`/quota` — how much you have left today\n' +
+                '`/quota` — your plan, badge and what you have left today\n' +
                 '`/history` — show your recent chat with me\n' +
                 '`/clear` — wipe your chat history\n' +
                 '`/stats` — global + your usage stats\n' +
-                '`/premium` — compare plans and upgrade', inline: false },
+                '`/upgrade` (or `/premium`) — choose a plan: monthly, yearly or once', inline: false },
             { name: '🎉 Fun', value:
                 '`/konami` — you know the one', inline: false },
           )
-          .setFooter({ text: `Free: ${free.msgs_day ?? 15} messages/day · Pro: ${pro.msgs_day ?? 200}/day — see /premium` });
+          .setFooter({ text: `Free: ${free.msgs_day ?? 15} messages/day · Pro: ${pro.msgs_day ?? 200}/day — see /upgrade` });
         return interaction.reply({ embeds: [embed] });
       }
     }
@@ -1727,6 +1632,7 @@ if (TOPGG_WEBHOOK_AUTH) {
 mountStripeWebhook(app, { supabase, client, guard: webhookGuard });
 mountRazorpayWebhook(app, { supabase, client, guard: webhookGuard });
 mountLemonWebhook(app, { supabase, client, guard: webhookGuard });
+mountBillingApi(app, { supabase, checkQuota: quota.checkQuota, guard: rateLimiter({ windowMs: 60_000, max: 40 }) });
 
 const httpServer = app.listen(HTTP_PORT, '0.0.0.0', () => {
   console.log(`🌐 HTTP health server listening on :${HTTP_PORT} (/, /health, /ping${TOPGG_WEBHOOK_AUTH ? ', /topgg-webhook' : ''})`);

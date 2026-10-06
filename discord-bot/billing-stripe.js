@@ -26,7 +26,7 @@
 
 'use strict';
 
-const { PLANS, planForCheckout } = require('./plans');
+const { PLANS, planForCheckout, stripePriceFor } = require('./plans');
 const { createBillingCore, applyOnce, dmNotifier, supabaseRepo, withGrace, RENEWAL_GRACE_MS } = require('./billing-core');
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
@@ -206,6 +206,48 @@ function createBillingHandlers({ repo, api, notify = async () => {}, env = proce
   return { handleEvent, checkoutCompleted, subscriptionChanged, chargeReversed, invoicePaymentFailed };
 }
 
+// ─── Selling (from the website's plans page) ───────────────────────────────
+
+/** Which plan/interval combinations Stripe can sell: a key and a price id each. */
+function stripeOffers(env = process.env) {
+  if (!(env.STRIPE_SECRET_KEY || '').trim()) return [];
+  const out = [];
+  for (const [plan, intervals] of [['pro', ['month', 'year']], ['server', ['month', 'year']], ['lifetime', ['once']]]) {
+    for (const interval of intervals) if (stripePriceFor(plan, interval, env)) out.push({ plan, interval });
+  }
+  return out;
+}
+
+/**
+ * A Stripe Checkout Session for one buyer. Unlike a Payment Link, the
+ * reference is written by the server, so it cannot be edited on the way.
+ * @returns { url }
+ */
+async function createStripeCheckout({ plan, interval = null, userId, guildId = null, successUrl, cancelUrl }, {
+  client = stripe, env = process.env,
+} = {}) {
+  if (!client) throw new Error('stripe not configured');
+  interval = plan === 'lifetime' ? 'once' : (interval || 'month');
+  const price = stripePriceFor(plan, interval, env);
+  if (!price) throw new Error(`no Stripe price id for ${plan}/${interval}`);
+  if (!/^\d{17,20}$/.test(String(userId))) throw new Error('bad user id');
+  if (plan === 'server' && !/^\d{17,20}$/.test(String(guildId))) throw new Error('server plan needs a server id');
+
+  const meta = { discord_user_id: String(userId), plan, ...(plan === 'server' ? { discord_guild_id: String(guildId) } : {}) };
+  const session = await client.checkout.sessions.create({
+    mode: plan === 'lifetime' ? 'payment' : 'subscription',
+    line_items: [{ price, quantity: 1 }],
+    client_reference_id: encodeClientRef({ userId, guildId: plan === 'server' ? guildId : null }),
+    metadata: meta,
+    ...(plan === 'lifetime' ? {} : { subscription_data: { metadata: meta } }),
+    allow_promotion_codes: true,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+  });
+  if (!session?.url || !String(session.url).startsWith('https://checkout.stripe.com/')) throw new Error('stripe returned no usable link');
+  return { url: session.url };
+}
+
 /**
  * Mount POST /stripe-webhook. Requires `req.rawBody` (captured by the `verify`
  * hook on express.json() in index.js): Stripe signs the exact bytes it sent.
@@ -246,6 +288,8 @@ function mountStripeWebhook(app, { supabase, client, guard = (_req, _res, next) 
 
 module.exports = {
   mountStripeWebhook,
+  createStripeCheckout,
+  stripeOffers,
   buildCheckoutUrl,
   encodeClientRef,
   parseClientRef,

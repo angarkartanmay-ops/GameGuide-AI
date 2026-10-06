@@ -288,7 +288,8 @@ BEGIN
    WHERE e.user_id = p_user_id
      -- past_due keeps access while Stripe retries the card, but only until
      -- the paid period (plus the webhook's grace) runs out.
-     AND e.status IN ('active', 'past_due')
+     -- 'ending' = cancelled but paid up to current_period_end.
+     AND e.status IN ('active', 'past_due', 'ending')
      AND (e.current_period_end IS NULL OR e.current_period_end > now())
    LIMIT 1;
   v_user_tier := COALESCE(v_user_tier, 'free');

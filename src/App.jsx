@@ -18,11 +18,12 @@ const Crosshair = lazy(() => import('./components/Crosshair'));
 const FINE_POINTER = typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches;
 
 const SharedAnswer = lazy(() => import('./components/codex/SharedAnswer'));
+const UpgradePage = lazy(() => import('./components/site/UpgradePage'));
 
 // Hash-routable static views. Anything outside this set falls back to landing
 // (so a stale or unknown hash never strands the user on a blank page).
 const INFO_VIEWS = new Set(['about', 'terms', 'privacy', 'contacts']);
-const ALL_VIEWS = new Set(['landing', 'chat', ...INFO_VIEWS]);
+const ALL_VIEWS = new Set(['landing', 'chat', 'upgrade', ...INFO_VIEWS]);
 // Shared answers live at #share/<payload>. The payload is case-sensitive
 // base64url, so it's read raw — never lowercased, never rewritten.
 const SHARE_PREFIX = 'share/';
@@ -31,8 +32,25 @@ function readViewFromHash() {
   if (typeof window === 'undefined') return null;
   const raw = rawHash();
   if (raw.startsWith(SHARE_PREFIX)) return 'share';
+  if (raw.toLowerCase().startsWith('upgrade')) return 'upgrade';
   const hash = raw.toLowerCase();
   return ALL_VIEWS.has(hash) ? hash : null;
+}
+
+// The plans page arrives as #upgrade/<signed token> from /upgrade in Discord,
+// or #upgrade/thanks back from a payment. The token is kept for the visit
+// (sessionStorage) and taken out of the address bar, so a reload still works
+// and a copied URL does not carry it.
+const UPGRADE_TOKEN_KEY = 'gg.upgradeToken';
+function readUpgradeHash() {
+  const raw = rawHash();
+  let stored = '';
+  try { stored = sessionStorage.getItem(UPGRADE_TOKEN_KEY) || ''; } catch { /* private mode */ }
+  if (!raw.toLowerCase().startsWith('upgrade/')) return { token: stored, thanks: false };
+  const rest = raw.slice('upgrade/'.length);
+  if (rest === 'thanks') return { token: stored, thanks: true };
+  try { sessionStorage.setItem(UPGRADE_TOKEN_KEY, rest); } catch { /* still works this load */ }
+  return { token: rest, thanks: false };
 }
 
 // All selectable themes are dark. Any stored value outside this set (e.g.
@@ -63,6 +81,7 @@ function App() {
     return sessionStorage.getItem('gg_entered') === '1' ? 'chat' : 'landing';
   });
   const [shareHash, setShareHash] = useState(rawHash);
+  const [upgrade, setUpgrade] = useState(readUpgradeHash);
   const [theme, setTheme] = useState(readStoredTheme);
   const [themeChosen, setThemeChosen] = useState(readThemeChosen);
   // Active theme-swap effect. `null` while idle. The `key` (timestamp) forces
@@ -165,6 +184,7 @@ function App() {
     const onPop = () => {
       setView(readViewFromHash() || 'landing');
       setShareHash(rawHash());
+      setUpgrade(readUpgradeHash());
     };
     window.addEventListener('popstate', onPop);
     window.addEventListener('hashchange', onPop);
@@ -249,6 +269,19 @@ function App() {
         encoded={shareHash.startsWith(SHARE_PREFIX) ? shareHash.slice(SHARE_PREFIX.length) : ''}
         onAsk={askFromShare}
         onHome={goLanding}
+      />
+    );
+  } else if (view === 'upgrade') {
+    viewBody = (
+      <UpgradePage
+        token={upgrade.token}
+        thanks={upgrade.thanks}
+        onBack={() => {
+          if (window.history.state?.view) window.history.back();
+          else goLanding();
+        }}
+        onLogo={goLanding}
+        onNavigate={navigate}
       />
     );
   } else if (view === 'landing') {

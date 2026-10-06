@@ -141,7 +141,7 @@ async function run(sub, opts = {}, { channel = GENERAL, inGuild = true } = {}) {
   await run('add', { game: 'dark souls iii' });
   await run('add', { game: 'dark souls remastered' });
   const r = await run('add', { game: 'elden ring', channel: chan('1400000000000000020') });
-  check('free servers stop at 3', rows.length === 3 && /3\/3/.test(r.text) && /premium/.test(r.text), r.text);
+  check('free servers stop at 3', rows.length === 3 && /3\/3/.test(r.text) && /upgrade/.test(r.text), r.text);
   premium = true;
   const r2 = await run('add', { game: 'elden ring', channel: chan('1400000000000000020') });
   check('Server plan lifts the limit', rows.length === 4, r2.text);

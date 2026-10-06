@@ -170,7 +170,7 @@ function quotaFooter(decision, { userId, now = Date.now() } = {}) {
 
   const left = msgs.remaining || 0;
   if (left <= 0) return '';
-  return `-# ${left} message${left === 1 ? '' : 's'} left today · \`/premium\` for 200/day`;
+  return `-# ${left} message${left === 1 ? '' : 's'} left today · \`/upgrade\` for 200/day`;
 }
 
 /**
@@ -181,7 +181,7 @@ function blockedMessage(decision) {
   const label = decision.tier_label || 'Free';
   const reset = resetStamp(decision.reset_at);
   const isFree = decision.tier === 'free';
-  const upsell = isFree ? '\n\nUse `/premium` for **200 messages/day**, 40 screenshots and 20/min.' : '';
+  const upsell = isFree ? '\n\nUse `/upgrade` for **200 messages/day**, 40 screenshots and 20/min.' : '';
 
   switch (decision.scope) {
     case 'minute':
@@ -204,13 +204,13 @@ function blockedMessage(decision) {
 
     case 'guild': {
       const g = decision.guild || {};
-      return `🌟 **This server has used its daily pool** (${g.used}/${g.limit}).\n\nResets ${reset}. Individual \`/premium\` still works on top of the server plan.`;
+      return `🌟 **This server has used its daily pool** (${g.used}/${g.limit}).\n\nResets ${reset}. Individual \`/upgrade\` still works on top of the server plan.`;
     }
 
     case 'capacity':
       // Honest about the real cause, and the strongest upgrade argument the
       // bot will ever make — because it is true.
-      return `⚡ **I'm at capacity for today.** Free traffic has used up the shared daily pool.\n\nResets ${reset}. Pro users are never queued — \`/premium\`.`;
+      return `⚡ **I'm at capacity for today.** Free traffic has used up the shared daily pool.\n\nResets ${reset}. Pro users are never queued — \`/upgrade\`.`;
 
     default:
       return `⏳ **Rate limit reached** (${label}). Try again shortly.${upsell}`;
