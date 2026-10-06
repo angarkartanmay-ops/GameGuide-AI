@@ -213,9 +213,10 @@ const NOW = 1_800_000_000_000;
   check('availableRails prefers Stripe, honours PAYMENT_GLOBAL', availableRails(env).card.provider === 'stripe'
     && availableRails({ ...env, PAYMENT_GLOBAL: 'lemon', LEMONSQUEEZY_WEBHOOK_SECRET: 'x', LEMON_VARIANT_PRO: '1', LEMON_CHECKOUT_PRO: 'https://a.lemonsqueezy.com/b' }).card.provider === 'lemon');
   check('no rails when nothing is configured', JSON.stringify(availableRails({})) === '{"card":null,"upi":null}');
-  server.close();
+  server.closeAllConnections?.();
+  await new Promise(r => server.close(r));
   check('createBillingApi is usable on its own', typeof createBillingApi({ env, checkQuota: async () => ({}) }).plans === 'function');
 }
 
 console.log(`upgrade: ${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+if (failed) process.exit(1);
