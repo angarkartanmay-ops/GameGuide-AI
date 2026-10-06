@@ -156,6 +156,7 @@ const plans = require(join(HERE, '..', 'discord-bot', 'plans.js'));
       async putUser({ userId, tier, providerRef, status, periodEnd }) {
         db.users[userId] = { user_id: userId, tier, status, provider_ref: providerRef, current_period_end: periodEnd };
       },
+      async getGuild(id) { return db.guilds[id] || null; },
       async getGuildByRef(ref) { return Object.values(db.guilds).find(g => g.provider_ref === ref) || null; },
       async putGuild({ guildId, grantedBy, providerRef, expiresAt }) {
         db.guilds[guildId] = { guild_id: guildId, granted_by: grantedBy, provider_ref: providerRef, expires_at: expiresAt };

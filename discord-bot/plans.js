@@ -16,15 +16,15 @@
 
 const PLANS = Object.freeze({
   pro: Object.freeze({
-    id: 'pro', label: 'Pro', cents: 499, interval: 'month',
+    id: 'pro', label: 'Pro', cents: 499, inr: 399, interval: 'month',
     priceEnv: 'STRIPE_PRICE_PRO', linkEnv: 'STRIPE_PAYMENT_LINK',
   }),
   server: Object.freeze({
-    id: 'server', label: 'Server', cents: 1499, interval: 'month',
+    id: 'server', label: 'Server', cents: 1499, inr: 1199, interval: 'month',
     priceEnv: 'STRIPE_PRICE_SERVER', linkEnv: 'STRIPE_SERVER_PAYMENT_LINK',
   }),
   lifetime: Object.freeze({
-    id: 'lifetime', label: 'Pro Lifetime', cents: 3999, interval: null,
+    id: 'lifetime', label: 'Pro Lifetime', cents: 3999, inr: 3299, interval: null,
     priceEnv: 'STRIPE_PRICE_LIFETIME', linkEnv: 'STRIPE_LIFETIME_PAYMENT_LINK',
   }),
 });
@@ -34,6 +34,19 @@ function priceLabel(planId, { withInterval = true } = {}) {
   const p = PLANS[planId];
   if (!p) return '';
   const amount = `$${(p.cents / 100).toFixed(2)}`;
+  if (!withInterval) return amount;
+  return p.interval === 'month' ? `${amount}/mo` : `${amount} once`;
+}
+
+/**
+ * Rupee prices for Razorpay (India). Set by hand, not converted live: Indian
+ * buyers see round numbers, and these are checked against what Razorpay
+ * actually collected, so changing one means changing the Razorpay plan too.
+ */
+function inrLabel(planId, { withInterval = true } = {}) {
+  const p = PLANS[planId];
+  if (!p || !p.inr) return '';
+  const amount = `₹${p.inr.toLocaleString('en-IN')}`;
   if (!withInterval) return amount;
   return p.interval === 'month' ? `${amount}/mo` : `${amount} once`;
 }
@@ -76,4 +89,4 @@ function planForCheckout({ priceIds = [], amountTotal = null, mode = null }, env
   return null;
 }
 
-module.exports = { PLANS, priceLabel, configuredPriceIds, planForCheckout };
+module.exports = { PLANS, priceLabel, inrLabel, configuredPriceIds, planForCheckout };
