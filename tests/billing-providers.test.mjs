@@ -67,7 +67,7 @@ const ent = (w) => w.db.t.discord_entitlements.get(U);
   await w.c.grant({ source: 'razorpay', plan: 'pro', userId: U, providerRef: 'rzp:sub_1', periodEnd: new Date(Date.now() + 10 * DAY).toISOString() });
   const future = new Date(Date.now() + 5 * DAY).toISOString();
   await w.c.setPeriod({ providerRef: 'rzp:sub_1', state: 'ended', until: future });
-  check('cancelled with days left keeps access until then', ent(w).tier === 'pro' && ent(w).status === 'active' && ent(w).current_period_end === future);
+  check('cancelled with days left keeps access until then (status ending)', ent(w).tier === 'pro' && ent(w).status === 'ending' && ent(w).current_period_end === future);
   await w.c.setPeriod({ providerRef: 'rzp:sub_1', state: 'ended', until: new Date(Date.now() - 1000).toISOString() });
   check('cancelled with nothing left ends now', ent(w).tier === 'free' && ent(w).status === 'canceled');
   check('an unknown reference is reported, not invented', await w.c.setPeriod({ providerRef: 'rzp:sub_nope', state: 'active', until: null }) === 'unknown');

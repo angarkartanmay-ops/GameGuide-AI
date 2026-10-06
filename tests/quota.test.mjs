@@ -93,21 +93,21 @@ const decision = (over, extra = {}) => ({
   const day = quota.blockedMessage({ ...base, scope: 'day' });
   check('day block names the limit', day.includes('15 messages'));
   check('day block says when it lifts', day.includes('<t:'));
-  check('day block upsells a free user', day.includes('/premium'));
+  check('day block upsells a free user', day.includes('/upgrade'));
 
   const vision = quota.blockedMessage({ ...base, scope: 'vision' });
   check('vision block is specific', vision.includes('3/3'));
   check('vision block offers text instead', vision.toLowerCase().includes('text'));
 
   const minute = quota.blockedMessage({ ...base, scope: 'minute' });
-  check('burst block does not upsell', !minute.includes('/premium'));
+  check('burst block does not upsell', !minute.includes('/upgrade'));
 
   const capacity = quota.blockedMessage({ ...base, scope: 'capacity' });
   check('capacity block is honest', capacity.toLowerCase().includes('capacity'));
 
   // A paying user hitting a limit must not be sold the thing they already have.
   const proBlocked = quota.blockedMessage({ ...base, tier: 'pro', tier_label: 'Pro', scope: 'day', messages: { used: 200, limit: 200, remaining: 0 } });
-  check('paid user is not upsold', !proBlocked.includes('/premium'));
+  check('paid user is not upsold', !proBlocked.includes('/upgrade'));
 }
 
 // ── fallbackDecision: DB outage must not fail open ─────────────────────────

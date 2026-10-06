@@ -135,9 +135,14 @@ const commands = [
     .setName('clear')
     .setDescription('Wipe your chat history'),
 
+  // Viewing your plan and buying one are separate commands.
   new SlashCommandBuilder()
     .setName('quota')
-    .setDescription('How many messages and screenshots you have left today'),
+    .setDescription('Your plan, badge and what you have left today'),
+
+  new SlashCommandBuilder()
+    .setName('upgrade')
+    .setDescription('Choose a plan — monthly, yearly or once — on the GameGuide website'),
 
   new SlashCommandBuilder()
     .setName('stats')
@@ -145,7 +150,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('premium')
-    .setDescription('Upgrade to Pro tier for higher rate limits'),
+    .setDescription('Same as /upgrade'),
 
   new SlashCommandBuilder()
     .setName('help')

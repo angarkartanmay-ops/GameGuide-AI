@@ -138,6 +138,24 @@ Users check their own balance with `/quota`.
 
 ## Monetization
 
+### 0. How buying works now — `/quota` to look, `/upgrade` to buy
+
+- **`/quota`** shows your plan with a badge (FREE · PRO · PRO LIFETIME ·
+  PREMIUM SERVER), whether it renews, ends or has a payment problem, and
+  today's usage. It never sells; free users get one "Upgrade" button.
+- **`/upgrade`** (`/premium` still works) opens the website's **plans page**
+  through a signed one-hour link (`upgradeLink.js`) that already knows who is
+  buying. The page offers Monthly / Yearly (ten months for twelve) / Lifetime,
+  card worldwide or UPI in India, and calls this bot's `GET /api/plans` and
+  `POST /api/checkout` (`billingApi.js`). The bot creates the checkout with
+  the configured provider — the buyer comes from the verified link, never from
+  the request — and the provider's webhook grants the plan as before.
+- Set `UPGRADE_LINK_SECRET` (and `SITE_URL` if the site moves) on the bot, and
+  `VITE_BILLING_API_URL=https://<bot-host>` on Vercel. Without the secret,
+  `/upgrade` falls back to the direct Stripe / Lemon Squeezy links.
+- Yearly needs one more product id per provider (`*_YEARLY` in `.env.example`);
+  a provider without it simply does not offer yearly on the page.
+
 ### 1. Stripe (Pro, Pro Lifetime, Server) — fully wired
 
 Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, create three
@@ -361,6 +379,9 @@ The bot doesn't run any LLM logic itself — it's a thin gateway to the existing
 | [billing-core.js](billing-core.js) | The payment rules shared by every provider (grant, renew, end, revoke, apply-once) |
 | [billing-stripe.js](billing-stripe.js) · [billing-razorpay.js](billing-razorpay.js) · [billing-lemon.js](billing-lemon.js) | One adapter per provider: signature check + its webhook dialect → the core |
 | [checkout.js](checkout.js) | Which payment buttons exist and where each goes |
+| [upgradeLink.js](upgradeLink.js) | The signed one-hour link from `/upgrade` to the website's plans page |
+| [billingApi.js](billingApi.js) | `GET /api/plans` and `POST /api/checkout` for the plans page |
+| [membership.js](membership.js) | The `/quota` badge and plan status copy |
 | [plans.js](plans.js) | Plan prices (USD and INR) — the one place they live |
 | [httpSecurity.js](httpSecurity.js) | Constant-time secrets, flood limiter, security headers, vote validation |
 | [.env.example](.env.example) | Template for all env vars — copy to `.env` |

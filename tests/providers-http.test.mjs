@@ -151,11 +151,11 @@ server.close();
     /mountStripeWebhook\(app, \{[^}]*guard: webhookGuard/.test(idx)
     && /mountRazorpayWebhook\(app, \{[^}]*guard: webhookGuard/.test(idx)
     && /mountLemonWebhook\(app, \{[^}]*guard: webhookGuard/.test(idx));
-  check('index routes rupee buttons before the slash-command guard', idx.indexOf("startsWith(PAY_ID)") > 0 && idx.indexOf("startsWith(PAY_ID)") < idx.indexOf('if (!interaction.isChatInputCommand()) return;'));
-  check('rupee button ids fit Discord\'s 100-char limit and are per plan', ['pro', 'lifetime', 'server'].every(p => `pay:rzp:${p}`.length < 100));
-  check('the Razorpay button rate-limits per user', /payCooldown/.test(idx) && /PAY_COOLDOWN_MS/.test(idx));
+  check('index serves the plans API behind a rate limiter', /mountBillingApi\(app, \{[^}]*guard: rateLimiter/.test(idx));
+  check('/upgrade and /premium share one handler', /case 'upgrade':\s*case 'premium': \{/.test(idx));
+  check('a paying user is never sent to a fresh checkout', /paid \? upgradeUrl\(/.test(idx));
   check('no payment link is read straight from env in index.js any more', !/process\.env\.STRIPE_(PAYMENT|SERVER_PAYMENT|LIFETIME_PAYMENT)_LINK/.test(idx));
-  check('prices on buttons come from plans.js', /priceLabel\('pro'\)/.test(idx) && /inrLabel\('pro'\)/.test(idx));
+  check('prices on the upgrade card come from plans.js', /priceLabel\('pro'\)/.test(idx) && /priceLabel\('pro', \{ interval: 'year' \}\)/.test(idx));
   check('lifetime rupee price matches what the webhook demands', PLANS.lifetime.inr === 3299);
 }
 

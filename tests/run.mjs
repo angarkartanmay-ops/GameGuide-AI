@@ -47,6 +47,7 @@ const SUITES = [
   ['stripe-http',   'stripe-webhook-http.test.mjs'], // the real webhook route: signatures, replays, outages, floods
   ['providers',     'billing-providers.test.mjs'], // razorpay + lemon squeezy: meaning of each webhook, checkouts, which buttons exist
   ['providers-http','providers-http.test.mjs'],   // their real routes, plus index.js wiring
+  ['upgrade',       'upgrade.test.mjs'],       // /upgrade link, plans API, yearly prices, /quota badge, interval checkouts
   ['discord-launch','discord-launch.test.mjs'],// invite perms, pings, intents, command wiring
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres
   ['quota-contract','quota-contract.test.mjs'],// quota.js against that same SQL

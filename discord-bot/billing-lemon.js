@@ -31,14 +31,17 @@ const { safeEqual } = require('./httpSecurity');
 /**
  * Settings from the environment, or null when Lemon Squeezy is not set up.
  *   LEMONSQUEEZY_WEBHOOK_SECRET        the signing secret you type when adding the webhook
- *   LEMON_VARIANT_PRO / _SERVER / _LIFETIME   variant ids of the three products
- *   LEMON_CHECKOUT_PRO / _SERVER / _LIFETIME  their hosted buy links
+ *   LEMON_VARIANT_PRO / _SERVER / _LIFETIME   variant ids (and _PRO_YEARLY / _SERVER_YEARLY)
+ *   LEMONSQUEEZY_API_KEY + LEMONSQUEEZY_STORE_ID  to create checkouts server-side (preferred)
+ *   LEMON_CHECKOUT_PRO / _SERVER / _LIFETIME  hosted buy links (fallback without an API key)
  */
 function lemonConfig(env = process.env) {
   const webhookSecret = (env.LEMONSQUEEZY_WEBHOOK_SECRET || '').trim();
   const variants = {
     pro: (env.LEMON_VARIANT_PRO || '').trim(),
+    pro_yearly: (env.LEMON_VARIANT_PRO_YEARLY || '').trim(),
     server: (env.LEMON_VARIANT_SERVER || '').trim(),
+    server_yearly: (env.LEMON_VARIANT_SERVER_YEARLY || '').trim(),
     lifetime: (env.LEMON_VARIANT_LIFETIME || '').trim(),
   };
   if (!webhookSecret || !Object.values(variants).some(Boolean)) return null;
@@ -46,9 +49,15 @@ function lemonConfig(env = process.env) {
     webhookSecret, variants,
     checkout: {
       pro: (env.LEMON_CHECKOUT_PRO || '').trim(),
+      pro_yearly: (env.LEMON_CHECKOUT_PRO_YEARLY || '').trim(),
       server: (env.LEMON_CHECKOUT_SERVER || '').trim(),
+      server_yearly: (env.LEMON_CHECKOUT_SERVER_YEARLY || '').trim(),
       lifetime: (env.LEMON_CHECKOUT_LIFETIME || '').trim(),
     },
+    // With an API key the bot creates each checkout itself (the buyer's id is
+    // then written server-side, not appended to a URL). Buy links are the fallback.
+    apiKey: (env.LEMONSQUEEZY_API_KEY || '').trim(),
+    storeId: (env.LEMONSQUEEZY_STORE_ID || '').trim(),
     allowTest: env.LEMON_ALLOW_TEST === '1',
   };
 }
@@ -76,11 +85,93 @@ function buildCheckoutUrl(base, { userId, guildId = null }) {
   return out;
 }
 
+// ─── Selling ───────────────────────────────────────────────────────────────
+
+const keyFor = (plan, interval) => (plan === 'lifetime' ? 'lifetime' : interval === 'year' ? `${plan}_yearly` : plan);
+
+/** Which plan/interval combinations this config can sell. */
+function lemonOffers(config) {
+  if (!config) return [];
+  const can = (k) => !!config.variants[k] && (!!(config.apiKey && config.storeId) || !!config.checkout[k]);
+  const out = [];
+  for (const plan of ['pro', 'server']) {
+    for (const interval of ['month', 'year']) if (can(keyFor(plan, interval))) out.push({ plan, interval });
+  }
+  if (can('lifetime')) out.push({ plan: 'lifetime', interval: 'once' });
+  return out;
+}
+
+/**
+ * A checkout for one buyer. Through the API when a key is set (custom data
+ * written by the server, a return link to the site); otherwise the hosted
+ * buy link with the ids appended.
+ * @returns { url }
+ */
+async function createLemonCheckout({ plan, interval = null, userId, guildId = null, redirectUrl = '' }, {
+  config, fetchImpl = globalThis.fetch, timeoutMs = 8000,
+} = {}) {
+  if (!config) throw new Error('lemon squeezy not configured');
+  interval = plan === 'lifetime' ? 'once' : (interval || 'month');
+  const key = keyFor(plan, interval);
+  const variant = config.variants[key];
+  if (!variant) throw new Error(`no Lemon Squeezy variant for ${plan}/${interval}`);
+  if (!isSnowflake(String(userId))) throw new Error('bad user id');
+  if (plan === 'server' && !isSnowflake(String(guildId))) throw new Error('server plan needs a server id');
+
+  if (!(config.apiKey && config.storeId)) {
+    const url = buildCheckoutUrl(config.checkout[key], { userId, guildId: plan === 'server' ? guildId : null });
+    if (!url) throw new Error(`no Lemon Squeezy buy link for ${plan}/${interval}`);
+    return { url };
+  }
+
+  const custom = { discord_user_id: String(userId) };
+  if (plan === 'server') custom.discord_guild_id = String(guildId);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl('https://api.lemonsqueezy.com/v1/checkouts', {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: {
+        Accept: 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'checkouts',
+          attributes: {
+            checkout_data: { custom },
+            product_options: { enabled_variants: [Number(variant)], ...(redirectUrl ? { redirect_url: redirectUrl } : {}) },
+          },
+          relationships: {
+            store: { data: { type: 'stores', id: String(config.storeId) } },
+            variant: { data: { type: 'variants', id: String(variant) } },
+          },
+        },
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`lemon squeezy ${res.status}: ${String(data?.errors?.[0]?.detail || '').slice(0, 160)}`);
+    const url = data?.data?.attributes?.url;
+    let ok = false;
+    try { const u = new URL(url); ok = u.protocol === 'https:' && /(^|\.)lemonsqueezy\.com$/i.test(u.hostname); } catch { ok = false; }
+    if (!ok) throw new Error('lemon squeezy returned no usable link');
+    return { url };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── Lemon Squeezy's dialect → billing-core ────────────────────────────────
 
 function createLemonHandlers({ repo, notify = async () => {}, config, log = console }) {
   const core = createBillingCore({ repo, notify, log });
-  const planFor = (variantId) => Object.entries(config.variants).find(([, v]) => v && String(v) === String(variantId))?.[0] || null;
+  // pro and pro_yearly are both Pro; the period itself comes from the subscription.
+  const planFor = (variantId) => {
+    const key = Object.entries(config.variants).find(([, v]) => v && String(v) === String(variantId))?.[0];
+    return key ? key.replace(/_yearly$/, '') : null;
+  };
 
   async function orderCreated(data, attrs, custom) {
     const plan = planFor(attrs.first_order_item?.variant_id);
@@ -210,4 +301,5 @@ function mountLemonWebhook(app, { supabase, client, guard = (_req, _res, next) =
 
 module.exports = {
   lemonConfig, verifySignature, buildCheckoutUrl, createLemonHandlers, mountLemonWebhook,
+  lemonOffers, createLemonCheckout,
 };
