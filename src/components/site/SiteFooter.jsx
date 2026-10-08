@@ -56,6 +56,8 @@ export default function SiteFooter({ onNavigate, onStart }) {
             <button type="button" className="s-foot__link" onClick={go('upgrade')}>Plans</button>
             <button type="button" className="s-foot__link" onClick={go('terms')}>Terms &amp; copyright</button>
             <button type="button" className="s-foot__link" onClick={go('privacy')}>Privacy</button>
+            <button type="button" className="s-foot__link" onClick={go('refunds')}>Refunds &amp; cancellation</button>
+            <button type="button" className="s-foot__link" onClick={go('delivery')}>Delivery</button>
             <button type="button" className="s-foot__link" onClick={go('contacts')}>Contact</button>
           </div>
           <div>

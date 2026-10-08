@@ -22,7 +22,7 @@ const UpgradePage = lazy(() => import('./components/site/UpgradePage'));
 
 // Hash-routable static views. Anything outside this set falls back to landing
 // (so a stale or unknown hash never strands the user on a blank page).
-const INFO_VIEWS = new Set(['about', 'terms', 'privacy', 'contacts']);
+const INFO_VIEWS = new Set(['about', 'terms', 'privacy', 'refunds', 'delivery', 'contacts']);
 const ALL_VIEWS = new Set(['landing', 'chat', 'upgrade', ...INFO_VIEWS]);
 // Shared answers live at #share/<payload>. The payload is case-sensitive
 // base64url, so it's read raw — never lowercased, never rewritten.

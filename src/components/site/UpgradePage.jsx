@@ -3,7 +3,7 @@ import { ArrowLeft, Check, Lock, ShieldCheck } from 'lucide-react';
 import { LINKS, mailto } from '../../site/links';
 import { HERO_GAMES, heroArt } from '../../site/showcase';
 import {
-  PLANS, money, yearlySaving, readUpgradeToken, billingOpen, fetchPlans, startCheckout, CHECKOUT_ERRORS,
+  PLANS, money, yearlySaving, readUpgradeToken, billingOpen, fetchPlans, startCheckout, signIn, CHECKOUT_ERRORS,
 } from '../../site/pricing';
 import { gsap, useCalm, useScene } from '../../site/motion';
 import SiteNav from './SiteNav';
@@ -56,7 +56,7 @@ function Features({ items }) {
  * provider takes it from there. Without a link it is a price list that says
  * how to get one.
  */
-export default function UpgradePage({ token, thanks, onBack, onLogo, onNavigate }) {
+export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, onNavigate }) {
   const calm = useCalm();
   const rootRef = useRef(null);
   const [game] = useState(() => HERO_GAMES[2] || HERO_GAMES[0]);
@@ -67,6 +67,11 @@ export default function UpgradePage({ token, thanks, onBack, onLogo, onNavigate 
   const [error, setError] = useState('');
   // The clock the page reads; ticking it keeps "valid for N minutes" honest.
   const [now, setNow] = useState(() => Date.now());
+  // Email sign-in, for test and review accounts that have no Discord to run
+  // /upgrade from (payment providers review the checkout this way).
+  const [signedIn, setSignedIn] = useState('');
+  const [form, setForm] = useState({ open: false, email: '', password: '', busy: false, error: '' });
+  const token = signedIn || linkToken;
 
   const buyer = useMemo(() => readUpgradeToken(token), [token]);
   const expired = !!buyer && buyer.exp * 1000 <= now;
@@ -119,6 +124,19 @@ export default function UpgradePage({ token, thanks, onBack, onLogo, onNavigate 
     if (tier === 'lifetime' && plan !== 'server') return 'You have Lifetime.';
     if (plan === 'server' && tier === 'server') return 'This server already has it.';
     return '';
+  };
+
+  const submitSignIn = async (e) => {
+    e.preventDefault();
+    setForm(f => ({ ...f, busy: true, error: '' }));
+    try {
+      const t = await signIn(form.email, form.password);
+      try { sessionStorage.setItem('gg.upgradeToken', t); } catch { /* still signed in for this view */ }
+      setSignedIn(t);
+      setForm({ open: false, email: '', password: '', busy: false, error: '' });
+    } catch (err) {
+      setForm(f => ({ ...f, busy: false, error: err.message === 'bad-login' ? 'That email and password do not match.' : err.message === 'slow-down' ? 'Too many tries — wait a few minutes.' : 'Sign-in is not available right now.' }));
+    }
   };
 
   const buy = async (plan, iv) => {
@@ -192,7 +210,9 @@ export default function UpgradePage({ token, thanks, onBack, onLogo, onNavigate 
               {linked ? (
                 <p>
                   <ShieldCheck size={16} aria-hidden="true" />
-                  Buying for <strong>{buyer.name ? `@${buyer.name}` : 'your Discord account'}</strong>
+                  {buyer.name === 'Test account'
+                    ? <>Signed in as the <strong>test account</strong> — payments here are test payments</>
+                    : <>Buying for <strong>{buyer.name ? `@${buyer.name}` : 'your Discord account'}</strong></>}
                   {buyer.inServer ? ' · server plans apply to the server you opened this from' : ''}
                   <span className="s-upgrade__ttl">link valid {minutesLeft} min</span>
                 </p>
@@ -203,7 +223,33 @@ export default function UpgradePage({ token, thanks, onBack, onLogo, onNavigate 
                     ? <>This link has expired. Run <code>/upgrade</code> in Discord for a fresh one.</>
                     : <>To buy, run <code>/upgrade</code> in Discord — its link opens this page already signed in as you.</>}
                   <a className="s-a" href={LINKS.discordInvite} target="_blank" rel="noopener noreferrer">Add GameGuide to Discord</a>
+                  {billingOpen() && !form.open && (
+                    <button type="button" className="s-linkbtn" onClick={() => setForm(f => ({ ...f, open: true }))}>
+                      Sign in with email
+                    </button>
+                  )}
                 </p>
+              )}
+              {!linked && form.open && (
+                <form className="s-signin" onSubmit={submitSignIn} aria-label="Sign in with email">
+                  <label>
+                    <span>Email</span>
+                    <input type="email" autoComplete="username" required value={form.email}
+                      onChange={(e) => setForm(f => ({ ...f, email: e.target.value }))} />
+                  </label>
+                  <label>
+                    <span>Password</span>
+                    <input type="password" autoComplete="current-password" required value={form.password}
+                      onChange={(e) => setForm(f => ({ ...f, password: e.target.value }))} />
+                  </label>
+                  <button type="submit" className="s-btn s-btn--primary s-btn--sm" disabled={form.busy}>
+                    {form.busy ? 'Signing in…' : 'Sign in'}
+                  </button>
+                  <p className="s-signin__note">
+                    For test and review accounts. Players link their account by running <code>/upgrade</code> in Discord.
+                  </p>
+                  {form.error && <p className="s-signin__error" role="alert">{form.error}</p>}
+                </form>
               )}
               {account && tier !== 'free' && (
                 <p className="s-upgrade__current">

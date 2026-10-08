@@ -106,6 +106,19 @@ export async function startCheckout({ token, plan, interval, rail }) {
   return data.url;
 }
 
+/** Email sign-in for test / review accounts; resolves to an upgrade token. */
+export async function signIn(email, password) {
+  if (!API) throw new Error('closed');
+  const res = await fetch(`${API}/api/review-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || typeof data.token !== 'string') throw new Error(data.error || `sign-in ${res.status}`);
+  return data.token;
+}
+
 /** Plain words for the API's error codes. */
 export const CHECKOUT_ERRORS = {
   'link-expired': 'This upgrade link has expired. Run /upgrade in Discord for a fresh one.',
