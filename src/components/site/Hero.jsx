@@ -3,11 +3,10 @@ import { Pause, Play, CornerDownLeft } from 'lucide-react';
 import { HERO_GAMES, heroArt, coverArt } from '../../site/showcase';
 import { LINKS } from '../../site/links';
 import { gsap, useScene } from '../../site/motion';
-import { HudCorners, Overline } from './bits';
+import { HudCorners } from './bits';
 import LiveCount from './LiveCount';
 
 const MOBILE_MQ = '(max-width: 767px)';
-const pad = (n) => String(n).padStart(2, '0');
 
 function ArtLayer({ game, ready, onReady, priority }) {
   return (
@@ -130,7 +129,6 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
       <div className="s-hero__frame">
         <HudCorners />
         <div className="s-hero__inner">
-          <div data-intro><Overline>GameGuide · a guide for every game</Overline></div>
           <h1 id="hero-title" className="s-hero__title">
             <span className="sr-only">Ask anything about any game.</span>
             <span aria-hidden="true">
@@ -139,8 +137,8 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
             </span>
           </h1>
           <p className="s-hero__sub" data-intro>
-            Live answers from wikis, patch notes and the web — set like a strategy guide,
-            and it won&rsquo;t spoil what you haven&rsquo;t reached.
+            Live answers from wikis, patch notes and the web, set like a strategy guide.
+            No spoilers past where you are.
           </p>
           <div className="s-hero__actions" data-intro>
             <button type="button" className="s-btn s-btn--primary s-btn--lg" onClick={onStart}>
@@ -155,7 +153,6 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
         </div>
 
         <div className="s-hero__hud" data-intro>
-          <span className="s-hero__count" aria-hidden="true">{pad(idx + 1)} / {pad(HERO_GAMES.length)}</span>
           <div className="s-hero__tabs" role="group" aria-label="Showcased game">
             {HERO_GAMES.map((g, i) => (
               <button
@@ -175,7 +172,7 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
               </button>
             ))}
           </div>
-          <span className="s-hero__now" aria-live="off">Now showing · {game.name}</span>
+          <span className="s-hero__now" aria-live="off">{game.name}</span>
           {!calm && (
             <button
               type="button"

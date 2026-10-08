@@ -7,7 +7,7 @@ import { ChapterHead } from './bits';
 // question that works as written.
 const ITEMS = [
   {
-    id: 'research', label: 'Live research', hint: 'Wikis · patch notes · web',
+    id: 'research', label: 'Live research', hint: 'Wikis, patch notes, web',
     body: 'Every answer is researched when you ask. It reads game wikis, official patch notes and the web, weighs them against each other, and lists the sources so you can check.',
     tries: ['What changed in the latest Helldivers 2 patch?'],
   },
@@ -18,7 +18,7 @@ const ITEMS = [
   },
   {
     id: 'missables', label: 'Missables', hint: 'Before the point of no return',
-    body: 'What can you still lose for good — items, questlines, trophies, one-time choices — listed in the order you will reach them, starting from where you are and spoiling nothing after it.',
+    body: 'What can you still lose for good: items, questlines, trophies, one-time choices. Listed in the order you will reach them, starting from where you are and spoiling nothing after it.',
     tries: ['/missables Elden Ring'],
   },
   {
@@ -43,7 +43,7 @@ const ITEMS = [
   },
   {
     id: 'share', label: 'Share it', hint: 'Spoilers stay hidden',
-    body: 'Send an answer to a friend who is behind you. The link opens it with every spoiler still under its bar — and it is carried in the link itself, so nothing is stored on our side.',
+    body: 'Send an answer to a friend who is behind you. The link opens it with every spoiler still under its bar. The answer travels inside the link itself, so nothing is stored on our side.',
     tries: ['Share under any answer'],
   },
 ];
@@ -84,7 +84,7 @@ export default function CapabilityMenu({ calm }) {
   return (
     <section ref={rootRef} id="loadout" className="s-chapter" aria-labelledby="loadout-title">
       <div className="s-wrap">
-        <ChapterHead index="04" label="Loadout" id="loadout-title" title="Everything it can do, one menu away." />
+        <ChapterHead id="loadout-title" title="Everything it can do, one menu away." />
         <div className="s-menu">
           <div className="s-menu__list" role="tablist" aria-orientation="vertical" aria-label="Capabilities" onKeyDown={onKeyDown} style={{ '--sel': sel }}>
             <span className="s-menu__selector" aria-hidden="true" />
@@ -111,7 +111,6 @@ export default function CapabilityMenu({ calm }) {
 
           <div className="s-menu__panel" role="tabpanel" id="cap-panel" aria-labelledby={`cap-tab-${item.id}`}>
             <div key={item.id} className="s-menu__detail">
-              <span className="s-menu__big" aria-hidden="true">{String(sel + 1).padStart(2, '0')}</span>
               <h3 className="s-menu__title">{item.label}</h3>
               <p className="s-menu__body">{item.body}</p>
               <p className="s-menu__try-label">Try</p>

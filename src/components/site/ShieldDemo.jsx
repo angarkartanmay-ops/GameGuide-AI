@@ -34,7 +34,6 @@ export default function ShieldDemo({ calm }) {
     <section ref={rootRef} id="shield" className="s-chapter s-shield-ch" aria-labelledby="shield-title">
       <div className="s-wrap">
         <ChapterHead
-          index="02"
           label="Spoiler Shield"
           id="shield-title"
           title="It stops where you are."
@@ -53,7 +52,7 @@ export default function ShieldDemo({ calm }) {
               step={1}
               value={at}
               onChange={(e) => set(Number(e.target.value))}
-              aria-valuetext={`${milestone.label} — ${milestone.progress}`}
+              aria-valuetext={`${milestone.label}: ${milestone.progress}`}
               style={{ '--s-range': `${(at / (SHIELD_MILESTONES.length - 1)) * 100}%` }}
             />
             <ol className="s-shield__ticks">
@@ -76,13 +75,13 @@ export default function ShieldDemo({ calm }) {
             </p>
             <p className="s-shield__status" aria-live="polite">
               {hidden === 0
-                ? 'Nothing hidden — you have seen it all.'
+                ? 'Nothing hidden. You have seen it all.'
                 : `${hidden} ${hidden === 1 ? 'line is' : 'lines are'} past your progress and hidden.`}
             </p>
           </div>
 
           <article className="s-shield__page" aria-label="Elden Ring lore, filtered by your progress">
-            <p className="s-mini-over"><Mark size="xs" /> GameGuide · Elden Ring lore</p>
+            <p className="s-mini-over"><Mark size="xs" /> Elden Ring lore</p>
             {SHIELD_LINES.map((line, i) => {
               const show = isVisibleAt(line, at);
               return (
@@ -93,7 +92,7 @@ export default function ShieldDemo({ calm }) {
                     <>
                       <span className="s-spoiler" aria-hidden="true"><span className="s-spoiler__text">{line.text}</span></span>
                       <span className="s-shield__why">
-                        <EyeOff size={12} aria-hidden="true" /> Past {milestone.label} — hidden
+                        <EyeOff size={12} aria-hidden="true" /> Hidden past {milestone.label}
                       </span>
                     </>
                   )}

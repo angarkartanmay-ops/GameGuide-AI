@@ -48,11 +48,10 @@ export default function WatchtowerDemo({ calm }) {
       <div className="s-wrap s-watch__grid">
         <div className="s-watch__copy">
           <ChapterHead
-            index="05"
-            label="Watchtower · Discord"
+            label="Watchtower for Discord"
             id="watch-title"
             title="Patch notes in your server, before anyone asks."
-            lead="Add the bot, pick a channel, name a game. Watchtower posts its official patch notes — summarised — and its best deals as they happen."
+            lead="Add the bot, pick a channel, name a game. Watchtower posts its official patch notes, summarised, and its best deals as they happen."
           />
           <ul className="s-watch__facts">
             <li><span>/watch add</span> follows any Steam game in the channel you choose.</li>
@@ -61,7 +60,7 @@ export default function WatchtowerDemo({ calm }) {
           </ul>
           <div className="s-watch__cta">
             <a className="s-btn s-btn--primary" href={LINKS.discordInvite} target="_blank" rel="noopener noreferrer">
-              Add to your server
+              Add to Discord
             </a>
             <a className="s-btn s-btn--ghost" href={LINKS.topgg} target="_blank" rel="noopener noreferrer">
               top.gg <ArrowUpRight size={14} aria-hidden="true" />

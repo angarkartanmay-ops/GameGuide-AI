@@ -26,7 +26,7 @@ export default function LiveCount() {
         {parts.map((p, i) => (
           <span key={p.label} className="s-livecount__part">
             <b>{p.value}</b> {p.label}
-            {i < parts.length - 1 && <span className="s-livecount__sep">·</span>}
+            {i < parts.length - 1 && <span className="s-livecount__sep" />}
           </span>
         ))}
       </span>

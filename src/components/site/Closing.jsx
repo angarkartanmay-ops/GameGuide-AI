@@ -2,7 +2,6 @@ import React, { useRef } from 'react';
 import { CornerDownLeft } from 'lucide-react';
 import { LINKS } from '../../site/links';
 import { gsap, SplitText, useScene } from '../../site/motion';
-import { HudCorners, Overline } from './bits';
 
 /**
  * The last screen: a title-card "PRESS START" whose letters fly in from
@@ -35,11 +34,9 @@ export default function Closing({ calm, onStart, arcade }) {
   return (
     <section ref={rootRef} id="start" className="s-chapter s-closing" aria-labelledby="start-title">
       <div className="s-wrap s-closing__inner">
-        <HudCorners />
-        <Overline>06 · Continue?</Overline>
         <h2 id="start-title" className="s-closing__title" aria-label="Press Start">Press <em>Start</em></h2>
         <p className="s-closing__sub" data-reveal-late>
-          Free on the web. No account needed to ask — sign in only if you want your history kept.
+          Free on the web. No account needed to ask. Sign in only if you want your history kept.
         </p>
         <div className="s-closing__actions" data-reveal-late>
           <button type="button" className="s-btn s-btn--primary s-btn--lg" onClick={onStart}>

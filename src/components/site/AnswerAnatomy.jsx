@@ -95,8 +95,6 @@ export default function AnswerAnatomy({ calm }) {
     <section ref={rootRef} id="anatomy" className="s-chapter s-anatomy" aria-labelledby="anatomy-title">
       <div className="s-wrap">
         <ChapterHead
-          index="01"
-          label="Anatomy of an answer"
           id="anatomy-title"
           title="Watch one answer come together."
           lead="Scroll to step through a real question, from the moment you ask to the part it keeps from you."

@@ -109,10 +109,9 @@ export default function SiteNav({ links, onBrand, cta, counter }) {
       {open && (
         <div ref={sheetRef} id={sheetId} className="s-sheet" role="dialog" aria-modal="true" aria-label="Menu">
           <ul className="s-sheet__list">
-            {links.map((l, i) => (
+            {links.map((l) => (
               <li key={l.label}>
                 <button type="button" className="s-sheet__link" onClick={run(l.onClick)} aria-current={l.current ? 'page' : undefined}>
-                  <span className="s-sheet__num">{String(i + 1).padStart(2, '0')}</span>
                   {l.label}
                 </button>
               </li>

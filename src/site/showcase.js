@@ -73,7 +73,7 @@ export const ANATOMY = {
     ['Bring help.', 'The Spirit Jellyfish ashes, from Roderika at Stormhill Shack, pull his attention and stack poison.'],
     ["Use Margit's Shackle.", 'Patches sells it in Murkwater Cave. It pins him to the ground for a few free hits.'],
     ['Wait out the delays.', 'His cane strings are timed to catch early rolls. Dodge late, hit once, back off.'],
-    ['Arrive ready.', 'Around level 25–30 with a +3 weapon makes the fight far more forgiving.'],
+    ['Arrive ready.', 'Around level 25-30 with a +3 weapon makes the fight far more forgiving.'],
   ],
   spoiler: 'Margit is Morgott in disguise, and you will face him again in Leyndell.',
   steps: [

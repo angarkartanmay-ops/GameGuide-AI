@@ -114,8 +114,6 @@ export default function LibraryWall({ calm, onPick }) {
     <section ref={rootRef} id="library" className={`s-chapter s-library${calm ? ' is-calm' : ''}`} aria-labelledby="library-title">
       <div className="s-wrap">
         <ChapterHead
-          index="03"
-          label="The library"
           id="library-title"
           title="Any game. Ask about it and the page becomes it."
           lead="Name a game and the chat dresses itself in that game's art and colour. Pick one below to start there."

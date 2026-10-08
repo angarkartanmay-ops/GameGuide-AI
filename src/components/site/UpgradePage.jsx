@@ -8,7 +8,6 @@ import {
 import { gsap, useCalm, useScene } from '../../site/motion';
 import SiteNav from './SiteNav';
 import SiteFooter from './SiteFooter';
-import { Overline } from './bits';
 import '../../styles/site.css';
 
 const PRO = PLANS.find(p => p.id === 'pro');
@@ -118,7 +117,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
     if (!billingOpen() || (live && !rails.card && !rails.upi)) return 'Payments open soon.';
     if (!linked) return 'Run /upgrade in Discord to link your account first.';
     if (!live) return 'Loading…';
-    if (!sells(railNow, plan, iv)) return 'Not available with this payment method — try the other one.';
+    if (!sells(railNow, plan, iv)) return 'Not available with this payment method. Try the other one.';
     if (plan === 'server' && !buyer.inServer) return 'Run /upgrade inside the server you want to upgrade.';
     if (plan === 'pro' && tier === 'pro' && account?.status !== 'ending') return 'This is your plan.';
     if (tier === 'lifetime' && plan !== 'server') return 'You have Lifetime.';
@@ -135,7 +134,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
       setSignedIn(t);
       setForm({ open: false, email: '', password: '', busy: false, error: '' });
     } catch (err) {
-      setForm(f => ({ ...f, busy: false, error: err.message === 'bad-login' ? 'That email and password do not match.' : err.message === 'slow-down' ? 'Too many tries — wait a few minutes.' : 'Sign-in is not available right now.' }));
+      setForm(f => ({ ...f, busy: false, error: err.message === 'bad-login' ? 'That email and password do not match.' : err.message === 'slow-down' ? 'Too many tries. Wait a few minutes.' : 'Sign-in is not available right now.' }));
     }
   };
 
@@ -184,11 +183,10 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
           <button type="button" className="s-back" onClick={onBack} data-intro>
             <ArrowLeft size={15} aria-hidden="true" /> Back
           </button>
-          <div data-intro><Overline>GameGuide · Plans</Overline></div>
           <h1 className="s-h1" data-intro>{thanks ? 'You’re in.' : 'Pick your plan.'}</h1>
           <p className="s-lead" data-intro>
             {thanks
-              ? 'Payment received. Your plan switches on in Discord within a minute — check it with /quota.'
+              ? 'Payment received. Your plan switches on in Discord within a minute. Check it with /quota.'
               : 'Monthly, yearly or once. Cancel any time and the plan stays on until the end of what you paid for.'}
           </p>
         </div>
@@ -211,7 +209,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
                 <p>
                   <ShieldCheck size={16} aria-hidden="true" />
                   {buyer.name === 'Test account'
-                    ? <>Signed in as the <strong>test account</strong> — payments here are test payments</>
+                    ? <>Signed in as the <strong>test account</strong>. Payments here are test payments.</>
                     : <>Buying for <strong>{buyer.name ? `@${buyer.name}` : 'your Discord account'}</strong></>}
                   {buyer.inServer ? ' · server plans apply to the server you opened this from' : ''}
                   <span className="s-upgrade__ttl">link valid {minutesLeft} min</span>
@@ -221,7 +219,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
                   <Lock size={16} aria-hidden="true" />
                   {buyer
                     ? <>This link has expired. Run <code>/upgrade</code> in Discord for a fresh one.</>
-                    : <>To buy, run <code>/upgrade</code> in Discord — its link opens this page already signed in as you.</>}
+                    : <>To buy, run <code>/upgrade</code> in Discord. Its link opens this page already signed in as you.</>}
                   <a className="s-a" href={LINKS.discordInvite} target="_blank" rel="noopener noreferrer">Add GameGuide to Discord</a>
                   {billingOpen() && !form.open && (
                     <button type="button" className="s-linkbtn" onClick={() => setForm(f => ({ ...f, open: true }))}>
@@ -255,7 +253,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
                 <p className="s-upgrade__current">
                   Current plan: <strong>{{ pro: 'Pro', lifetime: 'Pro Lifetime', server: 'Premium Server' }[tier]}</strong>
                   {account.status === 'ending' ? ' · cancelled, on until the end of the paid period' : ''}
-                  {account.status === 'past_due' ? ' · last payment failed — update your card from the receipt email' : ''}
+                  {account.status === 'past_due' ? ' · last payment failed, update your card from the receipt email' : ''}
                 </p>
               )}
             </div>
@@ -313,7 +311,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
                   <div>
                     <p className="s-plan__once-name">Pro Lifetime · {price(PRO, 'once')} once</p>
                     <p className="s-plan__once-note">
-                      Everything in Pro, for good — no renewals.
+                      Everything in Pro, for good. No renewals.
                       {tier === 'pro' ? ' Cancel your monthly or yearly plan from the receipt email so it does not renew.' : ''}
                     </p>
                   </div>
@@ -366,13 +364,13 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
 
             {!open && (
               <p className="s-upgrade__note" data-intro>
-                {billingOpen() ? 'Checking which payment methods are open…' : 'Paid plans open soon — prices above are final.'}
+                {billingOpen() ? 'Checking which payment methods are open…' : 'Paid plans open soon. Prices above are final.'}
               </p>
             )}
 
             <section className="s-prose s-upgrade__faq" aria-label="Questions">
               <h2 className="s-h2">Questions</h2>
-              <p><strong>How do I cancel?</strong> From the link in your receipt email. The plan stays on until the end of the period you paid for, then you are back on Free — nothing else changes.</p>
+              <p><strong>How do I cancel?</strong> From the link in your receipt email. The plan stays on until the end of the period you paid for, then you are back on Free. Nothing else changes.</p>
               <p><strong>How do I pay?</strong> By card anywhere in the world, or with UPI, netbanking and Indian cards in rupees. Payments are handled by the payment provider; GameGuide never sees your card or UPI details.</p>
               <p><strong>Monthly or yearly?</strong> Yearly costs ten months for twelve. Lifetime is a single payment for Pro, for good.</p>
               <p><strong>Something went wrong?</strong> Write to <a className="s-a" href={mailto('GameGuide plan question')}>{LINKS.email}</a>.</p>
