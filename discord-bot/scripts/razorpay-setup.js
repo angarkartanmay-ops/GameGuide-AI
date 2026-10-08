@@ -109,8 +109,11 @@ const WANT = [
     `RAZORPAY_WEBHOOK_SECRET=${webhookSecret}`,
     ...WANT.map(w => `${w.env}=${ids[w.env]}`),
     `UPGRADE_LINK_SECRET=${upgradeSecret}`,
-    '',
   ];
+  // Keep anything else already in the file (the review sign-in, for example).
+  const written = new Set(lines.map(l => l.split('=')[0]));
+  for (const [k, v] of Object.entries(previous)) if (!written.has(k)) lines.push(`${k}=${v}`);
+  lines.push('');
   fs.writeFileSync(OUT_FILE, lines.join('\n'), { mode: 0o600 });
   console.log(`\nWrote ${path.relative(process.cwd(), OUT_FILE) || OUT_FILE} — ${lines.length - 3} values for Render.`);
   console.log('The webhook secret to type into Razorpay is RAZORPAY_WEBHOOK_SECRET in that file.');

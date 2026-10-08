@@ -23,7 +23,8 @@
 'use strict';
 
 const { catalog, offer } = require('./plans');
-const { verifyUpgradeToken, siteUrl } = require('./upgradeLink');
+const { verifyUpgradeToken, createUpgradeToken, siteUrl } = require('./upgradeLink');
+const { safeEqual } = require('./httpSecurity');
 const { stripeOffers, createStripeCheckout } = require('./billing-stripe');
 const { lemonConfig, lemonOffers, createLemonCheckout } = require('./billing-lemon');
 const { razorpayConfig, razorpayOffers, createCheckout: createRazorpayCheckout } = require('./billing-razorpay');
@@ -160,7 +161,52 @@ function createBillingApi({
     return next();
   }
 
-  return { plans, checkout, cors, availableRails: () => availableRails(env) };
+  // ── Test / review sign-in ───────────────────────────────────────────────
+  // Payment providers review the checkout before switching an account to
+  // live, and their reviewers have no Discord account to run /upgrade from.
+  // One email + password (REVIEW_LOGIN_EMAIL / REVIEW_LOGIN_PASSWORD) signs
+  // in as a fixed TEST Discord identity — never a real user — so a reviewer
+  // can walk the whole flow. Off unless both are set. Failures are slowed
+  // and counted per address.
+  const failures = new Map();   // ip → { n, since }
+  const FAIL_WINDOW_MS = 15 * 60_000;
+  const MAX_FAILS = 8;
+
+  async function reviewLogin(req, res) {
+    const wantEmail = (env.REVIEW_LOGIN_EMAIL || '').trim().toLowerCase();
+    const wantPass = env.REVIEW_LOGIN_PASSWORD || '';
+    if (!wantEmail || wantPass.length < 12) return res.status(404).json({ error: 'not-available' });
+
+    const ip = req.ip || 'unknown';
+    const f = failures.get(ip);
+    if (f && now() - f.since < FAIL_WINDOW_MS && f.n >= MAX_FAILS) return res.status(429).json({ error: 'slow-down' });
+
+    const b = req.body && typeof req.body === 'object' ? req.body : {};
+    const email = String(b.email || '').trim().toLowerCase().slice(0, 200);
+    const pass = String(b.password || '').slice(0, 200);
+    // Both compared every time (no short-circuit), in constant time.
+    const okEmail = safeEqual(email, wantEmail);
+    const okPass = safeEqual(pass, wantPass);
+    if (!(okEmail && okPass)) {
+      const cur = f && now() - f.since < FAIL_WINDOW_MS ? f : { n: 0, since: now() };
+      cur.n++;
+      failures.set(ip, cur);
+      if (failures.size > 5000) for (const [k, v] of failures) if (now() - v.since > FAIL_WINDOW_MS) failures.delete(k);
+      await new Promise(r => setTimeout(r, 400));
+      return res.status(401).json({ error: 'bad-login' });
+    }
+    failures.delete(ip);
+    const token = createUpgradeToken({
+      userId: (env.REVIEW_DISCORD_USER_ID || '100000000000000001').trim(),
+      guildId: (env.REVIEW_DISCORD_GUILD_ID || '100000000000000002').trim(),
+      name: 'Test account',
+    }, { secret: secret(), now: now() });
+    if (!token) return res.status(500).json({ error: 'not-available' });
+    log.log('[upgrade] test account signed in');
+    return res.json({ token });
+  }
+
+  return { plans, checkout, reviewLogin, cors, availableRails: () => availableRails(env) };
 }
 
 /** Mount the routes. Off unless UPGRADE_LINK_SECRET is set (nothing to verify links with). */
@@ -172,8 +218,10 @@ function mountBillingApi(app, { supabase, checkQuota, guard = (_req, _res, next)
   const api = createBillingApi({ supabase, env, checkQuota, creators });
   app.options('/api/plans', api.cors);
   app.options('/api/checkout', api.cors);
+  app.options('/api/review-login', api.cors);
   app.get('/api/plans', guard, api.cors, (req, res) => api.plans(req, res));
   app.post('/api/checkout', guard, api.cors, (req, res) => api.checkout(req, res));
+  app.post('/api/review-login', guard, api.cors, (req, res) => api.reviewLogin(req, res));
   console.log('[upgrade] plans API on → GET /api/plans, POST /api/checkout');
   return true;
 }

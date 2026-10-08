@@ -220,6 +220,20 @@ const TERMS = [
     ),
   },
   {
+    id: 't-payments', title: 'Paid plans',
+    body: (
+      <p>
+        Pro, Server and Pro Lifetime are digital plans for the GameGuide Discord bot, bought on the{' '}
+        <a href="#upgrade" className="s-a" onClick={goto('upgrade')}>plans page</a> and paid through our payment
+        providers (Razorpay, Lemon Squeezy or Stripe), which process the payment under their own terms; we never see
+        card or UPI details. Subscriptions renew until cancelled and can be cancelled at any time. Refunds, cancellation
+        and delivery are covered by the{' '}
+        <a href="#refunds" className="s-a" onClick={goto('refunds')}>refund &amp; cancellation policy</a> and the{' '}
+        <a href="#delivery" className="s-a" onClick={goto('delivery')}>delivery policy</a>.
+      </p>
+    ),
+  },
+  {
     id: 't-termination', title: 'Termination',
     body: (
       <p>
@@ -430,6 +444,85 @@ function Contact() {
   );
 }
 
+// ─── Refunds & cancellation ────────────────────────────────────────────────
+
+const PRICES_LINE = 'Pro ₹399 / $4.99 a month or ₹3,999 / $49.99 a year · Server ₹1,199 / $14.99 a month or ₹11,999 / $149.99 a year · Pro Lifetime ₹3,299 / $39.99 once.';
+
+function Refunds() {
+  return (
+    <div className="s-prose">
+      <section>
+        <h2 className="s-h2">What you are buying</h2>
+        <p>
+          GameGuide sells digital access to paid plans of the GameGuide Discord bot: <strong>Pro</strong> (for
+          one Discord account), <strong>Server</strong> (for every member of one Discord server) and <strong>Pro
+          Lifetime</strong> (Pro with a single payment). Current prices: {PRICES_LINE} Prices include any taxes
+          shown at checkout. Plans are bought on the <a href="#upgrade" className="s-a" onClick={goto('upgrade')}>plans page</a>.
+        </p>
+      </section>
+      <section>
+        <h2 className="s-h2">Cancelling a subscription</h2>
+        <p>
+          You can cancel a monthly or yearly plan at any time — from the link in the receipt email the payment
+          provider sends you, or by writing to <a className="s-a" href={mailto('Cancel my GameGuide plan')}>{LINKS.email}</a>.
+          Cancelling stops all future charges. Your plan stays on until the end of the period you have already paid
+          for, then the account returns to the free plan. Nothing else is lost.
+        </p>
+      </section>
+      <section>
+        <h2 className="s-h2">Refunds</h2>
+        <ul className="s-bullets">
+          <li><strong>First 7 days.</strong> If the plan is not for you, ask within 7 days of your first payment for it — or within 7 days of a yearly renewal — and you get a full refund.</li>
+          <li><strong>Pro Lifetime.</strong> Full refund if asked within 7 days of purchase.</li>
+          <li><strong>Monthly renewals</strong> are not refunded once the new month has started; cancel before the renewal date to avoid the charge.</li>
+          <li><strong>Charged twice or by mistake?</strong> Duplicate or erroneous charges are always refunded in full.</li>
+          <li><strong>If the plan never switched on</strong> and we cannot fix it within 24 hours of you telling us, you get a full refund.</li>
+        </ul>
+        <p>
+          To ask for a refund, email <a className="s-a" href={mailto('Refund request')}>{LINKS.email}</a> with the
+          email address you paid with and the payment or receipt ID. Approved refunds are sent to the original payment
+          method within <strong>5–7 working days</strong>; your bank may take a few more days to show it. When a
+          refund is issued, the paid plan it was for ends.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+// ─── Delivery ──────────────────────────────────────────────────────────────
+
+function Delivery() {
+  return (
+    <div className="s-prose">
+      <section>
+        <h2 className="s-h2">Digital delivery only</h2>
+        <p>
+          Everything GameGuide sells is a digital service. Nothing is shipped and there are no physical goods, so no
+          shipping charges apply and no delivery address is needed.
+        </p>
+      </section>
+      <section>
+        <h2 className="s-h2">When your plan starts</h2>
+        <p>
+          Your plan is attached to the Discord account (or Discord server) you bought it for and usually switches
+          on <strong>within a few minutes</strong> of the payment being confirmed. You will see a confirmation page
+          after paying and a receipt by email from the payment provider; in Discord, <code>/quota</code> shows your
+          plan. Bank transfers and some UPI payments can take longer to confirm — the plan starts as soon as they do.
+        </p>
+      </section>
+      <section>
+        <h2 className="s-h2">If it does not arrive</h2>
+        <p>
+          If your plan has not switched on within an hour of paying, write to{' '}
+          <a className="s-a" href={mailto('My GameGuide plan did not arrive')}>{LINKS.email}</a> with your receipt.
+          We fix it the same day, or refund you in full — see the{' '}
+          <a href="#refunds" className="s-a" onClick={goto('refunds')}>refund policy</a>.
+        </p>
+      </section>
+    </div>
+  );
+}
+
 // ─── Shell ─────────────────────────────────────────────────────────────────
 
 const PAGES = {
@@ -453,6 +546,20 @@ const PAGES = {
     meta: 'Last updated: September 2026',
     Body: Terms,
     start: 't-privacy',
+  },
+  refunds: {
+    title: 'Refunds & cancellation', label: 'Refunds & cancellation',
+    heading: 'Refunds & cancellation.',
+    lead: 'Cancel any time, keep what you paid for, and a full refund in your first 7 days.',
+    meta: 'Last updated: October 2026',
+    Body: Refunds,
+  },
+  delivery: {
+    title: 'Delivery', label: 'Delivery',
+    heading: 'Delivery policy.',
+    lead: 'GameGuide plans are digital: they switch on in Discord within minutes of paying. Nothing is shipped.',
+    meta: 'Last updated: October 2026',
+    Body: Delivery,
   },
   contacts: {
     title: 'Contact', label: 'Contact',

@@ -81,6 +81,10 @@ services:
       # /upgrade → website plans page (see .env.example).
       - key: UPGRADE_LINK_SECRET
         sync: false
+      - key: REVIEW_LOGIN_EMAIL
+        sync: false
+      - key: REVIEW_LOGIN_PASSWORD
+        sync: false
       - key: SITE_URL
         sync: false
       - key: STRIPE_PRICE_PRO_YEARLY

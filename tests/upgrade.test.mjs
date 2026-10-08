@@ -218,5 +218,34 @@ const NOW = 1_800_000_000_000;
   check('createBillingApi is usable on its own', typeof createBillingApi({ env, checkQuota: async () => ({}) }).plans === 'function');
 }
 
+// ═══ test / review sign-in ════════════════════════════════════════════════
+{
+  const env = { UPGRADE_LINK_SECRET: SECRET, REVIEW_LOGIN_EMAIL: 'Review@Example.com', REVIEW_LOGIN_PASSWORD: 'correct-horse-battery' };
+  const app = express();
+  app.use(express.json());
+  mountBillingApi(app, { supabase: {}, env, checkQuota: async () => ({ tier: 'free' }) });
+  const off = express();
+  off.use(express.json());
+  mountBillingApi(off, { supabase: {}, env: { UPGRADE_LINK_SECRET: SECRET }, checkQuota: async () => ({}) });
+  const s1 = await new Promise(r => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
+  const s2 = await new Promise(r => { const s = off.listen(0, '127.0.0.1', () => r(s)); });
+  const login = async (srv, body) => {
+    const res = await fetch(`http://127.0.0.1:${srv.address().port}/api/review-login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  check('review sign-in is off unless configured', (await login(s2, { email: 'a', password: 'b' })).status === 404);
+  const bad = await login(s1, { email: 'review@example.com', password: 'wrong' });
+  check('a wrong password is refused without detail', bad.status === 401 && JSON.stringify(bad.json) === '{"error":"bad-login"}');
+  const good = await login(s1, { email: '  REVIEW@example.com ', password: 'correct-horse-battery' });
+  const p = link.verifyUpgradeToken(good.json?.token, { secret: SECRET });
+  check('the right login gets a link for the TEST identity, never a real user', good.status === 200 && p?.userId === '100000000000000001' && p.guildId === '100000000000000002' && p.name === 'Test account');
+  let locked = false;
+  for (let i = 0; i < 10 && !locked; i++) locked = (await login(s1, { email: 'review@example.com', password: `guess${i}` })).status === 429;
+  check('repeated wrong passwords lock the address out', locked);
+  check('…even the right password, while locked', (await login(s1, { email: 'review@example.com', password: 'correct-horse-battery' })).status === 429);
+  s1.closeAllConnections?.(); s2.closeAllConnections?.();
+  await Promise.all([new Promise(r => s1.close(r)), new Promise(r => s2.close(r))]);
+}
+
 console.log(`upgrade: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
