@@ -5,7 +5,7 @@ import { HERO_GAMES, heroArt } from '../site/showcase';
 import { gsap, useCalm, useScene } from '../site/motion';
 import SiteNav from './site/SiteNav';
 import SiteFooter from './site/SiteFooter';
-import { GitHubGlyph, LinkedInGlyph, Mark, Overline } from './site/bits';
+import { GitHubGlyph, LinkedInGlyph, Mark } from './site/bits';
 import '../styles/site.css';
 
 /** The game the visitor last saw on the landing, so the pages feel continuous. */
@@ -26,8 +26,8 @@ const goto = (view) => (e) => {
 // ─── About ─────────────────────────────────────────────────────────────────
 
 const COMMANDS = [
-  ['/progress', 'Tell it where you are — /progress Elden Ring: beat Margit. Story answers stay behind that line.'],
-  ['/missables', 'What you can still permanently miss — items, questlines, trophies — from where you are, with nothing past it spoiled.'],
+  ['/progress', 'Tell it where you are, as in /progress Elden Ring: beat Margit. Story answers stay behind that line.'],
+  ['/missables', 'What you can still permanently miss (items, questlines, trophies) from where you are, with nothing past it spoiled.'],
   ['/spoilers', 'Spoiler Shield on or off. On by default; /spoilers off once you have finished.'],
   ['/price', 'The best current price for a game across PC stores, and how it compares with its lowest ever. Understands gta 5, bg3, ff7 remake.'],
   ['/discover', 'A random pro tip, hidden detail or piece of lore.'],
@@ -40,7 +40,7 @@ const PRINCIPLES = [
   ['No art beats wrong art.', 'If it isn’t sure which game you mean, the page keeps your theme rather than dressing up as the wrong one.'],
   ['Your story, your pace.', 'Spoiler Shield is on from the start. Nothing past where you are shows unless you click it.'],
   ['Stealth means stealth.', 'A Stealth conversation is never saved or remembered, and no game art is fetched for it.'],
-  ['Guidance, not authority.', 'Answers cite their sources. When it matters — a purchase, a choice you can’t undo — check them.'],
+  ['Guidance, not authority.', 'Answers cite their sources. When it matters, like a purchase or a choice you can’t undo, check them.'],
 ];
 
 function About() {
@@ -51,7 +51,7 @@ function About() {
         <ol className="s-numbered">
           <li><strong>It looks things up when you ask.</strong> Game wikis, official patch notes and web search are consulted when you ask, so answers follow the current patch rather than last year&rsquo;s.</li>
           <li><strong>It recognises the game.</strong> The chat takes on that game&rsquo;s Steam art and a colour sampled from it, and the answer is set out like a strategy-guide page.</li>
-          <li><strong>It keeps your place.</strong> Tell it how far you have played and it answers up to there. Screenshots work too — up to three per message.</li>
+          <li><strong>It keeps your place.</strong> Tell it how far you have played and it answers up to there. Screenshots work too, up to three per message.</li>
         </ol>
       </section>
 
@@ -82,7 +82,7 @@ function About() {
         <h2 id="a-by" className="s-h3">Built by</h2>
         <p>
           GameGuide is designed and built independently by Tanmay Angarkar. Questions, ideas and bug
-          reports are welcome — see the <a href="#contacts" className="s-a" onClick={goto('contacts')}>contact page</a>.
+          reports are welcome. See the <a href="#contacts" className="s-a" onClick={goto('contacts')}>contact page</a>.
         </p>
         <p className="s-inline-links">
           <a className="s-a" href={LINKS.github} target="_blank" rel="noopener noreferrer"><GitHubGlyph size={16} /> GitHub</a>
@@ -529,7 +529,7 @@ const PAGES = {
   about: {
     title: 'About', label: 'About',
     heading: 'A game guide you can talk to.',
-    lead: 'Ask about any game — a boss, a build, a quest, a sale — and GameGuide researches it live, sets the answer out like a strategy guide, and keeps the story you haven’t reached behind a bar.',
+    lead: 'Ask about a boss, a build, a quest or a sale. GameGuide researches it live, sets the answer out like a strategy guide, and keeps the story you haven’t reached behind a bar.',
     Body: About,
   },
   terms: {
@@ -542,7 +542,7 @@ const PAGES = {
   privacy: {
     title: 'Privacy', label: 'Privacy',
     heading: 'Privacy & terms.',
-    lead: 'What GameGuide stores, for how long, who it is shared with — and the rules for using it.',
+    lead: 'What GameGuide stores, for how long and who it is shared with, plus the rules for using it.',
     meta: 'Last updated: September 2026',
     Body: Terms,
     start: 't-privacy',
@@ -564,7 +564,7 @@ const PAGES = {
   contacts: {
     title: 'Contact', label: 'Contact',
     heading: 'Contact & connect.',
-    lead: 'Questions, partnerships, bug reports or copyright concerns — pick a channel.',
+    lead: 'Questions, partnerships, bug reports or copyright concerns. Pick a channel.',
     Body: Contact,
   },
 };
@@ -627,7 +627,6 @@ export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
           <button type="button" className="s-back" onClick={onBack} data-intro>
             <ArrowLeft size={15} aria-hidden="true" /> Back
           </button>
-          <div data-intro><Overline>Codex · {page.label}</Overline></div>
           <h1 className="s-h1" data-intro>{page.heading}</h1>
           <p className="s-lead" data-intro>{page.lead}</p>
           {page.meta && <p className="s-meta" data-intro>{page.meta}</p>}

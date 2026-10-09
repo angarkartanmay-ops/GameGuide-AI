@@ -68,14 +68,14 @@ export default function SiteFooter({ onNavigate, onStart }) {
           </div>
           <div>
             <p className="s-foot__head">Discord</p>
-            <Ext href={LINKS.discordInvite}>Add to a server</Ext>
+            <Ext href={LINKS.discordInvite}>Add to Discord</Ext>
             <Ext href={LINKS.topgg}>top.gg page</Ext>
           </div>
         </nav>
       </div>
 
       <div className="s-foot__base">
-        <p>© 2026 Tanmay Angarkar — all rights reserved.</p>
+        <p>© 2026 Tanmay Angarkar. All rights reserved.</p>
         <p>Game art and names belong to their publishers, shown via Steam.</p>
         <p className="s-foot__secret" aria-hidden="true">↑ ↑ ↓ ↓ ← → ← → B A</p>
       </div>

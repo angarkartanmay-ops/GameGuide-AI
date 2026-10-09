@@ -122,11 +122,11 @@ export async function signIn(email, password) {
 /** Plain words for the API's error codes. */
 export const CHECKOUT_ERRORS = {
   'link-expired': 'This upgrade link has expired. Run /upgrade in Discord for a fresh one.',
-  'needs-server': 'Open /upgrade from inside the server you want to upgrade — the link then knows which server it is.',
-  'already-pro': 'You already have Pro. To go yearly, cancel the monthly plan from your receipt email and pick yearly once it ends — or go Lifetime now.',
-  'already-lifetime': 'You already have Pro Lifetime — nothing more to buy. Thank you!',
+  'needs-server': 'Open /upgrade from inside the server you want to upgrade, so the link knows which server it is.',
+  'already-pro': 'You already have Pro. To go yearly, cancel the monthly plan from your receipt email and pick yearly once it ends. Or go Lifetime now.',
+  'already-lifetime': 'You already have Pro Lifetime, so there is nothing more to buy. Thank you!',
   'server-already-premium': 'This server already has the Server plan.',
   unavailable: 'That option is not available with this payment method. Try the other one.',
-  'slow-down': 'One moment — your last checkout is still being made.',
+  'slow-down': 'One moment. Your last checkout is still being made.',
   'provider-unavailable': 'The payment provider did not answer. Please try again in a minute.',
 };

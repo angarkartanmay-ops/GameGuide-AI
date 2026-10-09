@@ -25,11 +25,15 @@ export function HudCorners() {
   );
 }
 
-/** A chapter heading block: overline, title, optional lead. */
-export function ChapterHead({ index, label, title, lead, id }) {
+/**
+ * A chapter heading block: title, optional lead. The overline is optional and
+ * rationed: only chapters named after a feature (Spoiler Shield, Watchtower)
+ * carry one, so the page doesn't stamp a label over every heading.
+ */
+export function ChapterHead({ label, title, lead, id }) {
   return (
     <header className="s-chapter__head" data-reveal>
-      <Overline>{index} · {label}</Overline>
+      {label && <Overline>{label}</Overline>}
       <h2 className="s-h2" id={id}>{title}</h2>
       {lead && <p className="s-lead">{lead}</p>}
     </header>
