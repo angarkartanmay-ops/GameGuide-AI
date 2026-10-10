@@ -13,6 +13,7 @@ Everything for launching on Peerlist, Product Hunt, LaunchBuff and Indie Hackers
 | [indie-hackers.md](indie-hackers.md) | Product page + launch story + the follow-up numbers post |
 | [social.md](social.md) | X thread, LinkedIn post, WhatsApp blurb, Reddit |
 | [demo-video-script.md](demo-video-script.md) | 60-second screen-recording shot list |
+| [seo-analytics-setup.md](seo-analytics-setup.md) | Search Console, Bing, PostHog, Sentry: the values to paste into Vercel |
 
 ## Assets (`assets/`)
 
