@@ -14,7 +14,7 @@ field below.
 
 **Tagline:** The game guide that won't spoil it
 
-**Website:** https://game-guide-ai-plum.vercel.app
+**Website:** https://gameguide.online
 
 **Logo:** `assets/logo-240.png` (or `assets/logo-512-rounded.png` if it asks for larger)
 

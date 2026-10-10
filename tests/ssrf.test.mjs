@@ -64,9 +64,19 @@ const originsRejected = [
   'https://gameguide-ai.vercel.app.evil.com',
   'http://gameguide-ai.vercel.app',        // plaintext for a remote host
   'https://sub.gameguide-ai.vercel.app',
+  // gameguide.online look-alikes: only the two exact hosts are trusted.
+  'https://gameguide.online.evil.com',
+  'https://evilgameguide.online',
+  'https://gameguide.online@evil.com',
+  'http://gameguide.online',               // plaintext for a remote host
+  'https://sub.gameguide.online',
+  'https://gameguide.online.',             // trailing-dot host is not the same host
   'null', '', null, undefined, 123, 'not a url',
 ];
 const originsAllowed = [
+  'https://gameguide.online',
+  'https://www.gameguide.online',
+  'https://game-guide-ai-plum.vercel.app',  // the original address, still redirected from
   'https://gameguide-ai.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',

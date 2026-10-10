@@ -52,6 +52,7 @@ const SUITES = [
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres
   ['quota-contract','quota-contract.test.mjs'],// quota.js against that same SQL
   ['stats',         'stats.test.mjs'],         // landing live count: SQL on real Postgres + helpers
+  ['privacy',       'privacy.test.mjs'],       // analytics + crash reports: no fragments, no cookies, off in stealth
 ];
 
 try {

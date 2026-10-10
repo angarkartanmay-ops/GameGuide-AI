@@ -17,11 +17,11 @@
 
 ## Usage
 
-GameGuide-AI is free to use at [game-guide-ai-plum.vercel.app](https://game-guide-ai-plum.vercel.app).
+GameGuide-AI is free to use at [gameguide.online](https://gameguide.online).
 No account is needed to ask. Sign in to keep your conversation history.
 
 ## Optional
 
-- [Terms of Service](https://game-guide-ai-plum.vercel.app/#terms)
-- [About](https://game-guide-ai-plum.vercel.app/#about)
-- [Contact](https://game-guide-ai-plum.vercel.app/#contacts)
+- [Terms of Service](https://gameguide.online/#terms)
+- [About](https://gameguide.online/#about)
+- [Contact](https://gameguide.online/#contacts)

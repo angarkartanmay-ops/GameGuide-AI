@@ -69,9 +69,13 @@ export function buildFandomUrl(game, params) {
 //  origins (preview deployments, a custom domain) be added deliberately via
 //  the ALLOWED_ORIGINS env var as a comma-separated list of hostnames.
 const DEFAULT_ALLOWED_HOSTS = new Set([
-  // The live deployment. Verified: gameguide-ai.vercel.app returns 404,
-  // game-guide-ai-plum.vercel.app returns 200. Add any custom domain here or
-  // via ALLOWED_ORIGINS rather than widening this to a suffix match.
+  // The live site, and its www twin (which redirects to the apex, but a
+  // request can still originate there mid-redirect or from a cached tab).
+  'gameguide.online',
+  'www.gameguide.online',
+  // The original Vercel address. It now redirects to gameguide.online, but
+  // tabs opened before the move and links already in the wild still land on
+  // it. Exact hosts only — never widen any of this to a suffix match.
   'game-guide-ai-plum.vercel.app',
   'gameguide-ai.vercel.app',
   'localhost',

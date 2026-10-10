@@ -50,7 +50,7 @@ day, and one about 1–2 weeks later with real numbers.
 > the website stays free and Discord servers pay for patch-note alerts and higher
 > limits. Does that sound right to you?
 >
-> 👉 https://game-guide-ai-plum.vercel.app
+> 👉 https://gameguide.online
 
 ---
 

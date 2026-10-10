@@ -26,7 +26,7 @@ const { safeEqual, isSnowflake } = require('./httpSecurity');
 
 const VERSION = 'v1';
 const TTL_SECONDS = 60 * 60;          // an hour to pick a plan and pay
-const DEFAULT_SITE = 'https://game-guide-ai-plum.vercel.app';
+const DEFAULT_SITE = 'https://gameguide.online';
 
 const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const fromB64url = (s) => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
@@ -87,4 +87,4 @@ function upgradeUrl({ userId, guildId = null, name = '' }, env = process.env, no
   return token ? `${siteUrl(env)}/#upgrade/${token}` : '';
 }
 
-module.exports = { createUpgradeToken, verifyUpgradeToken, upgradeUrl, siteUrl, TTL_SECONDS };
+module.exports = { createUpgradeToken, verifyUpgradeToken, upgradeUrl, siteUrl, DEFAULT_SITE, TTL_SECONDS };

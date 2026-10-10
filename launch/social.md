@@ -1,6 +1,6 @@
 # Social posts: GameGuide launch week
 
-Link: https://game-guide-ai-plum.vercel.app. Attach `assets/teaser-24s.mp4` (or
+Link: https://gameguide.online. Attach `assets/teaser-24s.mp4` (or
 your real demo) to X and LinkedIn; native video beats a link card.
 
 ---
@@ -64,7 +64,7 @@ anything slips past the Shield 🙏
 > Built with React, Vite, Supabase (Postgres + Deno edge functions), Vercel and
 > discord.js.
 >
-> It's free, with no sign-up: https://game-guide-ai-plum.vercel.app
+> It's free, with no sign-up: https://gameguide.online
 > It's on [Product Hunt / Peerlist] this week. I'd really value your feedback.
 >
 > #buildinpublic #gamedev #AI #webdevelopment
@@ -75,7 +75,7 @@ anything slips past the Shield 🙏
 
 > Hey! I just launched something I've been building for 6 months: GameGuide, a
 > game guide that doesn't spoil the game. Tell it where you are and ask anything.
-> Free, no sign-up 👉 https://game-guide-ai-plum.vercel.app
+> Free, no sign-up 👉 https://gameguide.online
 > It's on Product Hunt today. If you try it, an honest comment there would mean
 > a lot 🙏 [PH link]
 
@@ -93,7 +93,7 @@ anything slips past the Shield 🙏
 > Margit"), ask anything, and it researches the answer live (wikis, patch notes)
 > and puts anything past your progress behind a click-to-reveal bar.
 >
-> Free, no account: https://game-guide-ai-plum.vercel.app
+> Free, no account: https://gameguide.online
 >
 > The hardest part wasn't the AI. It was making "stop at this point in the
 > story" actually hold. If you try it on a game you know well, I'd love to hear

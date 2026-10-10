@@ -27,7 +27,7 @@ genuine comments on a few launches a day. Self-hunting is fine.
 
 (253 characters. If PH counts differently and rejects it, cut "Also on Discord.")
 
-**Links:** website https://game-guide-ai-plum.vercel.app · add the Discord invite
+**Links:** website https://gameguide.online · add the Discord invite
 as a second link if the form allows it
 
 **Topics:** Games, Artificial Intelligence, and a third from PH's list such as

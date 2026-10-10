@@ -23,7 +23,7 @@
 'use strict';
 
 const { catalog, offer } = require('./plans');
-const { verifyUpgradeToken, createUpgradeToken, siteUrl } = require('./upgradeLink');
+const { verifyUpgradeToken, createUpgradeToken, siteUrl, DEFAULT_SITE } = require('./upgradeLink');
 const { safeEqual } = require('./httpSecurity');
 const { stripeOffers, createStripeCheckout } = require('./billing-stripe');
 const { lemonConfig, lemonOffers, createLemonCheckout } = require('./billing-lemon');
@@ -145,9 +145,13 @@ function createBillingApi({
     }
   }
 
-  /** CORS for the site (and any extra origins in BILLING_API_ORIGINS). */
+  /**
+   * CORS for the site (and any extra origins in BILLING_API_ORIGINS). The
+   * canonical site is always allowed too: a host that still has the old
+   * SITE_URL would otherwise lock the new domain's plans page out of this API.
+   */
   function cors(req, res, next) {
-    const allowed = new Set([new URL(site()).origin,
+    const allowed = new Set([new URL(site()).origin, new URL(DEFAULT_SITE).origin,
       ...String(env.BILLING_API_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)]);
     const origin = req.headers.origin;
     if (origin && allowed.has(origin)) {

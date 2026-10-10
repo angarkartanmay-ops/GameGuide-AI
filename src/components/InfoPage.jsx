@@ -180,8 +180,16 @@ const TERMS = [
         </p>
         <p>
           <strong>Usage counts.</strong> We may count page views and a few anonymous actions (such as pressing
-          Start, sharing an answer or opening a shared one) with Vercel Web Analytics, which sets no cookies and
-          does not identify you. What you type is never part of it.
+          Start, sharing an answer or opening a shared one) with Vercel Web Analytics and PostHog. Neither is
+          set up to use cookies or browser storage, neither follows you from one visit to the next, and we
+          switch off PostHog&rsquo;s session recording and automatic capture. We honour Do Not Track, and nothing
+          is counted while Stealth is on. What you type is never part of it, and neither is the part of a shared
+          link after the <code>#</code>.
+        </p>
+        <p>
+          <strong>Crash reports.</strong> If the page breaks, Sentry may receive a report of what failed and in
+          which browser, with the address of the page minus anything after the <code>#</code>. It carries no
+          account details, no cookies and no part of your conversation.
         </p>
         <p>
           <strong>Share links.</strong> When you share an answer, the question and answer are packed into the link

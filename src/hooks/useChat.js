@@ -10,7 +10,7 @@ import {
   loadSpoilerPrefs, setSpoilerMode, setGameProgress, clearGameProgress, parseProgressArgs,
 } from '../utils/spoilerPrefs';
 import { pickMissablesGame, buildMissablesPrompt } from '../utils/missables';
-import { track } from '../utils/analytics';
+import { track, setTrackingPaused } from '../utils/analytics';
 import { withViewTransition } from '../utils/viewTransition';
 
 // Two identical sends inside this window are a double Enter, not a question.
@@ -40,6 +40,11 @@ export default function useChat(user) {
   // Set only by the /stealth command (never on load), so the shell knows to
   // play the going-dark / colour-returning sweep. `id` restarts it.
   const [stealthFx, setStealthFx] = useState(null);
+  // Usage counts stop for as long as stealth is on.
+  useEffect(() => {
+    setTrackingPaused(stealthMode);
+    return () => setTrackingPaused(false);
+  }, [stealthMode]);
   const [priceData, setPriceData] = useState([]);
 
   // ─── Credit-saving refs ────────────────────────────────────────────────────
