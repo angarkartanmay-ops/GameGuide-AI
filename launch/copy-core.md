@@ -3,7 +3,7 @@
 The source copy every platform file below draws from. Change it here first, then
 in the platform files.
 
-**Link:** https://game-guide-ai-plum.vercel.app
+**Link:** https://gameguide.online
 **Discord invite:** https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=277025508352&scope=bot+applications.commands
 **top.gg:** https://top.gg/bot/1499622566472712202
 **Contact:** gameguideai.support@gmail.com

@@ -46,7 +46,7 @@ const NOW = 1_800_000_000_000;
   check('a bad user id makes no link', link.createUpgradeToken({ userId: 'abc' }, { secret: SECRET }) === '');
   const url = link.upgradeUrl({ userId: U }, { UPGRADE_LINK_SECRET: SECRET, SITE_URL: 'https://gameguide.example/' }, NOW);
   check('the link lands on #upgrade/<token> of the site', url.startsWith('https://gameguide.example/#upgrade/v1.'));
-  check('a non-https SITE_URL falls back to the real site', link.siteUrl({ SITE_URL: 'http://evil.example' }).startsWith('https://game-guide-ai-plum.vercel.app'));
+  check('a non-https SITE_URL falls back to the real site', link.siteUrl({ SITE_URL: 'http://evil.example' }).startsWith('https://gameguide.online'));
 
   // The website reads (never trusts) the same payload.
   const read = site.readUpgradeToken(t);
@@ -173,6 +173,12 @@ const NOW = 1_800_000_000_000;
   check('CORS allows the site', anon.headers.get('access-control-allow-origin') === SITE);
   const other = await fetch(`${base}/api/plans`, { headers: { origin: 'https://evil.example' } });
   check('CORS does not allow other origins', !other.headers.get('access-control-allow-origin'));
+  // The host still has the OLD SITE_URL (gameguide.example here stands in for it):
+  // the real site must work anyway, and look-alikes must not.
+  const real = await fetch(`${base}/api/plans`, { headers: { origin: 'https://gameguide.online' } });
+  check('CORS always allows the canonical site, even with a stale SITE_URL', real.headers.get('access-control-allow-origin') === 'https://gameguide.online');
+  const lookalike = await fetch(`${base}/api/plans`, { headers: { origin: 'https://gameguide.online.evil.example' } });
+  check('CORS does not allow a look-alike of the canonical site', !lookalike.headers.get('access-control-allow-origin'));
   const pre = await fetch(`${base}/api/checkout`, { method: 'OPTIONS', headers: { origin: SITE, 'access-control-request-method': 'POST' } });
   check('preflight answers 204 for the site', pre.status === 204 && pre.headers.get('access-control-allow-methods')?.includes('POST'));
 

@@ -48,7 +48,7 @@ export default async function handler(req, res) {
   let upstream;
   try {
     upstream = await fetch(`${UPSTREAM}?${params}`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'GameGuide/1.0 (+https://game-guide-ai-plum.vercel.app)' },
+      headers: { Accept: 'application/json', 'User-Agent': 'GameGuide/1.0 (+https://gameguide.online)' },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch {

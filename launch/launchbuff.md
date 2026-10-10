@@ -6,7 +6,7 @@ have an extra indexed link to drop into launch posts.
 **How:** sign in with a magic link, fill in the form, and the listing goes live
 immediately.
 
-**Before submitting:** run https://game-guide-ai-plum.vercel.app through
+**Before submitting:** run https://gameguide.online through
 LaunchBuff's free Launch Readiness Checker. Things it should now find:
 - OG image and Twitter card ✓ (already in `index.html`)
 - favicon + apple-touch icon + web manifest ✓
@@ -22,7 +22,7 @@ LaunchBuff's free Launch Readiness Checker. Things it should now find:
 
 **Tagline:** The game guide that won't spoil it
 
-**Website URL:** https://game-guide-ai-plum.vercel.app
+**Website URL:** https://gameguide.online
 
 **Logo:** `assets/logo-240.png`
 

@@ -21,7 +21,7 @@ watch muted.
 | 30–38s | Landing → Spoiler Shield demo: drag the slider from Limgrave to Liurnia and watch lines unlock | **Story answers stop at your line.** |
 | 38–44s | Click Share → open the link in a new tab, spoiler still hidden | **Share it. Spoilers stay hidden.** |
 | 44–52s | Discord: `/watch add game: Elden Ring` → the confirmation embed | **Same guide in Discord, plus patch-note alerts.** |
-| 52–60s | Phone (or DevTools mobile view) with the answer laid out | **Free. No account. game-guide-ai-plum.vercel.app** |
+| 52–60s | Phone (or DevTools mobile view) with the answer laid out | **Free. No account. gameguide.online** |
 
 **Avoid in the recording:** `/missables` and `/price` until the issues in
 `README.md` → "Before Monday" are fixed. A cut-off answer or a "couldn't reach

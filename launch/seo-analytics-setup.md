@@ -10,20 +10,23 @@ baked in at build time, so changing one does nothing until a new build.
 
 | Tool | Variable | Where the value comes from |
 |---|---|---|
-| Google Search Console | `VITE_GSC_VERIFICATION` | step 1 |
+| Google Search Console | `VITE_GSC_VERIFICATION` (only for the HTML-tag method) | step 1 |
 | Bing Webmaster Tools | `VITE_BING_VERIFICATION` | step 2 (optional, see below) |
 | PostHog | `VITE_POSTHOG_KEY` (+ `VITE_POSTHOG_HOST` if EU) | step 3 |
 | Sentry | `VITE_SENTRY_DSN` | step 4 |
 
 ## 1. Google Search Console
 
-1. <https://search.google.com/search-console> → **Add property** → **URL prefix** →
-   `https://game-guide-ai-plum.vercel.app/` (a `vercel.app` subdomain can't be verified
-   as a Domain property, because that needs DNS you don't control).
-2. Choose **HTML tag**. Copy only the `content="…"` value (not the whole tag).
-3. Add it as `VITE_GSC_VERIFICATION`, redeploy, then press **Verify**.
+1. <https://search.google.com/search-console> → **Add property**.
+2. **Recommended — Domain property:** enter `gameguide.online`. Google gives you a
+   `TXT` record; add it at GoDaddy (DNS → Add record → Type `TXT`, Name `@`, Value the
+   `google-site-verification=…` string). This covers `https`, `http`, `www` and every
+   path in one property, and needs no code or env var. Verification can take a few
+   minutes after the record is added.
+3. **Alternative — URL prefix:** enter `https://gameguide.online/`, choose **HTML tag**,
+   copy only the `content="…"` value into `VITE_GSC_VERIFICATION`, redeploy, then **Verify**.
 4. **Sitemaps** → submit `sitemap.xml`.
-5. **URL Inspection** → paste the home URL → **Request indexing**.
+5. **URL Inspection** → paste `https://gameguide.online/` → **Request indexing**.
 
 ## 2. Bing Webmaster Tools
 
@@ -64,10 +67,18 @@ Open the live site, then:
 - **PostHog:** Activity → Live events shows a `$pageview` within seconds.
 - **Sentry:** in the browser console run
   `setTimeout(() => { throw new Error('sentry-test') })` and the issue appears in about a minute.
-- **View source** on the site: you should see `google-site-verification` in the `<head>`.
+- **HTML-tag method only:** view source on the site; you should see `google-site-verification` in the `<head>`.
 
-## If you ever add a custom domain
+## The domain
 
-The domain is written into `index.html` (canonical, Open Graph, JSON-LD),
-`public/sitemap.xml` and `public/robots.txt`. Change those, add the new domain as
-its own Search Console property, and use a **Domain** property (DNS verification).
+The site lives at **`https://gameguide.online`** (the apex). In Vercel →
+Settings → Domains: `www.gameguide.online` and the original
+`game-guide-ai-plum.vercel.app` both redirect to it with a permanent (308)
+redirect, so there is one address for search engines to index. DNS is at GoDaddy.
+
+If it ever changes, the address is written in: `index.html` (canonical, Open Graph,
+JSON-LD), `public/sitemap.xml`, `public/robots.txt`, `public/llms.txt`,
+`api/_wikiTarget.js` (the CORS allow-list — without it the wiki/price/art routes
+refuse the new origin), `discord-bot/upgradeLink.js` (`DEFAULT_SITE`), `vercel.json`
+(the redirect), `supabase/functions/chat-proxy/meshRouter.ts`, and in the Supabase
+dashboard (Authentication → URL Configuration: Site URL and Redirect URLs).

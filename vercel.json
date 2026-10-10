@@ -1,6 +1,14 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/((?!api/).*)",
+      "has": [{ "type": "host", "value": "game-guide-ai-plum.vercel.app" }],
+      "destination": "https://gameguide.online/$1",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/reddit/:path*",

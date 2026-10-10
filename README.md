@@ -10,7 +10,7 @@ Ask about any game: a boss, a build, a quest, a sale. GameGuide looks it up live
 lays the answer out like a strategy-guide page with its sources, and keeps every
 story beat past your progress behind a bar until you choose to look.
 
-[**▶ Try it — no account needed**](https://game-guide-ai-plum.vercel.app) ·
+[**▶ Try it — no account needed**](https://gameguide.online) ·
 [**Add to Discord**](https://discord.com/oauth2/authorize?client_id=1499622566472712202&permissions=277025508352&scope=bot+applications.commands) ·
 [Top.gg](https://top.gg/bot/1499622566472712202?s=0c09d3395142b) ·
 [Security](SECURITY.md)
