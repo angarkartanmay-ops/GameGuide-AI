@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  MEMBERSHIP — what plan someone is on, said plainly.
 //  ───────────────────────────────────────────────────────────────────────
-//  /quota shows a badge (FREE · PRO · PRO LIFETIME · PREMIUM SERVER), the
+//  /quota shows a badge (FREE · BASE · PRO · PRO LIFETIME · PREMIUM SERVER), the
 //  plan's state (renews on…, ends on…, payment problem) and the day's usage.
 //  The quota decision says which tier is in force; the entitlement row says
 //  why and until when. This module reads the row and turns both into copy.
@@ -13,12 +13,13 @@
 
 const BADGES = Object.freeze({
   free: { emoji: '⚪', text: 'FREE', color: 0x8a93a6 },
+  base: { emoji: '✅', text: 'BASE', color: 0x6fcf97 },
   pro: { emoji: '⭐', text: 'PRO', color: 0xffd166 },
   lifetime: { emoji: '💎', text: 'PRO LIFETIME', color: 0x7ee0ff },
   server: { emoji: '🌟', text: 'PREMIUM SERVER', color: 0xc9a7ff },
 });
 
-const SOURCES = { stripe: 'card (Stripe)', razorpay: 'Razorpay', lemonsqueezy: 'Lemon Squeezy', manual: 'granted by the team' };
+const SOURCES = { stripe: 'card (Stripe)', razorpay: 'Razorpay', paypal: 'PayPal', lemonsqueezy: 'Lemon Squeezy', manual: 'granted by the team' };
 
 /** Discord's long-date timestamp, e.g. "12 November 2026". */
 const dateStamp = (iso) => {
@@ -62,17 +63,19 @@ function describeMembership({ tier = 'free', entitlement = null, server = null, 
 
   if (tier === 'lifetime') {
     lines.push(`Yours for good — no renewals${entitlement?.source === 'manual' ? '' : via}.`);
-  } else if (tier === 'pro') {
+  } else if (tier === 'pro' || tier === 'base') {
+    const name = tier === 'pro' ? 'Pro' : 'Base';
     if (entitlement?.status === 'past_due') {
-      lines.push(`⚠️ Your last payment didn't go through — Pro stays on while it's retried${dateStamp(end) ? `, until ${dateStamp(end)}` : ''}. Update your card from the link in your receipt email.`);
+      lines.push(`⚠️ Your last payment didn't go through — ${name} stays on while it's retried${dateStamp(end) ? `, until ${dateStamp(end)}` : ''}. Update your card from the link in your receipt email.`);
     } else if (entitlement?.source === 'manual' && !end) {
       lines.push('Granted by the team — no renewals.');
     } else if (entitlement?.status === 'ending') {
-      lines.push(`Cancelled — Pro stays on until ${dateStamp(end) || 'the end of the paid period'}. \`/upgrade\` to pick it up again.`);
+      lines.push(`Cancelled — ${name} stays on until ${dateStamp(end) || 'the end of the paid period'}. \`/upgrade\` to pick it up again.`);
     } else if (end) {
       // The stored date includes a short grace period after the renewal charge.
       lines.push(`Renews around ${dateStamp(end)}${via}.`);
     }
+    if (tier === 'base') lines.push('`/upgrade` to Pro for 200 messages a day and the most accurate model on hard questions.');
   } else if (tier === 'server') {
     const s = server?.expires_at ? dateStamp(server.expires_at) : null;
     lines.push(`This server is on the Premium Server plan${s ? ` until ${s}` : ''} — every member shares it.`);
@@ -81,7 +84,7 @@ function describeMembership({ tier = 'free', entitlement = null, server = null, 
   }
   // A lapsed paid plan reads as Free, but say what happened.
   if (tier === 'free' && entitlement && entitlement.tier !== 'free' && Date.parse(end || '') <= now) {
-    lines.unshift(`Your ${entitlement.tier === 'server' ? 'server' : 'Pro'} plan ended ${dateStamp(end) || 'recently'}.`);
+    lines.unshift(`Your ${{ server: 'server', base: 'Base' }[entitlement.tier] || 'Pro'} plan ended ${dateStamp(end) || 'recently'}.`);
   }
   return { badge, title: `${badge.emoji} ${badge.text}`, lines };
 }

@@ -19,6 +19,8 @@
 
 'use strict';
 
+const { priceLabel } = require('./plans');
+
 // Nudge when this fraction of the daily allowance is gone. 0.8 puts the first
 // warning at 12/15 on free — late enough not to nag, early enough to act on.
 const NUDGE_AT = 0.8;
@@ -180,8 +182,11 @@ function quotaFooter(decision, { userId, now = Date.now() } = {}) {
 function blockedMessage(decision) {
   const label = decision.tier_label || 'Free';
   const reset = resetStamp(decision.reset_at);
-  const isFree = decision.tier === 'free';
-  const upsell = isFree ? '\n\nUse `/upgrade` for **200 messages/day**, 40 screenshots and 20/min.' : '';
+  const upsell = decision.tier === 'free'
+    ? '\n\nUse `/upgrade`: **Base** gives 60 messages/day, **Pro** 200/day with 40 screenshots.'
+    : decision.tier === 'base'
+      ? '\n\n`/upgrade` to **Pro** for 200 messages/day, 40 screenshots and 20/min.'
+      : '';
 
   switch (decision.scope) {
     case 'minute':
@@ -210,7 +215,7 @@ function blockedMessage(decision) {
     case 'capacity':
       // Honest about the real cause, and the strongest upgrade argument the
       // bot will ever make — because it is true.
-      return `⚡ **I'm at capacity for today.** Free traffic has used up the shared daily pool.\n\nResets ${reset}. Pro users are never queued — \`/upgrade\`.`;
+      return `⚡ **I'm at capacity for today.** Free traffic has used up the shared daily pool.\n\nResets ${reset}. Paid plans are never queued — \`/upgrade\` (Base from ${priceLabel('base')}).`;
 
     default:
       return `⏳ **Rate limit reached** (${label}). Try again shortly.${upsell}`;

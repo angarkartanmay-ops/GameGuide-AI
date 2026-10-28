@@ -108,8 +108,8 @@ const PAID_SUB_STATUSES = new Set(['active', 'trialing', 'past_due']);
  *   api    — { retrieveSubscription(id), listLineItemPriceIds(sessionId) }
  *   notify — (userId, kind) => Promise, best effort
  */
-function createBillingHandlers({ repo, api, notify = async () => {}, env = process.env, log = console }) {
-  const core = createBillingCore({ repo, notify, log });
+function createBillingHandlers({ repo, api, notify = async () => {}, supersede, env = process.env, log = console }) {
+  const core = createBillingCore({ repo, notify, supersede, log });
 
   async function checkoutCompleted(session) {
     // Card payments complete as 'paid'. Delayed methods (bank debits) arrive
@@ -212,7 +212,7 @@ function createBillingHandlers({ repo, api, notify = async () => {}, env = proce
 function stripeOffers(env = process.env) {
   if (!(env.STRIPE_SECRET_KEY || '').trim()) return [];
   const out = [];
-  for (const [plan, intervals] of [['pro', ['month', 'year']], ['server', ['month', 'year']], ['lifetime', ['once']]]) {
+  for (const [plan, intervals] of [['base', ['month', 'year']], ['pro', ['month', 'year']], ['server', ['month', 'year']], ['lifetime', ['once']]]) {
     for (const interval of intervals) if (stripePriceFor(plan, interval, env)) out.push({ plan, interval });
   }
   return out;
@@ -252,7 +252,7 @@ async function createStripeCheckout({ plan, interval = null, userId, guildId = n
  * Mount POST /stripe-webhook. Requires `req.rawBody` (captured by the `verify`
  * hook on express.json() in index.js): Stripe signs the exact bytes it sent.
  */
-function mountStripeWebhook(app, { supabase, client, guard = (_req, _res, next) => next(), stripeApi = null }) {
+function mountStripeWebhook(app, { supabase, client, guard = (_req, _res, next) => next(), stripeApi = null, supersede }) {
   if (!stripeConfigured) {
     console.log('[stripe] billing disabled (need STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET)');
     return false;
@@ -268,7 +268,7 @@ function mountStripeWebhook(app, { supabase, client, guard = (_req, _res, next) 
       return (items?.data || []).map(i => i?.price?.id).filter(Boolean);
     },
   };
-  const handlers = createBillingHandlers({ repo, api, notify: dmNotifier(client) });
+  const handlers = createBillingHandlers({ repo, api, notify: dmNotifier(client), supersede });
 
   app.post('/stripe-webhook', guard, async (req, res) => {
     let event;
@@ -286,8 +286,19 @@ function mountStripeWebhook(app, { supabase, client, guard = (_req, _res, next) 
   return true;
 }
 
+/**
+ * Stop a Stripe subscription renewing (a higher plan replaced it): cancel at
+ * the end of the period already paid for.
+ */
+async function cancelStripeSubscription(id, { client = stripe } = {}) {
+  if (!client) throw new Error('stripe not configured');
+  await client.subscriptions.update(id, { cancel_at_period_end: true });
+  return 'cancelled';
+}
+
 module.exports = {
   mountStripeWebhook,
+  cancelStripeSubscription,
   createStripeCheckout,
   stripeOffers,
   buildCheckoutUrl,

@@ -17,6 +17,13 @@
 'use strict';
 
 const PLANS = Object.freeze({
+  // Base: more room than Free on the same free model mesh. Pro adds the paid
+  // model on deep questions, which is the part that costs real money per turn.
+  base: Object.freeze({
+    id: 'base', label: 'Base', cents: 299, inr: 199, interval: 'month',
+    yearly: Object.freeze({ cents: 2999, inr: 1999 }),
+    priceEnv: 'STRIPE_PRICE_BASE', linkEnv: 'STRIPE_BASE_PAYMENT_LINK',
+  }),
   pro: Object.freeze({
     id: 'pro', label: 'Pro', cents: 499, inr: 399, interval: 'month',
     yearly: Object.freeze({ cents: 4999, inr: 3999 }),
@@ -34,6 +41,11 @@ const PLANS = Object.freeze({
 });
 
 const INTERVALS = Object.freeze(['month', 'year', 'once']);
+
+// The personal plans, weakest first. A purchase may replace a live plan of a
+// lower rank (an upgrade); never one of the same or a higher rank.
+const PERSONAL_RANK = Object.freeze({ free: 0, base: 1, pro: 2, lifetime: 3 });
+const SUBSCRIPTION_PLANS = Object.freeze(['base', 'pro', 'server']);
 
 /**
  * The price of one plan on one interval, or null if that combination is not
@@ -126,9 +138,10 @@ function planForCheckout({ priceIds = [], amountTotal = null, mode = null }, env
   if (mode === 'payment') return amountTotal >= PLANS.lifetime.cents ? 'lifetime' : null;
   if (mode === 'subscription') {
     // Every subscription offer, dearest first: $149.99 server/yr, $49.99 pro/yr,
-    // $14.99 server/mo, $4.99 pro/mo. A $49.99 yearly Pro must not read as a
-    // monthly server plan just because it is more than $14.99.
-    const offers = ['pro', 'server'].flatMap(id => ['month', 'year'].map(i => offer(id, i))).filter(Boolean)
+    // $29.99 base/yr, $14.99 server/mo, $4.99 pro/mo, $2.99 base/mo. A $49.99
+    // yearly Pro must not read as a monthly server plan just because it is more
+    // than $14.99.
+    const offers = SUBSCRIPTION_PLANS.flatMap(id => ['month', 'year'].map(i => offer(id, i))).filter(Boolean)
       .sort((a, b) => b.cents - a.cents);
     const hit = offers.find(o => amountTotal >= o.cents && amountTotal < o.cents * 1.5);
     return hit ? hit.plan : null;
@@ -137,5 +150,5 @@ function planForCheckout({ priceIds = [], amountTotal = null, mode = null }, env
 }
 
 module.exports = {
-  PLANS, INTERVALS, offer, catalog, priceLabel, inrLabel, configuredPriceIds, stripePriceFor, planForCheckout,
+  PLANS, INTERVALS, PERSONAL_RANK, SUBSCRIPTION_PLANS, offer, catalog, priceLabel, inrLabel, configuredPriceIds, stripePriceFor, planForCheckout,
 };

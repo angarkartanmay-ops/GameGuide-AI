@@ -10,17 +10,26 @@ import SiteNav from './SiteNav';
 import SiteFooter from './SiteFooter';
 import '../../styles/site.css';
 
+const BASE = PLANS.find(p => p.id === 'base');
 const PRO = PLANS.find(p => p.id === 'pro');
 const SERVER = PLANS.find(p => p.id === 'server');
 const FREE = PLANS.find(p => p.id === 'free');
 
-// Buyers in India see rupees and UPI first, everyone else cards in dollars.
+// Buyers in India see rupees and UPI first, everyone else PayPal in dollars.
 const inIndia = () => {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone === 'Asia/Kolkata'; } catch { return false; }
 };
 const sells = (rail, plan, iv) => !!rail?.offers?.some(o => o.plan === plan && o.interval === iv);
 
-/** Two-way switch drawn as one control (Monthly | Yearly, Card | UPI). */
+// Ways to pay, in the order the switch shows them.
+const RAIL_ORDER = ['upi', 'paypal', 'card'];
+const RAIL_LABELS = {
+  upi: { label: 'UPI & Indian cards', note: 'INR' },
+  paypal: { label: 'PayPal · worldwide', note: 'USD' },
+  card: { label: 'Card · worldwide', note: 'USD' },
+};
+
+/** A switch drawn as one control (Monthly | Yearly, UPI | PayPal | Card). */
 function Segmented({ label, value, options, onChange }) {
   return (
     <div className="s-seg" role="radiogroup" aria-label={label}>
@@ -60,7 +69,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
   const rootRef = useRef(null);
   const [game] = useState(() => HERO_GAMES[2] || HERO_GAMES[0]);
   const [period, setPeriod] = useState('year');
-  const [rail, setRail] = useState(inIndia() ? 'upi' : 'card');
+  const [rail, setRail] = useState(inIndia() ? 'upi' : 'paypal');
   const [live, setLive] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -95,9 +104,10 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
     return () => clearInterval(id);
   }, []);
 
-  const rails = live?.rails || { card: null, upi: null };
-  // If the preferred way to pay is not open, use the one that is.
-  const railKey = live && !rails[rail] ? (rails.card ? 'card' : rails.upi ? 'upi' : rail) : rail;
+  const rails = live?.rails || { card: null, upi: null, paypal: null };
+  const openRails = RAIL_ORDER.filter(k => rails[k]);
+  // If the preferred way to pay is not open, use one that is.
+  const railKey = live && !rails[rail] ? (openRails[0] || rail) : rail;
 
   useScene(rootRef, ({ calm: still }, root) => {
     if (still) return;
@@ -110,16 +120,17 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
   const tier = account?.tier || 'free';
   const minutesLeft = buyer ? Math.max(0, Math.round((buyer.exp * 1000 - now) / 60_000)) : 0;
   const linked = !!buyer && !expired && !live?.linkExpired;
-  const open = billingOpen() && !!live && (rails.card || rails.upi);
+  const open = billingOpen() && !!live && openRails.length > 0;
 
   /** Why a button is off, or '' when it can be pressed. */
   const blocked = (plan, iv) => {
-    if (!billingOpen() || (live && !rails.card && !rails.upi)) return 'Payments open soon.';
+    if (!billingOpen() || (live && !openRails.length)) return 'Payments open soon.';
     if (!linked) return 'Run /upgrade in Discord to link your account first.';
     if (!live) return 'Loading…';
-    if (!sells(railNow, plan, iv)) return 'Not available with this payment method. Try the other one.';
+    if (!sells(railNow, plan, iv)) return 'Not available with this payment method. Try another one.';
     if (plan === 'server' && !buyer.inServer) return 'Run /upgrade inside the server you want to upgrade.';
-    if (plan === 'pro' && tier === 'pro' && account?.status !== 'ending') return 'This is your plan.';
+    if (plan === tier && plan !== 'server' && account?.status !== 'ending') return 'This is your plan.';
+    if (plan === 'base' && tier === 'pro' && account?.status !== 'ending') return 'You have Pro, which includes all of Base.';
     if (tier === 'lifetime' && plan !== 'server') return 'You have Lifetime.';
     if (plan === 'server' && tier === 'server') return 'This server already has it.';
     return '';
@@ -160,6 +171,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
     return currency === 'inr' ? `₹${Math.round(y / 12).toLocaleString('en-IN')}` : `$${(y / 1200).toFixed(2)}`;
   };
   const saving = yearlySaving(PRO.offers, currency);
+  const baseBlocked = blocked('base', period);
   const proBlocked = blocked('pro', period);
   const lifeBlocked = blocked('lifetime', 'once');
   const serverBlocked = blocked('server', period);
@@ -251,7 +263,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
               )}
               {account && tier !== 'free' && (
                 <p className="s-upgrade__current">
-                  Current plan: <strong>{{ pro: 'Pro', lifetime: 'Pro Lifetime', server: 'Premium Server' }[tier]}</strong>
+                  Current plan: <strong>{{ base: 'Base', pro: 'Pro', lifetime: 'Pro Lifetime', server: 'Premium Server' }[tier]}</strong>
                   {account.status === 'ending' ? ' · cancelled, on until the end of the paid period' : ''}
                   {account.status === 'past_due' ? ' · last payment failed, update your card from the receipt email' : ''}
                 </p>
@@ -268,15 +280,12 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
                   { value: 'year', label: 'Yearly', note: saving ? `save ${saving}%` : '' },
                 ]}
               />
-              {(!live || (rails.card && rails.upi)) && (
+              {(!live || openRails.length > 1) && (
                 <Segmented
                   label="Payment method"
                   value={railKey}
                   onChange={setRail}
-                  options={[
-                    { value: 'card', label: 'Card · worldwide', note: 'USD' },
-                    { value: 'upi', label: 'UPI & Indian cards', note: 'INR' },
-                  ]}
+                  options={(live ? openRails : ['upi', 'paypal']).map(k => ({ value: k, ...RAIL_LABELS[k] }))}
                 />
               )}
             </div>
@@ -303,16 +312,19 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
                     disabled={!!proBlocked || !!busy}
                     onClick={() => buy('pro', period)}
                   >
-                    {busy === `pro:${period}` ? 'Opening checkout…' : tier === 'pro' ? 'Your plan' : `Get Pro ${period === 'year' ? 'yearly' : 'monthly'}`}
+                    {busy === `pro:${period}` ? 'Opening checkout…' : tier === 'pro' ? 'Your plan' : `${tier === 'base' ? 'Move up to' : 'Get'} Pro ${period === 'year' ? 'yearly' : 'monthly'}`}
                   </button>
                   {proBlocked && tier !== 'pro' && <p className="s-plan__why">{proBlocked}</p>}
+                  {!proBlocked && tier === 'base' && (
+                    <p className="s-plan__why">Your Base plan stops renewing when Pro starts. Base days already paid for are not refunded.</p>
+                  )}
                 </div>
                 <div className="s-plan__once">
                   <div>
                     <p className="s-plan__once-name">Pro Lifetime · {price(PRO, 'once')} once</p>
                     <p className="s-plan__once-note">
                       Everything in Pro, for good. No renewals.
-                      {tier === 'pro' ? ' Cancel your monthly or yearly plan from the receipt email so it does not renew.' : ''}
+                      {tier === 'pro' || tier === 'base' ? ' Your monthly or yearly plan stops renewing on its own.' : ''}
                     </p>
                   </div>
                   <button
@@ -327,6 +339,29 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
               </article>
 
               <div className="s-plans__side">
+                <article className="s-plan" aria-labelledby="plan-base" data-intro>
+                  <header className="s-plan__head">
+                    <h2 id="plan-base" className="s-plan__name">{BASE.name}</h2>
+                    <p className="s-plan__tag">{BASE.tagline}</p>
+                  </header>
+                  <p className="s-plan__price">
+                    <span className="s-plan__amount">{price(BASE, period)}</span>
+                    <span className="s-plan__per">{period === 'year' ? `/year · ${perMonth(BASE)} a month` : '/month'}</span>
+                  </p>
+                  <Features items={BASE.features} />
+                  <div className="s-plan__actions">
+                    <button
+                      type="button"
+                      className="s-btn s-btn--ghost"
+                      disabled={!!baseBlocked || !!busy}
+                      onClick={() => buy('base', period)}
+                    >
+                      {busy === `base:${period}` ? 'Opening checkout…' : tier === 'base' ? 'Your plan' : `Get Base ${period === 'year' ? 'yearly' : 'monthly'}`}
+                    </button>
+                    {baseBlocked && tier !== 'base' && <p className="s-plan__why">{baseBlocked}</p>}
+                  </div>
+                </article>
+
                 <article className="s-plan" aria-labelledby="plan-server" data-intro>
                   <header className="s-plan__head">
                     <h2 id="plan-server" className="s-plan__name">{SERVER.name}</h2>
@@ -371,7 +406,9 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
             <section className="s-prose s-upgrade__faq" aria-label="Questions">
               <h2 className="s-h2">Questions</h2>
               <p><strong>How do I cancel?</strong> From the link in your receipt email. The plan stays on until the end of the period you paid for, then you are back on Free. Nothing else changes.</p>
-              <p><strong>How do I pay?</strong> By card anywhere in the world, or with UPI, netbanking and Indian cards in rupees. Payments are handled by the payment provider; GameGuide never sees your card or UPI details.</p>
+              <p><strong>Base or Pro?</strong> Both raise the daily limit and skip the queue when the free pool is full. Base answers with the same models as Free. Pro also sends hard questions to the most accurate model first, and gives more than three times the messages and four times the screenshots.</p>
+              <p><strong>Moving from Base to Pro?</strong> Buy Pro here. It starts at once and your Base plan stops renewing on its own. Base days already paid for are not refunded.</p>
+              <p><strong>How do I pay?</strong> With PayPal (or a card through PayPal) anywhere in the world, or with UPI, netbanking and Indian cards in rupees. Payments are handled by the payment provider; GameGuide never sees your card or UPI details.</p>
               <p><strong>Monthly or yearly?</strong> Yearly costs ten months for twelve. Lifetime is a single payment for Pro, for good.</p>
               <p><strong>Something went wrong?</strong> Write to <a className="s-a" href={mailto('GameGuide plan question')}>{LINKS.email}</a>.</p>
             </section>

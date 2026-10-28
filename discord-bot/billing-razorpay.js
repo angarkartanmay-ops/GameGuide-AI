@@ -9,7 +9,7 @@
 //  ──────────────────────────────────────────────────────────────
 //  Razorpay has no "append ?client_reference_id=" to a static link. Instead
 //  the bot calls the Razorpay API at the moment someone presses the button,
-//  and creates a subscription (Pro, Server) or a payment link (Lifetime) that
+//  and creates a subscription (Base, Pro, Server) or a payment link (Lifetime) that
 //  carries the Discord user id, server id and plan in `notes`. Those notes are
 //  written by the server, not by the buyer, and come back inside the signed
 //  webhook — so unlike a hand-editable URL they cannot be tampered with. The
@@ -37,8 +37,8 @@ const iso = (unix) => (Number.isFinite(unix) ? new Date(unix * 1000).toISOString
  * Settings from the environment, or null when Razorpay is not set up.
  *   RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET   API keys (Dashboard → API Keys)
  *   RAZORPAY_WEBHOOK_SECRET                 the secret you type when adding the webhook
- *   RAZORPAY_PLAN_PRO / RAZORPAY_PLAN_SERVER  plan ids (plan_…), monthly, for the amounts in plans.js
- *   RAZORPAY_PLAN_PRO_YEARLY / _SERVER_YEARLY  the yearly ones (optional)
+ *   RAZORPAY_PLAN_BASE / _PRO / _SERVER     plan ids (plan_…), monthly, for the amounts in plans.js
+ *   RAZORPAY_PLAN_BASE_YEARLY / _PRO_YEARLY / _SERVER_YEARLY  the yearly ones (optional)
  */
 function razorpayConfig(env = process.env) {
   const keyId = (env.RAZORPAY_KEY_ID || '').trim();
@@ -50,6 +50,8 @@ function razorpayConfig(env = process.env) {
     // Monthly and yearly plan ids (plan_…). A yearly one is optional: without
     // it the plans page simply does not offer yearly in rupees.
     plans: {
+      base: (env.RAZORPAY_PLAN_BASE || '').trim(),
+      base_yearly: (env.RAZORPAY_PLAN_BASE_YEARLY || '').trim(),
       pro: (env.RAZORPAY_PLAN_PRO || '').trim(),
       pro_yearly: (env.RAZORPAY_PLAN_PRO_YEARLY || '').trim(),
       server: (env.RAZORPAY_PLAN_SERVER || '').trim(),
@@ -83,7 +85,7 @@ function razorpayPlanId(config, plan, interval) {
 function razorpayOffers(config) {
   if (!config) return [];
   const out = [{ plan: 'lifetime', interval: 'once' }];
-  for (const plan of ['pro', 'server']) {
+  for (const plan of ['base', 'pro', 'server']) {
     for (const interval of ['month', 'year']) if (razorpayPlanId(config, plan, interval)) out.push({ plan, interval });
   }
   return out;
@@ -155,8 +157,8 @@ async function createCheckout({ plan, interval = null, userId, guildId = null, c
 
 // ─── Razorpay's dialect → billing-core ─────────────────────────────────────
 
-function createRazorpayHandlers({ repo, notify = async () => {}, config, log = console }) {
-  const core = createBillingCore({ repo, notify, log });
+function createRazorpayHandlers({ repo, notify = async () => {}, supersede, config, log = console }) {
+  const core = createBillingCore({ repo, notify, supersede, log });
   // pro and pro_yearly are both Pro; the period itself comes from the subscription.
   const planFor = (planId) => {
     const key = Object.entries(config.plans).find(([, id]) => id && id === planId)?.[0];
@@ -250,16 +252,45 @@ function createRazorpayHandlers({ repo, notify = async () => {}, config, log = c
   return { handleEvent };
 }
 
+/**
+ * Stop a Razorpay subscription renewing (a higher plan replaced it). At the
+ * end of the cycle, so what was paid for is kept and nothing is refunded.
+ */
+async function cancelRazorpaySubscription(id, { config, fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
+  if (!config) throw new Error('razorpay not configured');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(`${API}/subscriptions/${encodeURIComponent(id)}/cancel`, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Basic ${Buffer.from(`${config.keyId}:${config.keySecret}`).toString('base64')}`,
+      },
+      body: JSON.stringify({ cancel_at_cycle_end: 1 }),
+    });
+    if (res.ok) return 'cancelled';
+    const data = await res.json().catch(() => ({}));
+    const why = String(data?.error?.description || '');
+    // Already cancelled or completed: the goal is met.
+    if (res.status === 400 && /cancel|complet/i.test(why)) return 'already-stopped';
+    throw new Error(`razorpay ${res.status}: ${why.slice(0, 160)}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── Mounting ──────────────────────────────────────────────────────────────
 
 /** Mount POST /razorpay-webhook. Needs `req.rawBody` from express.json's verify hook. */
-function mountRazorpayWebhook(app, { supabase, client, guard = (_req, _res, next) => next(), config = razorpayConfig() }) {
+function mountRazorpayWebhook(app, { supabase, client, guard = (_req, _res, next) => next(), config = razorpayConfig(), supersede }) {
   if (!config) {
     console.log('[razorpay] billing disabled (need RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET)');
     return false;
   }
   const repo = supabaseRepo(supabase);
-  const handlers = createRazorpayHandlers({ repo, notify: dmNotifier(client), config });
+  const handlers = createRazorpayHandlers({ repo, notify: dmNotifier(client), supersede, config });
 
   app.post('/razorpay-webhook', guard, async (req, res) => {
     if (!verifySignature(req.rawBody, req.headers['x-razorpay-signature'], config.webhookSecret)) {
@@ -284,5 +315,5 @@ function mountRazorpayWebhook(app, { supabase, client, guard = (_req, _res, next
 
 module.exports = {
   razorpayConfig, verifySignature, createCheckout, createRazorpayHandlers, mountRazorpayWebhook,
-  razorpayOffers, razorpayPlanId,
+  razorpayOffers, razorpayPlanId, cancelRazorpaySubscription,
 };

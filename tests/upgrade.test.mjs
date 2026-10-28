@@ -67,7 +67,11 @@ const NOW = 1_800_000_000_000;
   check('by amount: $149.99 is the yearly server', plans.planForCheckout({ amountTotal: 14999, mode: 'subscription' }, {}) === 'server');
   check('by amount: monthly prices still map', plans.planForCheckout({ amountTotal: 499, mode: 'subscription' }, {}) === 'pro' && plans.planForCheckout({ amountTotal: 1499, mode: 'subscription' }, {}) === 'server');
   check('by amount: tax on top is fine', plans.planForCheckout({ amountTotal: 5899, mode: 'subscription' }, {}) === 'pro');
-  check('by amount: an amount matching nothing is refused', plans.planForCheckout({ amountTotal: 3000, mode: 'subscription' }, {}) === null);
+  check('by amount: an amount matching nothing is refused', plans.planForCheckout({ amountTotal: 1000, mode: 'subscription' }, {}) === null);
+  check('by amount: Base monthly and yearly are Base', plans.planForCheckout({ amountTotal: 299, mode: 'subscription' }, {}) === 'base' && plans.planForCheckout({ amountTotal: 2999, mode: 'subscription' }, {}) === 'base');
+  check('base costs $2.99 / ₹199 a month, ten months a year', plans.offer('base', 'month').cents === 299 && plans.offer('base', 'month').inr === 199
+    && plans.offer('base', 'year').cents === 2999 && plans.offer('base', 'year').inr === 1999 && plans.offer('base', 'once') === null);
+  check('personal plans rank free < base < pro < lifetime', plans.PERSONAL_RANK.free < plans.PERSONAL_RANK.base && plans.PERSONAL_RANK.base < plans.PERSONAL_RANK.pro && plans.PERSONAL_RANK.pro < plans.PERSONAL_RANK.lifetime);
 
   // The website shows exactly what the bot charges.
   for (const p of site.PLANS.filter(x => x.offers)) {
@@ -79,7 +83,9 @@ const NOW = 1_800_000_000_000;
   const life = site.PLANS.find(p => p.id === 'pro').lifetime;
   check('website lifetime price matches plans.js', life.usd === plans.offer('lifetime', 'once').cents && life.inr === plans.offer('lifetime', 'once').inr);
   check('website money formats', site.money(4999, 'usd') === '$49.99' && site.money(11999, 'inr') === '₹11,999' && site.money(0, 'usd') === '$0');
-  check('website yearly saving', site.yearlySaving(site.PLANS[1].offers) === 17);
+  check('website yearly saving', site.yearlySaving(site.PLANS.find(p => p.id === 'pro').offers) === 17 && site.yearlySaving(site.PLANS.find(p => p.id === 'base').offers) === 16);
+  check('website lists free, base, pro, server in that order', site.PLANS.map(p => p.id).join() === 'free,base,pro,server');
+  check('every plan error the API can send has words on the site', ['already-base', 'already-pro', 'already-lifetime', 'unavailable'].every(k => typeof site.CHECKOUT_ERRORS[k] === 'string'));
 }
 
 // ═══ /quota badge ══════════════════════════════════════════════════════════
@@ -93,6 +99,11 @@ const NOW = 1_800_000_000_000;
   check('lifetime badge', d({ tier: 'lifetime', entitlement: { tier: 'lifetime', status: 'active', source: 'razorpay' } }).title === '💎 PRO LIFETIME');
   check('server badge', d({ tier: 'server', server: { expires_at: later } }).title === '🌟 PREMIUM SERVER');
   check('a lapsed plan says so', /plan ended/.test(d({ tier: 'free', entitlement: { tier: 'pro', status: 'canceled', current_period_end: new Date(NOW - 864e5).toISOString() } }).lines[0]));
+  check('base badge, its renewal and a way up to Pro', d({ tier: 'base', entitlement: { tier: 'base', status: 'active', source: 'paypal', current_period_end: later } }).title === '✅ BASE'
+    && /Renews around <t:.*PayPal/.test(d({ tier: 'base', entitlement: { tier: 'base', status: 'active', source: 'paypal', current_period_end: later } }).lines[0])
+    && /\/upgrade` to Pro/.test(d({ tier: 'base', entitlement: { tier: 'base', status: 'active', current_period_end: later } }).lines.join()));
+  check('a cancelled base names Base, not Pro', /Cancelled — Base stays on/.test(d({ tier: 'base', entitlement: { tier: 'base', status: 'ending', current_period_end: later } }).lines[0]));
+  check('a lapsed base says Base', /Your Base plan ended/.test(d({ tier: 'free', entitlement: { tier: 'base', status: 'canceled', current_period_end: new Date(NOW - 864e5).toISOString() } }).lines[0]));
   check('every badge has a colour', Object.values(membership.BADGES).every(b => Number.isInteger(b.color)));
 }
 
@@ -143,7 +154,8 @@ const NOW = 1_800_000_000_000;
   const env = {
     UPGRADE_LINK_SECRET: SECRET, SITE_URL: SITE,
     STRIPE_SECRET_KEY: 'sk', STRIPE_PRICE_PRO: 'pm', STRIPE_PRICE_PRO_YEARLY: 'py', STRIPE_PRICE_SERVER: 'sm', STRIPE_PRICE_LIFETIME: 'pl',
-    RAZORPAY_KEY_ID: 'k', RAZORPAY_KEY_SECRET: 's', RAZORPAY_WEBHOOK_SECRET: 'w', RAZORPAY_PLAN_PRO: 'plan_pm',
+    RAZORPAY_KEY_ID: 'k', RAZORPAY_KEY_SECRET: 's', RAZORPAY_WEBHOOK_SECRET: 'w', RAZORPAY_PLAN_PRO: 'plan_pm', RAZORPAY_PLAN_BASE: 'plan_bm',
+    PAYPAL_CLIENT_ID: 'pc', PAYPAL_CLIENT_SECRET: 'ps', PAYPAL_WEBHOOK_ID: 'WH-1', PAYPAL_PLAN_BASE: 'P-BM', PAYPAL_PLAN_PRO: 'P-PM', PAYPAL_PLAN_PRO_YEARLY: 'P-PY',
   };
   let tier = 'free';
   let status = 'active';
@@ -153,6 +165,7 @@ const NOW = 1_800_000_000_000;
     stripe: async (a) => { made.push(['stripe', a]); return { url: 'https://checkout.stripe.com/c/pay/x' }; },
     lemon: async (a) => { made.push(['lemon', a]); return { url: 'https://x.lemonsqueezy.com/c' }; },
     razorpay: async (a) => { if (a.plan === 'lifetime') throw new Error('razorpay 500: secret internals'); made.push(['razorpay', a]); return { url: 'https://rzp.io/i/x' }; },
+    paypal: async (a) => { made.push(['paypal', a]); return { url: 'https://www.sandbox.paypal.com/webapps/billing/subscriptions?ba_token=BA-1' }; },
   };
   const app = express();
   app.use(express.json());
@@ -169,7 +182,7 @@ const NOW = 1_800_000_000_000;
 
   const anon = await fetch(`${base}/api/plans`, { headers: { origin: SITE } });
   const aj = await anon.json();
-  check('plans without a link: prices and open rails, nobody signed in', anon.status === 200 && aj.plans.length === 3 && aj.rails.card.provider === 'stripe' && aj.rails.upi.provider === 'razorpay' && aj.buyer === null && aj.account === null);
+  check('plans without a link: prices and open rails, nobody signed in', anon.status === 200 && aj.plans.length === 4 && aj.rails.card.provider === 'stripe' && aj.rails.upi.provider === 'razorpay' && aj.rails.paypal.provider === 'paypal' && aj.buyer === null && aj.account === null);
   check('CORS allows the site', anon.headers.get('access-control-allow-origin') === SITE);
   const other = await fetch(`${base}/api/plans`, { headers: { origin: 'https://evil.example' } });
   check('CORS does not allow other origins', !other.headers.get('access-control-allow-origin'));
@@ -205,7 +218,18 @@ const NOW = 1_800_000_000_000;
   const fail = await post({ t: link.createUpgradeToken({ userId: '323456789012345678' }, { secret: SECRET }), plan: 'lifetime', interval: 'once', rail: 'upi' });
   check('a provider failure is a generic 502', fail.status === 502 && JSON.stringify(fail.json) === '{"error":"provider-unavailable"}');
 
+  const pp = await post({ t: link.createUpgradeToken({ userId: '723456789012345678' }, { secret: SECRET }), plan: 'base', interval: 'month', rail: 'paypal' });
+  check('the paypal rail sells Base and returns PayPal\'s page', pp.status === 200 && pp.json.url.includes('paypal.com') && made.at(-1)[0] === 'paypal' && made.at(-1)[1].plan === 'base');
+  check('paypal yearly Base is unavailable without its plan id', (await post({ t: link.createUpgradeToken({ userId: '733456789012345678' }, { secret: SECRET }), plan: 'base', interval: 'year', rail: 'paypal' })).json?.error === 'unavailable');
+  const ru = await post({ t: link.createUpgradeToken({ userId: '743456789012345678' }, { secret: SECRET }), plan: 'base', interval: 'month', rail: 'upi' });
+  check('Base is sold in rupees too', ru.status === 200 && made.at(-1)[0] === 'razorpay' && made.at(-1)[1].plan === 'base');
+
+  tier = 'base';
+  check('someone on Base is not sold Base again', (await post({ t: link.createUpgradeToken({ userId: '753456789012345678' }, { secret: SECRET }), plan: 'base', interval: 'month', rail: 'paypal' })).json?.error === 'already-base');
+  check('…but can move up to Pro', (await post({ t: link.createUpgradeToken({ userId: '763456789012345678' }, { secret: SECRET }), plan: 'pro', interval: 'month', rail: 'paypal' })).status === 200);
+
   tier = 'pro';
+  check('someone on Pro is not sold Base', (await post({ t: link.createUpgradeToken({ userId: '773456789012345678' }, { secret: SECRET }), plan: 'base', interval: 'month', rail: 'paypal' })).json?.error === 'already-pro');
   const t3 = link.createUpgradeToken({ userId: '423456789012345678' }, { secret: SECRET });
   check('someone already on Pro is not sold Pro again', (await post({ t: t3, plan: 'pro', interval: 'month' })).json?.error === 'already-pro');
   check('…but can go Lifetime', (await post({ t: t3, plan: 'lifetime', interval: 'once' })).status === 200);
@@ -218,7 +242,7 @@ const NOW = 1_800_000_000_000;
 
   check('availableRails prefers Stripe, honours PAYMENT_GLOBAL', availableRails(env).card.provider === 'stripe'
     && availableRails({ ...env, PAYMENT_GLOBAL: 'lemon', LEMONSQUEEZY_WEBHOOK_SECRET: 'x', LEMON_VARIANT_PRO: '1', LEMON_CHECKOUT_PRO: 'https://a.lemonsqueezy.com/b' }).card.provider === 'lemon');
-  check('no rails when nothing is configured', JSON.stringify(availableRails({})) === '{"card":null,"upi":null}');
+  check('no rails when nothing is configured', JSON.stringify(availableRails({})) === '{"card":null,"upi":null,"paypal":null}');
   server.closeAllConnections?.();
   await new Promise(r => server.close(r));
   check('createBillingApi is usable on its own', typeof createBillingApi({ env, checkQuota: async () => ({}) }).plans === 'function');
