@@ -1,10 +1,8 @@
 import React, { useRef } from 'react';
-import { LIBRARY, coverArt } from '../../site/showcase';
 import { achievements } from '../../site/achievements';
 import { gsap, ScrollTrigger, useScene } from '../../site/motion';
 import { ChapterHead } from './bits';
 
-const ROWS = [LIBRARY.slice(0, 8), LIBRARY.slice(8, 16), LIBRARY.slice(16, 24)];
 const BASE_SPEED = 0.034; // px per ms
 
 function Cover({ game, dup, onPick, onSeen }) {
@@ -21,7 +19,7 @@ function Cover({ game, dup, onPick, onSeen }) {
       data-dup={dup || undefined}
     >
       <img
-        src={coverArt(game.appid)}
+        src={game.cover}
         alt=""
         width={600}
         height={900}
@@ -35,11 +33,14 @@ function Cover({ game, dup, onPick, onSeen }) {
 }
 
 /**
- * Chapter 03. A tilted wall of real Steam covers drifting in opposite
- * directions; scrolling fast pushes them faster, hovering a row slows it to a
- * stop. Picking a cover opens the chat with a question about it drafted.
+ * A tilted wall of real Steam covers drifting in opposite directions;
+ * scrolling fast pushes them faster, hovering a row slows it to a stop.
+ * Picking a cover opens the chat with a question about it drafted. The
+ * covers are the day's most-played games (src/site/daily.js) when Steam
+ * answered, the showcase otherwise.
  */
-export default function LibraryWall({ calm, onPick }) {
+export default function LibraryWall({ calm, onPick, games, today }) {
+  const rows = [games.slice(0, 8), games.slice(8, 16), games.slice(16, 24)];
   const rootRef = useRef(null);
   const seen = useRef(new Set());
 
@@ -108,7 +109,7 @@ export default function LibraryWall({ calm, onPick }) {
     });
 
     return () => { gsap.ticker.remove(tick); offs.forEach(fn => fn()); };
-  }, [calm]);
+  }, [calm, games]);
 
   return (
     <section ref={rootRef} id="library" className={`s-chapter s-library${calm ? ' is-calm' : ''}`} aria-labelledby="library-title">
@@ -116,12 +117,14 @@ export default function LibraryWall({ calm, onPick }) {
         <ChapterHead
           id="library-title"
           title="Any game. Ask about it and the page becomes it."
-          lead="Name a game and the chat dresses itself in that game's art and colour. Pick one below to start there."
+          lead={today
+            ? "Name a game and the chat dresses itself in that game's art and colour. These are today's most played on Steam. Pick one to start there."
+            : "Name a game and the chat dresses itself in that game's art and colour. Pick one below to start there."}
         />
       </div>
       <div className="s-wall">
         <div className="s-wall__plane">
-          {ROWS.map((row, r) => (
+          {rows.map((row, r) => (
             <div key={r} className="s-wall__row">
               <div className="s-wall__track">
                 {row.map(g => <Cover key={g.appid} game={g} onPick={onPick} onSeen={onSeen} />)}

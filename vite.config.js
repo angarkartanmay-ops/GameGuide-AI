@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { buildFandomUrl } from './api/_wikiTarget.js'
 import { resolveSteamArt } from './api/_steamArt.js'
+import { resolveTrending } from './api/_trending.js'
 
 // Search-engine ownership tags, read from the environment so no token is
 // committed and a fork doesn't claim our site. Set them in the Vercel project's
@@ -129,6 +130,14 @@ function gameArtDevPlugin() {
       server.middlewares.use('/api/game-art', async (req, res) => {
         const q = new URL(req.url, 'http://localhost').searchParams.get('q') || '';
         const { status, body, cacheControl } = await resolveSteamArt(q);
+        res.statusCode = status;
+        res.setHeader('Content-Type', 'application/json');
+        if (cacheControl) res.setHeader('Cache-Control', cacheControl);
+        res.end(JSON.stringify(body));
+      });
+      // /api/trending-games in dev — the landing's daily games.
+      server.middlewares.use('/api/trending-games', async (_req, res) => {
+        const { status, body, cacheControl } = await resolveTrending();
         res.statusCode = status;
         res.setHeader('Content-Type', 'application/json');
         if (cacheControl) res.setHeader('Cache-Control', cacheControl);

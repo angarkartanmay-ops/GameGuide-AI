@@ -6,10 +6,13 @@ const CDN = 'https://cdn.akamai.steamstatic.com/steam/apps';
 
 export const heroArt = (appid) => `${CDN}/${appid}/library_hero.jpg`;
 export const coverArt = (appid) => `${CDN}/${appid}/library_600x900.jpg`;
+const headerArt = (appid) => `${CDN}/${appid}/header.jpg`;
 
+// The fallback hero, for when today's list (src/site/daily.js) can't be had.
 // Accents were sampled from each game's Steam art with the chat's own
 // sampleAccent (so the landing and the chat agree on a game's colour) and are
 // already lifted to 4.5:1 on the site background (#07090d).
+// Every game, here or from the daily list, carries its own art URLs.
 export const HERO_GAMES = [
   { appid: 1245620, name: 'Elden Ring', accent: '#c0985b' },
   { appid: 1086940, name: "Baldur's Gate 3", accent: '#398fc6' },
@@ -17,7 +20,7 @@ export const HERO_GAMES = [
   { appid: 1145350, name: 'Hades II', accent: '#e5302e' },
   { appid: 553850, name: 'Helldivers 2', accent: '#5579b4' },
   { appid: 367520, name: 'Hollow Knight', accent: '#579fa8' },
-];
+].map(g => ({ ...g, hero: heroArt(g.appid), cover: coverArt(g.appid), header: headerArt(g.appid) }));
 
 export const SITE_BG = '#07090d';
 
@@ -32,7 +35,7 @@ export const LIBRARY = [
   [1888160, 'Armored Core VI'], [1172620, 'Sea of Thieves'], [548430, 'Deep Rock Galactic'],
   [1966720, 'Lethal Company'], [892970, 'Valheim'], [105600, 'Terraria'],
   [275850, "No Man's Sky"], [264710, 'Subnautica'], [2694490, 'Path of Exile 2'],
-].map(([appid, name]) => ({ appid, name }));
+].map(([appid, name]) => ({ appid, name, cover: coverArt(appid) }));
 
 // ─── Spoiler Shield demo ────────────────────────────────────────────────────
 // Where the player can say they are, and a lore page whose lines unlock as

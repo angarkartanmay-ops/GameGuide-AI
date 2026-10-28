@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, Lock, ShieldCheck } from 'lucide-react';
 import { LINKS, mailto } from '../../site/links';
-import { HERO_GAMES, heroArt } from '../../site/showcase';
+import { lastSiteGame } from '../../site/daily';
 import {
   PLANS, money, yearlySaving, readUpgradeToken, billingOpen, fetchPlans, startCheckout, signIn, CHECKOUT_ERRORS,
 } from '../../site/pricing';
@@ -58,7 +58,9 @@ function Features({ items }) {
 export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, onNavigate }) {
   const calm = useCalm();
   const rootRef = useRef(null);
-  const [game] = useState(() => HERO_GAMES[2] || HERO_GAMES[0]);
+  const [game] = useState(() => {
+    try { return lastSiteGame(sessionStorage); } catch { return lastSiteGame(null); }
+  });
   const [period, setPeriod] = useState('year');
   const [rail, setRail] = useState(inIndia() ? 'upi' : 'card');
   const [live, setLive] = useState(null);
@@ -177,7 +179,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
 
       <div className="s-page-head">
         <div className="s-page-head__art" aria-hidden="true">
-          <img src={heroArt(game.appid)} alt="" decoding="async" />
+          <img src={game.hero} alt="" decoding="async" />
         </div>
         <div className="s-wrap s-page-head__inner">
           <button type="button" className="s-back" onClick={onBack} data-intro>

@@ -58,6 +58,21 @@
       href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Geist:wght@300..900&family=Geist+Mono:wght@400..600&display=swap"
       rel="stylesheet"
     />
+    <!-- Today's landing games (src/site/daily.js): start the one request now,
+         in parallel with the app bundle, when the landing will need it and
+         the day's copy isn't already saved. -->
+    <script>
+      try {
+        var h = location.hash.replace(/^#\/?/, '').toLowerCase();
+        var c = JSON.parse(localStorage.getItem('gg.daily.v1') || 'null');
+        var landing = h === 'landing' || (!h && sessionStorage.getItem('gg_entered') !== '1');
+        if (landing && !(c && c.day === new Date().toISOString().slice(0, 10))) {
+          window.__ggDaily = fetch('/api/trending-games')
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .catch(function () { return null; });
+        }
+      } catch (e) { /* the landing fetches it itself */ }
+    </script>
   </head>
   <body>
     <div id="root"></div>

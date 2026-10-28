@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { HERO_GAMES } from '../site/showcase';
+import useDailyGames from '../site/useDailyGames';
 import { achievements } from '../site/achievements';
 import { advance, isTypingTarget } from '../site/konami';
 import { gsap, scrollToId, useCalm, useLenis, useScene, scheduleRefresh } from '../site/motion';
@@ -17,7 +17,7 @@ import { track } from '../utils/analytics';
 import '../styles/site.css';
 
 const EXIT_MS = 560;
-const GAME_KEY = 'gg.site.game';
+const GAME_KEY = 'gg.site.game.v2';
 const DRAFT_KEY = 'gg.startDraft';
 const INTERACTIVE = 'a, button, input, textarea, select, summary, [role="button"], [role="tab"], [contenteditable="true"]';
 
@@ -36,6 +36,7 @@ export default function LandingPage({ onEnter, onNavigate }) {
   const [exiting, setExiting] = useState(false);
   const [arcade, setArcade] = useState(false);
   const count = useSyncExternalStore(subscribeCount, readCount, readCount);
+  const daily = useDailyGames();
 
   useLenis(!calm);
 
@@ -70,9 +71,13 @@ export default function LandingPage({ onEnter, onNavigate }) {
     });
   }, [calm]);
 
+  // The info pages open on the last game seen here, so they carry its art.
   const onGame = useCallback((game) => {
     rootRef.current?.style.setProperty('--s-game-accent', game.accent);
-    try { sessionStorage.setItem(GAME_KEY, String(game.appid)); } catch { /* per-visit nicety only */ }
+    if (game.accentReady === false) return; // saved once its colour is known
+    try {
+      sessionStorage.setItem(GAME_KEY, JSON.stringify({ appid: game.appid, name: game.name, accent: game.accent, hero: game.hero }));
+    } catch { /* per-visit nicety only */ }
   }, []);
 
   const start = useCallback((draft) => {
@@ -134,7 +139,7 @@ export default function LandingPage({ onEnter, onNavigate }) {
     <div
       ref={rootRef}
       className={`site s-landing${exiting ? ' is-exiting' : ''}${calm ? ' is-calm' : ''}`}
-      style={{ '--s-game-accent': HERO_GAMES[0].accent }}
+      style={{ '--s-game-accent': daily.hero[0].accent }}
     >
       <a className="s-skip" href="#main" onClick={(e) => { e.preventDefault(); scrollToId('main'); }}>Skip to content</a>
       <SiteNav
@@ -145,10 +150,15 @@ export default function LandingPage({ onEnter, onNavigate }) {
       />
 
       <main id="main">
-        <Hero calm={calm} onStart={() => start()} onGame={onGame} arcade={arcade} />
+        {/* The hero waits for today's list (instant from the day's cache, one
+            edge-cached request otherwise) so it never opens on one set of
+            games and swaps to another. */}
+        {daily.ready
+          ? <Hero games={daily.hero} calm={calm} onStart={() => start()} onGame={onGame} arcade={arcade} />
+          : <section className="s-hero is-waiting" aria-busy="true" aria-label="Loading today's games" />}
         <AnswerAnatomy calm={calm} />
         <ShieldDemo calm={calm} />
-        <LibraryWall calm={calm} onPick={pick} />
+        <LibraryWall calm={calm} onPick={pick} games={daily.wall} today={daily.source === 'steam'} />
         <CapabilityMenu calm={calm} />
         <WatchtowerDemo calm={calm} />
         <Closing calm={calm} onStart={() => start()} arcade={arcade} />

@@ -28,6 +28,7 @@ const SUITES = [
   ['codex',         'codex.test.mjs'],         // chat UI: palette, game context, accent, shelf
   ['site',          'site.test.mjs'],          // landing + info: konami, achievements, showcase, honest copy
   ['steam-art',     'steam-art.test.mjs'],     // backdrop art lookup: strict match, fixed host
+  ['trending',      'trending.test.mjs'],      // landing's daily games: Steam chart ranking, client cache
   ['price',         'price.test.mjs'],         // /price game+version detection, web/Discord parity
   ['price-proxy',   'price-proxy.test.mjs'],   // /api/price: narrow CheapShark proxy for filtered networks
   ['share',         'share.test.mjs'],         // spoiler-safe share links: round trip, hostile input, deflate bomb
