@@ -275,7 +275,10 @@ ignored unless `LEMON_ALLOW_TEST=1`, because anyone can make one for free.
 - Higher plans replace lower ones and stop the old subscription renewing;
   a failure to stop it is logged loudly for a human, never undoes the grant.
 - Run `migrations/20261005_billing_final.sql`, `20261006_billing_providers.sql`,
-  then re-run `schema-v3.sql` and run `20261028_base_tier.sql` (Base).
+  then `20261028_base_tier.sql` (Base; patches the quota function in place).
+- Going live: paste the Razorpay, PayPal and Render keys into `.env`, then
+  `node scripts/billing-go-live.js` does the rest (`--diagnose` shows the
+  Render service's state and logs).
 - Razorpay setup is scripted too: `node scripts/razorpay-setup.js` creates all
   six rupee plans. `node scripts/billing-check.js` checks either provider.
 

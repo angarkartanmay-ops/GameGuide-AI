@@ -378,12 +378,29 @@ await db.exec(readFileSync(`${ROOT}/migrations/20261006_billing_providers.sql`, 
 }
 
 // -- 2026-10-28: the Base plan ---------------------------------------------
-// Production gets it by re-running schema-v3.sql, then the migration: both
-// must be safe over everything above, and must not reopen what was closed.
-await db.exec(readFileSync(`${ROOT}/schema-v3.sql`, 'utf8'));
-await db.exec(readFileSync(`${ROOT}/migrations/20261028_base_tier.sql`, 'utf8'));
+// Production still runs the quota function from BEFORE this change. Put that
+// version back (only its one changed condition differs), then run the
+// migration exactly as it will be pasted into the SQL editor.
+{
+  const fn = `'public.gg_discord_quota_check(bigint,bigint,text,boolean)'::regprocedure`;
+  const now = (await db.query(`select pg_get_functiondef(${fn}) d`)).rows[0].d;
+  const old = now.replace(/IF v_user_tier NOT IN \('free', 'server'\)\s+AND EXISTS \(SELECT 1 FROM public\.discord_quota_tiers t WHERE t\.tier = v_user_tier\) THEN/,
+    `IF v_user_tier IN ('pro', 'lifetime') THEN`);
+  check('the pre-Base function is reconstructed for the test', old !== now && old.includes(`IF v_user_tier IN ('pro', 'lifetime') THEN`));
+  await db.exec(old);
+  await db.exec(`insert into discord_entitlements (user_id, tier, source, status, current_period_end) values (666666666666666660, 'base', 'paypal', 'active', now() + interval '1 day')`);
+  check('before the migration, Base is not honoured', (await q('666666666666666660', { dry: true })).tier === 'free');
+  await db.exec(readFileSync(`${ROOT}/migrations/20261028_base_tier.sql`, 'utf8'));
+  const patched = (await db.query(`select pg_get_functiondef(${fn}) d`)).rows[0].d;
+  check('the migration patches only that condition', patched.includes(`NOT IN ('free', 'server')`) && patched.length - old.length < 120 && patched.includes('SECURITY DEFINER'));
+  check('after the migration, Base is honoured', (await q('666666666666666660', { dry: true })).tier === 'base');
+  const r = await db.query(`select has_function_privilege('anon', ${fn}, 'execute') a, has_function_privilege('service_role', ${fn}, 'execute') s`);
+  check('the patched function keeps its grants (service role only)', r.rows[0].a === false && r.rows[0].s === true);
+}
 await db.exec(readFileSync(`${ROOT}/migrations/20261028_base_tier.sql`, 'utf8'));   // idempotent
-check('schema-v3 re-run + base migration are safe to apply', true);
+await db.exec(readFileSync(`${ROOT}/schema-v3.sql`, 'utf8'));                         // and a later full re-run is still safe
+await db.exec(readFileSync(`${ROOT}/migrations/20261028_base_tier.sql`, 'utf8'));
+check('base migration and schema-v3 re-run are safe in any order', true);
 {
   const tiers = Object.fromEntries((await db.query('select * from discord_quota_tiers')).rows.map(r => [r.tier, r]));
   check('base sits between free and pro', tiers.base?.msgs_day === 60 && tiers.free.msgs_day < 60 && tiers.pro.msgs_day > 60
