@@ -377,5 +377,37 @@ await db.exec(readFileSync(`${ROOT}/migrations/20261006_billing_providers.sql`, 
   check('an ending plan past its date is Free', (await q(E2, { dry: true })).tier === 'free');
 }
 
+// -- 2026-10-28: the Base plan ---------------------------------------------
+// Production gets it by re-running schema-v3.sql, then the migration: both
+// must be safe over everything above, and must not reopen what was closed.
+await db.exec(readFileSync(`${ROOT}/schema-v3.sql`, 'utf8'));
+await db.exec(readFileSync(`${ROOT}/migrations/20261028_base_tier.sql`, 'utf8'));
+await db.exec(readFileSync(`${ROOT}/migrations/20261028_base_tier.sql`, 'utf8'));   // idempotent
+check('schema-v3 re-run + base migration are safe to apply', true);
+{
+  const tiers = Object.fromEntries((await db.query('select * from discord_quota_tiers')).rows.map(r => [r.tier, r]));
+  check('base sits between free and pro', tiers.base?.msgs_day === 60 && tiers.free.msgs_day < 60 && tiers.pro.msgs_day > 60
+    && tiers.base.vision_day === 10 && tiers.base.imagegen_day === 5 && tiers.base.context_turns === 12);
+  check('base is never queued but has no paid-model soft cap', tiers.base.priority === true && tiers.base.soft_cap_day === null);
+  check('re-running schema-v3 kept the final pro limits', tiers.pro.msgs_day === 200 && tiers.pro.soft_cap_day === 120 && tiers.server.guild_pool_day === 800);
+  const pol = (await db.query(`select count(*)::int c from pg_policies where tablename = 'discord_usage_stats'`)).rows[0].c;
+  check('re-running schema-v3 did not reopen per-user stats', pol === 0);
+  const r = await db.query(`select has_table_privilege('anon', 'public.discord_entitlements', 'select') s, has_table_privilege('anon', 'public.discord_quota_tiers', 'update') u`);
+  check('re-running schema-v3 did not grant anon anything', r.rows[0].s === false && r.rows[0].u === false);
+
+  const B = '666666666666666661', BG = '666666666666666662', GOLD = '666666666666666663', PG = '777777777777777771';
+  await db.exec(`insert into discord_entitlements (user_id, tier, source, status, current_period_end) values
+    (${B}, 'base', 'paypal', 'active', now() + interval '20 days'),
+    (${BG}, 'base', 'razorpay', 'active', now() + interval '20 days'),
+    (${GOLD}, 'gold', 'manual', 'active', null)`);
+  await db.exec(`insert into discord_premium_servers (guild_id) values (${PG}) on conflict do nothing`);
+  const d = await q(B, { dry: true });
+  check('a Base subscriber resolves to base with 60 a day', d.tier === 'base' && d.tier_label === 'Base' && d.messages.limit === 60 && d.limits.priority === true && d.limits.soft_capped === false);
+  check('Base in a premium server keeps their own plan (no pool)', (await q(BG, { guild: PG, dry: true })).tier === 'base');
+  check('a tier with no row in the table is free, not trusted', (await q(GOLD, { dry: true })).tier === 'free');
+  await seed(B, 60);
+  check('Base is refused at 61', (await q(B)).allowed === false);
+}
+
 console.log(`\nSQL: ${pass} passed${fail ? `, ${fail} FAILED` : ''}`);
 process.exit(fail ? 1 : 0);

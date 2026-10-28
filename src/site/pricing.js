@@ -18,6 +18,18 @@ export const PLANS = [
     ],
   },
   {
+    id: 'base',
+    name: 'Base',
+    tagline: 'For playing most days without hitting the wall.',
+    features: [
+      '60 messages a day',
+      '10 screenshot reads and 5 images a day',
+      'Never queued when the free pool is busy',
+      'Remembers 12 turns of the conversation',
+    ],
+    offers: { month: { usd: 299, inr: 199 }, year: { usd: 2999, inr: 1999 } },
+  },
+  {
     id: 'pro',
     name: 'Pro',
     tagline: 'For playing every day, and getting it right.',
@@ -123,6 +135,7 @@ export async function signIn(email, password) {
 export const CHECKOUT_ERRORS = {
   'link-expired': 'This upgrade link has expired. Run /upgrade in Discord for a fresh one.',
   'needs-server': 'Open /upgrade from inside the server you want to upgrade, so the link knows which server it is.',
+  'already-base': 'You already have Base. Pick Pro to move up; Base then stops renewing on its own.',
   'already-pro': 'You already have Pro. To go yearly, cancel the monthly plan from your receipt email and pick yearly once it ends. Or go Lifetime now.',
   'already-lifetime': 'You already have Pro Lifetime, so there is nothing more to buy. Thank you!',
   'server-already-premium': 'This server already has the Server plan.',

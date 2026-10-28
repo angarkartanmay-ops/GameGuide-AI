@@ -31,13 +31,15 @@ const { safeEqual } = require('./httpSecurity');
 /**
  * Settings from the environment, or null when Lemon Squeezy is not set up.
  *   LEMONSQUEEZY_WEBHOOK_SECRET        the signing secret you type when adding the webhook
- *   LEMON_VARIANT_PRO / _SERVER / _LIFETIME   variant ids (and _PRO_YEARLY / _SERVER_YEARLY)
+ *   LEMON_VARIANT_BASE / _PRO / _SERVER / _LIFETIME   variant ids (and _BASE_YEARLY / _PRO_YEARLY / _SERVER_YEARLY)
  *   LEMONSQUEEZY_API_KEY + LEMONSQUEEZY_STORE_ID  to create checkouts server-side (preferred)
  *   LEMON_CHECKOUT_PRO / _SERVER / _LIFETIME  hosted buy links (fallback without an API key)
  */
 function lemonConfig(env = process.env) {
   const webhookSecret = (env.LEMONSQUEEZY_WEBHOOK_SECRET || '').trim();
   const variants = {
+    base: (env.LEMON_VARIANT_BASE || '').trim(),
+    base_yearly: (env.LEMON_VARIANT_BASE_YEARLY || '').trim(),
     pro: (env.LEMON_VARIANT_PRO || '').trim(),
     pro_yearly: (env.LEMON_VARIANT_PRO_YEARLY || '').trim(),
     server: (env.LEMON_VARIANT_SERVER || '').trim(),
@@ -48,6 +50,8 @@ function lemonConfig(env = process.env) {
   return {
     webhookSecret, variants,
     checkout: {
+      base: (env.LEMON_CHECKOUT_BASE || '').trim(),
+      base_yearly: (env.LEMON_CHECKOUT_BASE_YEARLY || '').trim(),
       pro: (env.LEMON_CHECKOUT_PRO || '').trim(),
       pro_yearly: (env.LEMON_CHECKOUT_PRO_YEARLY || '').trim(),
       server: (env.LEMON_CHECKOUT_SERVER || '').trim(),
@@ -94,7 +98,7 @@ function lemonOffers(config) {
   if (!config) return [];
   const can = (k) => !!config.variants[k] && (!!(config.apiKey && config.storeId) || !!config.checkout[k]);
   const out = [];
-  for (const plan of ['pro', 'server']) {
+  for (const plan of ['base', 'pro', 'server']) {
     for (const interval of ['month', 'year']) if (can(keyFor(plan, interval))) out.push({ plan, interval });
   }
   if (can('lifetime')) out.push({ plan: 'lifetime', interval: 'once' });
@@ -165,8 +169,8 @@ async function createLemonCheckout({ plan, interval = null, userId, guildId = nu
 
 // ─── Lemon Squeezy's dialect → billing-core ────────────────────────────────
 
-function createLemonHandlers({ repo, notify = async () => {}, config, log = console }) {
-  const core = createBillingCore({ repo, notify, log });
+function createLemonHandlers({ repo, notify = async () => {}, supersede, config, log = console }) {
+  const core = createBillingCore({ repo, notify, supersede, log });
   // pro and pro_yearly are both Pro; the period itself comes from the subscription.
   const planFor = (variantId) => {
     const key = Object.entries(config.variants).find(([, v]) => v && String(v) === String(variantId))?.[0];
@@ -190,7 +194,7 @@ function createLemonHandlers({ repo, notify = async () => {}, config, log = cons
 
   async function subscriptionEvent(data, attrs, custom) {
     const plan = planFor(attrs.variant_id);
-    if (plan !== 'pro' && plan !== 'server') return 'ignored';
+    if (plan !== 'base' && plan !== 'pro' && plan !== 'server') return 'ignored';
     const ref = `ls:sub:${data.id}`;
     const now = Date.now();
 
@@ -266,16 +270,37 @@ function createLemonHandlers({ repo, notify = async () => {}, config, log = cons
   return { handleEvent };
 }
 
+/**
+ * Stop a Lemon Squeezy subscription renewing (a higher plan replaced it).
+ * Lemon Squeezy's cancel keeps the subscription on until its paid period ends.
+ */
+async function cancelLemonSubscription(id, { config, fetchImpl = globalThis.fetch, timeoutMs = 8000 } = {}) {
+  if (!config?.apiKey) throw new Error('lemon squeezy API key not set');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetchImpl(`https://api.lemonsqueezy.com/v1/subscriptions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      signal: ctrl.signal,
+      headers: { Accept: 'application/vnd.api+json', Authorization: `Bearer ${config.apiKey}` },
+    });
+    if (!res.ok) throw new Error(`lemon squeezy ${res.status}`);
+    return 'cancelled';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ─── Mounting ──────────────────────────────────────────────────────────────
 
 /** Mount POST /lemonsqueezy-webhook. Needs `req.rawBody` from express.json's verify hook. */
-function mountLemonWebhook(app, { supabase, client, guard = (_req, _res, next) => next(), config = lemonConfig() }) {
+function mountLemonWebhook(app, { supabase, client, guard = (_req, _res, next) => next(), config = lemonConfig(), supersede }) {
   if (!config) {
     console.log('[lemon] billing disabled (need LEMONSQUEEZY_WEBHOOK_SECRET and at least one LEMON_VARIANT_*)');
     return false;
   }
   const repo = supabaseRepo(supabase);
-  const handlers = createLemonHandlers({ repo, notify: dmNotifier(client), config });
+  const handlers = createLemonHandlers({ repo, notify: dmNotifier(client), supersede, config });
 
   app.post('/lemonsqueezy-webhook', guard, async (req, res) => {
     if (!verifySignature(req.rawBody, req.headers['x-signature'], config.webhookSecret)) {
@@ -301,5 +326,5 @@ function mountLemonWebhook(app, { supabase, client, guard = (_req, _res, next) =
 
 module.exports = {
   lemonConfig, verifySignature, buildCheckoutUrl, createLemonHandlers, mountLemonWebhook,
-  lemonOffers, createLemonCheckout,
+  lemonOffers, createLemonCheckout, cancelLemonSubscription,
 };

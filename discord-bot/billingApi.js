@@ -15,9 +15,10 @@
 //  verified token, never from the request body; the plan and price come from
 //  plans.js and the provider's own product ids.
 //
-//  Rails: "card" is the worldwide option (Stripe, or Lemon Squeezy — the
-//  latter is merchant of record and handles sales tax); "upi" is Razorpay,
-//  in rupees, for buyers in India.
+//  Rails: "upi" is Razorpay, in rupees, for buyers in India; "paypal" is
+//  PayPal, in dollars, worldwide (PayPal balance or a card through PayPal);
+//  "card" is Stripe or Lemon Squeezy, for when one of those is set up.
+//  Base, Pro and Server are sold on every rail that has their plan ids.
 // ═══════════════════════════════════════════════════════════════════════════
 
 'use strict';
@@ -28,6 +29,7 @@ const { safeEqual } = require('./httpSecurity');
 const { stripeOffers, createStripeCheckout } = require('./billing-stripe');
 const { lemonConfig, lemonOffers, createLemonCheckout } = require('./billing-lemon');
 const { razorpayConfig, razorpayOffers, createCheckout: createRazorpayCheckout } = require('./billing-razorpay');
+const { paypalConfig, paypalOffers, createPaypalCheckout } = require('./billing-paypal');
 const { loadMembership } = require('./membership');
 
 const COOLDOWN_MS = 8_000;
@@ -43,7 +45,12 @@ function availableRails(env = process.env) {
   else if (stripe.length) card = { provider: 'stripe', offers: stripe };
   else if (lemon.length) card = { provider: 'lemon', offers: lemon };
   const rzp = razorpayOffers(razorpayConfig(env));
-  return { card, upi: rzp.length ? { provider: 'razorpay', offers: rzp } : null };
+  const pp = paypalOffers(paypalConfig(env));
+  return {
+    card,
+    upi: rzp.length ? { provider: 'razorpay', offers: rzp } : null,
+    paypal: pp.length ? { provider: 'paypal', offers: pp } : null,
+  };
 }
 
 const sells = (rail, plan, interval) => !!rail && rail.offers.some(o => o.plan === plan && o.interval === interval);
@@ -51,7 +58,7 @@ const sells = (rail, plan, interval) => !!rail && rail.offers.some(o => o.plan =
 /**
  * The handlers, with every outside dependency injectable for tests.
  *   checkQuota(supabase, {userId, guildId, kind, dryRun}) → quota decision
- *   creators.{stripe,lemon,razorpay}(args) → { url }
+ *   creators.{stripe,lemon,razorpay,paypal}(args) → { url }
  */
 function createBillingApi({
   supabase, env = process.env, checkQuota, creators = {}, now = () => Date.now(), log = console,
@@ -64,6 +71,7 @@ function createBillingApi({
     stripe: creators.stripe || ((a) => createStripeCheckout(a, { env })),
     lemon: creators.lemon || ((a) => createLemonCheckout(a, { config: lemonConfig(env) })),
     razorpay: creators.razorpay || ((a) => createRazorpayCheckout(a, { config: razorpayConfig(env) })),
+    paypal: creators.paypal || ((a) => createPaypalCheckout(a, { config: paypalConfig(env) })),
   };
 
   async function account(buyer) {
@@ -93,6 +101,7 @@ function createBillingApi({
       rails: {
         card: rails.card && { provider: rails.card.provider, offers: rails.card.offers },
         upi: rails.upi && { provider: rails.upi.provider, offers: rails.upi.offers },
+        paypal: rails.paypal && { provider: rails.paypal.provider, offers: rails.paypal.offers },
       },
       buyer: buyer ? { name: buyer.name, inServer: !!buyer.guildId, expiresAt: buyer.exp } : null,
       linkExpired: !!token && !buyer,
@@ -107,7 +116,7 @@ function createBillingApi({
 
     const plan = String(b.plan || '');
     const interval = plan === 'lifetime' ? 'once' : String(b.interval || 'month');
-    const railName = b.rail === 'upi' ? 'upi' : 'card';
+    const railName = b.rail === 'upi' || b.rail === 'paypal' ? b.rail : 'card';
     if (!offer(plan, interval)) return res.status(400).json({ error: 'unknown-plan' });
     const rail = availableRails(env)[railName];
     if (!sells(rail, plan, interval)) return res.status(400).json({ error: 'unavailable' });
@@ -117,7 +126,10 @@ function createBillingApi({
     try {
       const you = await account(buyer);
       if (you?.tier === 'lifetime' && plan !== 'server') return res.status(409).json({ error: 'already-lifetime' });
-      if (you?.tier === 'pro' && plan === 'pro' && you.status !== 'ending') return res.status(409).json({ error: 'already-pro' });
+      // Base → Pro is an upgrade (the Base subscription is stopped when Pro is
+      // granted); Pro → Base waits until Pro is cancelled.
+      if (you?.tier === 'pro' && (plan === 'pro' || plan === 'base') && you.status !== 'ending') return res.status(409).json({ error: 'already-pro' });
+      if (you?.tier === 'base' && plan === 'base' && you.status !== 'ending') return res.status(409).json({ error: 'already-base' });
       if (you?.tier === 'server' && plan === 'server') return res.status(409).json({ error: 'server-already-premium' });
     } catch { /* if the lookup fails, the billing core still refuses to displace a plan */ }
 

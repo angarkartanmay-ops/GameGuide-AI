@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS public.discord_quota_tiers (
 INSERT INTO public.discord_quota_tiers
   (tier, label, msgs_day, burst_min, vision_day, imagegen_day, guild_pool_day, history_len, context_turns, priority, soft_cap_day) VALUES
   ('free',     'Free',            15,  5,  3,  1, NULL, 10,  6, FALSE, NULL),
+  ('base',     'Base',            60, 10, 10,  5, NULL, 25, 12, TRUE,  NULL),
   ('pro',      'Pro',            200, 20, 40, 15, NULL, 50, 24, TRUE,   120),
   ('lifetime', 'Pro Lifetime',   200, 20, 40, 15, NULL, 50, 24, TRUE,   120),
   ('server',   'Premium Server',  60, 10, 10,  5,  800, 25, 12, TRUE,  NULL)
@@ -303,9 +304,12 @@ BEGIN
   END IF;
   v_guild_prem := COALESCE(v_guild_prem, FALSE);
 
-  -- An individually-paying user keeps their own (larger) allowance and does
-  -- NOT draw from the guild pool - they bought that separately.
-  IF v_user_tier IN ('pro', 'lifetime') THEN
+  -- An individually-paying user keeps their own allowance and does NOT draw
+  -- from the guild pool - they bought that separately. Any personal tier with
+  -- a row in discord_quota_tiers counts (base, pro, lifetime, and whatever is
+  -- added later), so a new plan is an INSERT, not a new function.
+  IF v_user_tier NOT IN ('free', 'server')
+     AND EXISTS (SELECT 1 FROM public.discord_quota_tiers t WHERE t.tier = v_user_tier) THEN
     v_tier := v_user_tier;
   ELSIF v_guild_prem THEN
     v_tier := 'server';

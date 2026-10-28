@@ -48,6 +48,8 @@ const { syncEnvOverrides, grantBonusCredits } = require('./entitlements');
 const { mountStripeWebhook, stripeConfigured } = require('./billing-stripe');
 const { mountRazorpayWebhook, razorpayConfig } = require('./billing-razorpay');
 const { mountLemonWebhook } = require('./billing-lemon');
+const { mountPaypalWebhook, paypalConfig } = require('./billing-paypal');
+const { createSuperseder } = require('./billing-cancel');
 const { globalProvider, globalCheckoutUrl } = require('./checkout');
 const { priceLabel } = require('./plans');
 const { upgradeUrl } = require('./upgradeLink');
@@ -122,6 +124,7 @@ const VOTE_BONUS_CAP = 20;
 
 // Prices come from plans.js — the table the Stripe webhook checks purchases
 // against, so a button can never quote a price the webhook would reject.
+const BASE_PRICE = priceLabel('base');          // "$2.99/mo"
 const PRO_PRICE = priceLabel('pro');            // "$4.99/mo"
 const SERVER_PRICE = priceLabel('server');      // "$14.99/mo"
 const LIFETIME_PRICE = priceLabel('lifetime');  // "$39.99 once"
@@ -610,7 +613,7 @@ function upgradeRow({ userId, guildId = null, name = '', paid = false }) {
 /** How to pay, in one line, from what is configured. */
 function payMethodsLine() {
   const rails = availableRails();
-  const ways = [rails.card && 'card (worldwide)', rails.upi && 'UPI or Indian cards'].filter(Boolean);
+  const ways = [rails.paypal && 'PayPal (worldwide)', rails.card && 'card (worldwide)', rails.upi && 'UPI or Indian cards'].filter(Boolean);
   return ways.length ? `Pay by ${ways.join(' or ')}.` : '';
 }
 
@@ -618,8 +621,9 @@ function payMethodsLine() {
 function sendBlocked(replyTarget, decision, userId) {
   const content = quota.blockedMessage(decision);
   const components = [];
-  if (decision.tier === 'free') {
-    const row = upgradeRow({ userId });
+  // Base is shown the way up to Pro; it goes to the plans page, not a checkout.
+  if (decision.tier === 'free' || decision.tier === 'base') {
+    const row = upgradeRow({ userId, paid: decision.tier === 'base' });
     if (row) components.push(row);
   }
   const payload = { content, components, allowedMentions: { parse: [] } };
@@ -937,7 +941,7 @@ client.once('clientReady', async () => {
   console.log(`🎮 GameGuide-AI Bot online as ${client.user.tag}`);
   console.log(`   Proxy: ${CHAT_PROXY_URL}`);
   console.log(`   Service role key: ${supabaseHasServiceRole ? 'configured' : 'NOT configured — history off, and daily quotas and paid tiers are NOT enforced (the quota function only runs for the service role)'}`);
-  console.log(`   Billing: stripe ${stripeConfigured ? 'on' : 'off'} · razorpay ${razorpayConfig() ? 'on' : 'off'} · global checkout ${globalProvider() || 'none'}`);
+  console.log(`   Billing: stripe ${stripeConfigured ? 'on' : 'off'} · razorpay ${razorpayConfig() ? 'on' : 'off'} · paypal ${paypalConfig()?.mode || 'off'} · global checkout ${globalProvider() || 'none'}`);
 
   // Mirror the env overrides into the database. Tier is resolved inside the
   // quota function, which cannot read process.env — without this sync an
@@ -1442,13 +1446,14 @@ client.on('interactionCreate', async (interaction) => {
             .setTitle(`${plan.title} — you're on a paid plan`)
             .setDescription(
               `${plan.lines.join('\n')}\n\n` +
-              'Open the plans page to switch to yearly, go Lifetime, or upgrade this server.\n' +
+              'Open the plans page to move up to Pro, switch to yearly, go Lifetime, or upgrade this server.\n' +
               '-# To cancel or update your card, use the link in your receipt email — or write to gameguideai.support@gmail.com.',
             );
         } else {
           embed
             .setTitle('⭐ Upgrade GameGuide')
             .setDescription([
+              `**Base** — 60 messages a day, 10 screenshots, never queued. **${BASE_PRICE}** or **${priceLabel('base', { interval: 'year' })}**.`,
               `**Pro** — 200 messages a day, 40 screenshots and the most accurate answers. **${PRO_PRICE}**, or **${priceLabel('pro', { interval: 'year' })}** (two months free), or **${LIFETIME_PRICE}**.`,
               `**Server** — 60 a day for every member and ${watchtower.WATCH_LIMITS.server} Watchtower games. **${SERVER_PRICE}** or **${priceLabel('server', { interval: 'year' })}**.`,
               ...[
@@ -1629,9 +1634,13 @@ if (TOPGG_WEBHOOK_AUTH) {
   });
 }
 
-mountStripeWebhook(app, { supabase, client, guard: webhookGuard });
-mountRazorpayWebhook(app, { supabase, client, guard: webhookGuard });
-mountLemonWebhook(app, { supabase, client, guard: webhookGuard });
+// One superseder for every rail: Base bought on PayPal and Pro bought with UPI
+// must still stop the Base subscription renewing.
+const supersede = createSuperseder();
+mountStripeWebhook(app, { supabase, client, guard: webhookGuard, supersede });
+mountRazorpayWebhook(app, { supabase, client, guard: webhookGuard, supersede });
+mountLemonWebhook(app, { supabase, client, guard: webhookGuard, supersede });
+mountPaypalWebhook(app, { supabase, client, guard: webhookGuard, supersede });
 mountBillingApi(app, { supabase, checkQuota: quota.checkQuota, guard: rateLimiter({ windowMs: 60_000, max: 40 }) });
 
 const httpServer = app.listen(HTTP_PORT, '0.0.0.0', () => {

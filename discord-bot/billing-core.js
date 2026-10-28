@@ -6,7 +6,7 @@
 //  signatures and works out WHO paid for WHICH plan; everything after that
 //  is one set of rules, here, so the three can never disagree:
 //
-//    • Pro and Lifetime are personal; a server plan attaches to one server.
+//    • Base, Pro and Lifetime are personal; a server plan attaches to one server.
 //    • A subscription always has an end date — null would mean "never
 //      expires" to gg_discord_quota_check, so a missing date becomes a short
 //      provisional window, never eternity.
@@ -18,12 +18,16 @@
 //      edit, so without this a stranger could buy a cheap plan "for" someone
 //      else's id (or server) and displace what that account already pays for.
 //      The stranger's payment is logged and the buyer told; nothing changes.
+//    • The one exception is a HIGHER personal plan (Base → Pro, anything →
+//      Lifetime): it replaces the lower one, and the replaced subscription is
+//      told to stop renewing (`supersede`) — never refunded or cut short, so
+//      the worst a stranger can do is pay for someone's Pro.
 //    • Every provider event is applied once (claimEvent), and a failure
 //      answers 5xx and un-claims the event so the provider's retry lands. A
 //      claim that never completed (the process died mid-handler) goes stale
 //      after STALE_CLAIM_MS and is taken over by the provider's next retry.
 //
-//  Provider references are prefixed (`rzp:`, `ls:`) so ids that look alike
+//  Provider references are prefixed (`rzp:`, `ls:`, `pp:`) so ids that look alike
 //  across providers (`sub_…` exists at both Stripe and Razorpay) can never
 //  collide in discord_entitlements.provider_ref.
 //
@@ -31,6 +35,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 'use strict';
+
+const { PERSONAL_RANK } = require('./plans');
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const isSnowflake = (v) => typeof v === 'string' && SNOWFLAKE.test(v);
@@ -129,14 +135,18 @@ function supabaseRepo(supabase) {
 // ─── The rules ─────────────────────────────────────────────────────────────
 
 /**
- * @param repo    supabaseRepo(...) or a fake
- * @param notify  (userId, 'pro' | 'server' | 'lifetime') => Promise, best effort
+ * @param repo       supabaseRepo(...) or a fake
+ * @param notify     (userId, 'base' | 'pro' | 'server' | 'lifetime' | …) => Promise, best effort
+ * @param supersede  (providerRef) => Promise — stop renewing a subscription a
+ *                   higher plan just replaced (billing-cancel.js). A failure is
+ *                   logged for a human and never undoes the grant.
  */
-function createBillingCore({ repo, notify = async () => {}, log = console }) {
+function createBillingCore({ repo, notify = async () => {}, supersede = async () => {}, log = console }) {
+  const rank = (tier) => PERSONAL_RANK[tier] ?? 0;
 
   /**
    * A confirmed purchase (or renewal — it is idempotent).
-   * @param plan       'pro' | 'server' | 'lifetime'
+   * @param plan       'base' | 'pro' | 'server' | 'lifetime'
    * @param periodEnd  ISO end of the paid period (already including any grace);
    *                   required for pro/server, ignored for lifetime
    * @returns the plan actually granted, or 'invalid'
@@ -172,20 +182,33 @@ function createBillingCore({ repo, notify = async () => {}, log = console }) {
     }
 
     const existing = await repo.getUser(userId);
-    // A different, still-valid plan on this account stays put — see the header.
-    // (Lifetime may replace a subscription: it is strictly more, and the
-    // subscription is simply left to lapse.)
+    // A different, still-valid plan on this account stays put — see the header —
+    // unless this purchase is a higher plan (Base → Pro, anything → Lifetime).
     // (A past_due plan is failing to renew; a fresh purchase is meant to replace it.)
     const holds = existing && existing.status === 'active'
       && (!existing.current_period_end || isFuture(existing.current_period_end));
-    if (holds && existing.provider_ref !== providerRef && !(plan === 'lifetime' && existing.tier !== 'lifetime')) {
+    const other = holds && existing.provider_ref !== providerRef;
+    const upgrade = other && rank(plan) > rank(existing.tier);
+    if (other && !upgrade) {
       log.error(`[billing] user=${userId} already has an active ${existing.tier} (${existing.provider_ref || 'manual'}); ${source} ${plan} ${providerRef} changed nothing — refund or re-assign it`);
       await notify(userId, 'covered');
       return 'already-covered';
     }
     const known = existing && existing.provider_ref === providerRef ? existing : null;
     await repo.putUser({ userId, tier: plan, source, providerRef, status: 'active', periodEnd: end });
-    log.log(`[billing] ${plan} active → user=${userId} ref=${providerRef} (${source})`);
+    log.log(`[billing] ${plan} active → user=${userId} ref=${providerRef} (${source})${upgrade ? ` — replaces ${existing.tier} ${existing.provider_ref || 'manual'}` : ''}`);
+    // Whatever subscription this row held before — a lower plan, or one stuck
+    // in past_due that is still retrying the card — must stop charging. Its own
+    // "cancelled" webhook later finds no row under its reference: no change.
+    const replaced = existing && existing.provider_ref && existing.provider_ref !== providerRef
+      && existing.tier !== 'free' && existing.tier !== 'lifetime';
+    if (replaced) {
+      try {
+        await supersede(existing.provider_ref);
+      } catch (e) {
+        log.error(`[billing] user=${userId} moved to ${plan} but ${existing.provider_ref} could not be stopped (${e.message}) — cancel it by hand so it does not renew`);
+      }
+    }
     // Renewals arrive as the same grant; only a new (or resumed) plan earns a thank-you.
     if (!known || known.status !== 'active' || known.tier !== plan) await notify(userId, plan);
     return plan;
@@ -224,7 +247,10 @@ function createBillingCore({ repo, notify = async () => {}, log = console }) {
     }
     const end = until || row.current_period_end || provisionalEnd(now);
     await repo.putUser({
-      userId: row.user_id, tier: 'pro', source: row.source || 'stripe', providerRef,
+      // A renewal keeps the plan it renews (Base stays Base). A row an earlier
+      // 'ended' already turned to free comes back as Pro, as it always has:
+      // that row no longer says which plan it was.
+      userId: row.user_id, tier: row.tier === 'free' ? 'pro' : row.tier, source: row.source || 'stripe', providerRef,
       // 'ending': cancelled, still paid up — /quota says "until <date>", not "renews".
       status: state === 'past_due' ? 'past_due' : state === 'ended' ? 'ending' : 'active', periodEnd: end,
     });
@@ -272,6 +298,7 @@ async function applyOnce({ repo, eventId, type, handle, log = console }) {
 /** Thank-you DM, best effort. */
 const NOTICE = {
   server: '🌟 **Server plan is live.** Every member of your server now gets 60 messages/day, 10 screenshots and priority routing. Thank you — this is what keeps the bot running.',
+  base: '✅ **You\'re on Base.** 60 messages/day, 10 screenshots and never queued when the free pool is busy, effective immediately. Check anytime with `/quota`. Thank you for supporting a solo dev.',
   pro: '⭐ **You\'re on Pro.** 200 messages/day, 40 screenshots, 20/min and priority routing, effective immediately. Check anytime with `/quota`. Thank you for supporting a solo dev.',
   covered: `💳 **Payment received — but you already have an active plan,** so nothing changed. If this was a mistake, email ${process.env.SUPPORT_EMAIL || 'gameguideai.support@gmail.com'} and it will be refunded.`,
   'covered-server': `💳 **Payment received — but that server already has an active plan,** so nothing changed. If this was a mistake, email ${process.env.SUPPORT_EMAIL || 'gameguideai.support@gmail.com'} and it will be refunded.`,

@@ -205,7 +205,7 @@ const TERMS = [
           <li>usage counts, to apply daily limits and show <strong>/stats</strong>;</li>
           <li>your Spoiler Shield setting and the game progress you tell it, so answers stay spoiler-safe;</li>
           <li>for servers using <strong>/watch</strong>: the server and channel IDs and the games to post patch notes or deals for — no user IDs. These are deleted with <strong>/watch remove</strong>, when the channel is deleted, or when the bot is removed from the server.</li>
-          <li>if you buy Pro, Pro Lifetime or a server plan: which plan you hold, its status and renewal date, and the Stripe reference for it. Payment is handled entirely by our payment providers (Stripe, Razorpay or Lemon Squeezy, depending on how you pay) — we never see or store card or UPI details.</li>
+          <li>if you buy Base, Pro, Pro Lifetime or a server plan: which plan you hold, its status and renewal date, and the payment provider's reference for it. Payment is handled entirely by our payment providers (Razorpay or PayPal, depending on how you pay; Stripe or Lemon Squeezy if offered at checkout) — we never see or store card or UPI details.</li>
         </ul>
         <p>
           The bot only reads messages that <strong>@mention it</strong>, direct messages sent to it, and its slash
@@ -231,9 +231,9 @@ const TERMS = [
     id: 't-payments', title: 'Paid plans',
     body: (
       <p>
-        Pro, Server and Pro Lifetime are digital plans for the GameGuide Discord bot, bought on the{' '}
+        Base, Pro, Server and Pro Lifetime are digital plans for the GameGuide Discord bot, bought on the{' '}
         <a href="#upgrade" className="s-a" onClick={goto('upgrade')}>plans page</a> and paid through our payment
-        providers (Razorpay, Lemon Squeezy or Stripe), which process the payment under their own terms; we never see
+        providers (Razorpay or PayPal; Stripe or Lemon Squeezy if offered at checkout), which process the payment under their own terms; we never see
         card or UPI details. Subscriptions renew until cancelled and can be cancelled at any time. Refunds, cancellation
         and delivery are covered by the{' '}
         <a href="#refunds" className="s-a" onClick={goto('refunds')}>refund &amp; cancellation policy</a> and the{' '}
@@ -454,7 +454,7 @@ function Contact() {
 
 // ─── Refunds & cancellation ────────────────────────────────────────────────
 
-const PRICES_LINE = 'Pro ₹399 / $4.99 a month or ₹3,999 / $49.99 a year · Server ₹1,199 / $14.99 a month or ₹11,999 / $149.99 a year · Pro Lifetime ₹3,299 / $39.99 once.';
+const PRICES_LINE = 'Base ₹199 / $2.99 a month or ₹1,999 / $29.99 a year · Pro ₹399 / $4.99 a month or ₹3,999 / $49.99 a year · Server ₹1,199 / $14.99 a month or ₹11,999 / $149.99 a year · Pro Lifetime ₹3,299 / $39.99 once.';
 
 function Refunds() {
   return (
@@ -462,8 +462,8 @@ function Refunds() {
       <section>
         <h2 className="s-h2">What you are buying</h2>
         <p>
-          GameGuide sells digital access to paid plans of the GameGuide Discord bot: <strong>Pro</strong> (for
-          one Discord account), <strong>Server</strong> (for every member of one Discord server) and <strong>Pro
+          GameGuide sells digital access to paid plans of the GameGuide Discord bot: <strong>Base</strong> and{' '}
+          <strong>Pro</strong> (each for one Discord account), <strong>Server</strong> (for every member of one Discord server) and <strong>Pro
           Lifetime</strong> (Pro with a single payment). Current prices: {PRICES_LINE} Prices include any taxes
           shown at checkout. Plans are bought on the <a href="#upgrade" className="s-a" onClick={goto('upgrade')}>plans page</a>.
         </p>
@@ -482,6 +482,7 @@ function Refunds() {
         <ul className="s-bullets">
           <li><strong>First 7 days.</strong> If the plan is not for you, ask within 7 days of your first payment for it — or within 7 days of a yearly renewal — and you get a full refund.</li>
           <li><strong>Pro Lifetime.</strong> Full refund if asked within 7 days of purchase.</li>
+          <li><strong>Moving up</strong> from Base to Pro, or from a subscription to Pro Lifetime, starts the new plan at once and stops the old one renewing. Days already paid for on the old plan are not refunded.</li>
           <li><strong>Monthly renewals</strong> are not refunded once the new month has started; cancel before the renewal date to avoid the charge.</li>
           <li><strong>Charged twice or by mistake?</strong> Duplicate or erroneous charges are always refunded in full.</li>
           <li><strong>If the plan never switched on</strong> and we cannot fix it within 24 hours of you telling us, you get a full refund.</li>

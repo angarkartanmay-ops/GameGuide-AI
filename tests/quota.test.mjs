@@ -149,5 +149,18 @@ check('survives a malformed reset', quota.resetStamp('not-a-date').includes('UTC
   check('hides bonus row at zero', !noBonus.map(f => f.name).join(' ').includes('Bonus'));
 }
 
+// ── Base: shown the way up, never upsold as if it were free ──────────────
+{
+  const out = { scope: 'day', reset_at: null, messages: { used: 60, limit: 60 } };
+  const free = quota.blockedMessage({ ...out, tier: 'free', tier_label: 'Free' });
+  const base = quota.blockedMessage({ ...out, tier: 'base', tier_label: 'Base' });
+  const pro = quota.blockedMessage({ ...out, tier: 'pro', tier_label: 'Pro' });
+  check('free at the wall hears about Base and Pro', /\*\*Base\*\*/.test(free) && /\*\*Pro\*\* 200/.test(free));
+  check('base at the wall is pointed at Pro only', /to \*\*Pro\*\*/.test(base) && !/\*\*Base\*\* gives/.test(base));
+  check('pro at the wall is not upsold', !/upgrade/i.test(pro));
+  check('capacity copy quotes the Base price from plans.js', /Base from \$2\.99\/mo/.test(quota.blockedMessage({ scope: 'capacity', tier: 'free' })));
+  check('a paying Base user gets no footer nudge', quota.quotaFooter({ tier: 'base', limits: { priority: true }, messages: { used: 59, limit: 60, remaining: 1 } }, { userId: 'b1' }) === '');
+}
+
 console.log(`quota: ${passed} passed${failed ? `, ${failed} FAILED` : ''}`);
 process.exit(failed ? 1 : 0);

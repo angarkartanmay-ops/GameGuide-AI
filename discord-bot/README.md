@@ -109,19 +109,28 @@ redeploy. A vision turn costs 1 message *and* 1 screenshot.
 Prices live in `plans.js` (the webhook checks purchases against them); limits
 live in the table. Pro Lifetime ($39.99 once) has exactly the Pro column.
 
-| | 🆓 Free | ⭐ Pro — $4.99/mo | 🌟 Server — $14.99/mo |
-|---|---|---|---|
-| Messages / day | **15** | **200** | **60 per member** |
-| Guild pool / day | — | — | **800 shared** |
-| Burst / minute | 5 | 20 | 10 |
-| Screenshots / day | 3 | 40 | 10 |
-| Image generations / day | 1 | 15 | 5 |
-| History retained | 10 | 50 | 25 |
-| Context sent to model | 6 turns | 24 turns | 12 turns |
-| Priority routing | — | ✅ | ✅ |
-| At global capacity | waits | never queued | protected |
-| Paid model first on deep questions | — | ✅ | ✅ |
-| Watchtower games per server | 3 | 3 | 25 |
+| | 🆓 Free | ✅ Base — $2.99/mo · ₹199 | ⭐ Pro — $4.99/mo · ₹399 | 🌟 Server — $14.99/mo · ₹1,199 |
+|---|---|---|---|---|
+| Messages / day | **15** | **60** | **200** | **60 per member** |
+| Guild pool / day | — | — | — | **800 shared** |
+| Burst / minute | 5 | 10 | 20 | 10 |
+| Screenshots / day | 3 | 10 | 40 | 10 |
+| Image generations / day | 1 | 5 | 15 | 5 |
+| History retained | 10 | 25 | 50 | 25 |
+| Context sent to model | 6 turns | 12 turns | 24 turns | 12 turns |
+| At global capacity | waits | never queued | never queued | protected |
+| Paid model first on deep questions | — | — | ✅ (to 120/day) | ✅ |
+| Watchtower games per server | 3 | 3 | 3 | 25 |
+
+**Base vs Pro.** Both are about *room*: neither waits when the free pool is
+full. The line between them is the one thing that costs money per message —
+Pro (and Server) send deep questions to the paid model first; Base stays on
+the free model mesh, so it can be cheap without losing money on heavy users.
+Base never needs a soft cap for that reason. Moving up (Base → Pro, anything →
+Lifetime) is allowed at any time: the new plan starts at once and the old
+subscription is told to stop renewing (`billing-cancel.js`), at whichever
+provider it lives, keeping what was already paid for. Pro → Base is refused
+while Pro is active.
 
 **Why 15/day free:** median engaged use is 3–5 messages/day, so 15 clears
 roughly 88% of users untouched while the heaviest ~12% — the only group that
@@ -130,7 +139,7 @@ costs real money — hit the wall by mid-afternoon. The platform can serve about
 table is derived from, and it is enforced by `global_daily_cap` in
 `discord_quota_config`.
 
-**Granted by:** `discord_entitlements` row (Stripe, or `manual`), a
+**Granted by:** `discord_entitlements` row (Razorpay, PayPal, Stripe, Lemon Squeezy or `manual`), a
 `discord_premium_servers` row for the server plan, or the `PREMIUM_USER_IDS` /
 `PREMIUM_GUILD_IDS` env vars, which are synced into the database at boot.
 
@@ -140,13 +149,13 @@ Users check their own balance with `/quota`.
 
 ### 0. How buying works now — `/quota` to look, `/upgrade` to buy
 
-- **`/quota`** shows your plan with a badge (FREE · PRO · PRO LIFETIME ·
+- **`/quota`** shows your plan with a badge (FREE · BASE · PRO · PRO LIFETIME ·
   PREMIUM SERVER), whether it renews, ends or has a payment problem, and
   today's usage. It never sells; free users get one "Upgrade" button.
 - **`/upgrade`** (`/premium` still works) opens the website's **plans page**
   through a signed one-hour link (`upgradeLink.js`) that already knows who is
   buying. The page offers Monthly / Yearly (ten months for twelve) / Lifetime,
-  card worldwide or UPI in India, and calls this bot's `GET /api/plans` and
+  UPI in India (Razorpay) or PayPal worldwide, and calls this bot's `GET /api/plans` and
   `POST /api/checkout` (`billingApi.js`). The bot creates the checkout with
   the configured provider — the buyer comes from the verified link, never from
   the request — and the provider's webhook grants the plan as before.
@@ -196,9 +205,9 @@ stripe trigger checkout.session.completed
 ### 1b. Razorpay (India — UPI, cards, netbanking)
 
 Runs beside Stripe; nothing about Stripe changes. `/premium` shows rupee buttons
-(🇮🇳 Pro ₹399/mo · Lifetime ₹3,299 · Server ₹1,199/mo) whenever the Razorpay keys
+(🇮🇳 Base ₹199/mo · Pro ₹399/mo · Lifetime ₹3,299 · Server ₹1,199/mo) whenever the Razorpay keys
 are set. Pressing one makes the bot create that buyer's checkout through the
-Razorpay API — a subscription for Pro/Server, a payment link for Lifetime — with
+Razorpay API — a subscription for Base/Pro/Server, a payment link for Lifetime — with
 their Discord id (and server id) in `notes` the **server** wrote, so there is no
 hand-editable URL involved.
 
@@ -213,6 +222,33 @@ Lifetime, the exact rupee amount paid on a link the bot made), never from notes
 alone. Cancelling keeps access to the end of the paid month; a failed charge keeps
 Pro while Razorpay retries; a full refund or a dispute takes Lifetime back.
 Subscription refunds are not auto-revoked — cancel the subscription in Razorpay.
+
+### 1b-ii. PayPal (worldwide — the recommended dollar rail)
+
+Razorpay takes rupees; PayPal takes everyone else (PayPal balance, or a card
+through PayPal's own checkout). Both can be live at once; the plans page shows
+a UPI | PayPal switch and picks UPI first for visitors in India.
+
+Setup (sandbox first, then again with a Live app):
+1. developer.paypal.com → Apps & Credentials → Create App. Put
+   `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_ENV=sandbox` in `.env`.
+2. `node scripts/paypal-setup.js --webhook https://<bot-host>/paypal-webhook` —
+   creates the product, the six plans (Base/Pro/Server × month/year, USD, from
+   `plans.js`) and the webhook, and writes every id to `.env.render`.
+3. Copy those values to the bot host, redeploy, then
+   `node scripts/billing-check.js --bot https://<bot-host>` — it checks every
+   plan id and price with PayPal itself, makes a real checkout for each plan,
+   and checks the bot's routes are live. Then buy Base once with a sandbox
+   buyer account and watch for `[billing] base active … (paypal)`.
+
+How it is checked: checkouts are created by the API with the Discord ids in a
+server-written `custom_id`; every subscription webhook makes the bot re-read
+that subscription from PayPal and act on its current status, plan id and next
+billing time. Lifetime is an order the bot captures itself on
+`CHECKOUT.ORDER.APPROVED` and grants on `PAYMENT.CAPTURE.COMPLETED` after
+checking the dollar amount. Signatures are PayPal's RSA scheme over
+`id|time|webhook_id|crc32(body)`, with the certificate fetched only from
+PayPal's API hosts.
 
 ### 1c. Lemon Squeezy (worldwide — and it handles sales tax for you)
 
@@ -236,7 +272,12 @@ ignored unless `LEMON_ALLOW_TEST=1`, because anyone can make one for free.
   and un-claims it; a claim that never completed is retried after five minutes.
 - A subscription always has an end date (a missing one is a 3-day provisional
   grant, never "forever"); a renewal thanks the buyer once, not monthly.
-- Run `migrations/20261005_billing_final.sql` then `20261006_billing_providers.sql`.
+- Higher plans replace lower ones and stop the old subscription renewing;
+  a failure to stop it is logged loudly for a human, never undoes the grant.
+- Run `migrations/20261005_billing_final.sql`, `20261006_billing_providers.sql`,
+  then re-run `schema-v3.sql` and run `20261028_base_tier.sql` (Base).
+- Razorpay setup is scripted too: `node scripts/razorpay-setup.js` creates all
+  six rupee plans. `node scripts/billing-check.js` checks either provider.
 
 ### 2. Top.gg votes (free traffic)
 List the bot at [Top.gg](https://top.gg). A vote grants **+10 bonus messages for

@@ -7,8 +7,8 @@
 //        RAZORPAY_KEY_SECRET=...
 //  2. Run:  node scripts/razorpay-setup.js
 //
-//  It creates the four subscription plans the bot sells (Pro and Server,
-//  monthly and yearly, at the rupee prices in plans.js) — or finds them if a
+//  It creates the six subscription plans the bot sells (Base, Pro and
+//  Server, monthly and yearly, at the rupee prices in plans.js) — or finds them if a
 //  previous run already did — generates the two secrets the bot needs, and
 //  writes everything to discord-bot/.env.render (git-ignored), ready to paste
 //  into Render → Environment. It never prints a secret.
@@ -63,6 +63,8 @@ async function api(method, url, body) {
 // What the bot sells by subscription. Lifetime is a one-off payment link the
 // bot makes per buyer, so it needs no plan.
 const WANT = [
+  { env: 'RAZORPAY_PLAN_BASE', name: 'GameGuide Base (monthly)', period: 'monthly', paise: PLANS.base.inr * 100 },
+  { env: 'RAZORPAY_PLAN_BASE_YEARLY', name: 'GameGuide Base (yearly)', period: 'yearly', paise: PLANS.base.yearly.inr * 100 },
   { env: 'RAZORPAY_PLAN_PRO', name: 'GameGuide Pro (monthly)', period: 'monthly', paise: PLANS.pro.inr * 100 },
   { env: 'RAZORPAY_PLAN_PRO_YEARLY', name: 'GameGuide Pro (yearly)', period: 'yearly', paise: PLANS.pro.yearly.inr * 100 },
   { env: 'RAZORPAY_PLAN_SERVER', name: 'GameGuide Server (monthly)', period: 'monthly', paise: PLANS.server.inr * 100 },
