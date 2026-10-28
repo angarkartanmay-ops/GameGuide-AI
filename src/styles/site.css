@@ -337,6 +337,12 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
 }
 .s-line { display: block; overflow: hidden; padding-bottom: 0.08em; margin-bottom: -0.08em; }
 .s-line > span { display: block; }
+.s-hero__name-line { position: relative; white-space: nowrap; font-size: calc(var(--name-fit, 1) * 1em); }
+/* The hidden full-size copy Hero measures; it undoes the line's own scale. */
+.s-hero__measure {
+  position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: none;
+  font-size: calc(1em / var(--name-fit, 1));
+}
 .s-hero__game { font-style: italic; font-weight: 680; color: var(--s-accent); white-space: nowrap; }
 .s-hero__sub {
   max-width: 50ch; margin: 28px 0 0;
@@ -394,6 +400,15 @@ html[data-low-power] .site .s-livecount__dot { animation: none; }
 .s-tab.is-active .s-tab__fill { animation: s-fill 6.5s linear forwards; }
 .is-calm .s-tab.is-active .s-tab__fill { animation: none; transform: scaleX(1); }
 @keyframes s-fill { to { transform: scaleX(1); } }
+.s-hero__stat { display: flex; align-items: center; min-width: 0; }
+.s-hero__stat > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.s-hero__stat > span + span::before {
+  content: ''; display: inline-block; width: 1px; height: 0.95em; margin: 0 14px;
+  background: var(--s-hair-2);
+}
+.s-hero__stat b { font-weight: 600; color: var(--s-ink); font-variant-numeric: tabular-nums; }
+.s-hero__move { color: var(--s-accent); }
+@media (max-width: 1180px) { .s-hero__peak { display: none !important; } }
 .s-hero__now { justify-self: end; color: var(--s-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .s-hero__pause {
   display: grid; place-items: center; width: 44px; height: 44px;

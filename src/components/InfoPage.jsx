@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowUpRight, Check, Copy, Mail, MessageSquare } from 'lucide-react';
 import { LINKS, mailto } from '../site/links';
-import { HERO_GAMES, heroArt } from '../site/showcase';
+import { lastSiteGame } from '../site/daily';
 import { gsap, useCalm, useScene } from '../site/motion';
 import SiteNav from './site/SiteNav';
 import SiteFooter from './site/SiteFooter';
@@ -10,12 +10,7 @@ import '../styles/site.css';
 
 /** The game the visitor last saw on the landing, so the pages feel continuous. */
 function lastGame() {
-  try {
-    const id = Number(sessionStorage.getItem('gg.site.game'));
-    return HERO_GAMES.find(g => g.appid === id) || HERO_GAMES[0];
-  } catch {
-    return HERO_GAMES[0];
-  }
+  try { return lastSiteGame(sessionStorage); } catch { return lastSiteGame(null); }
 }
 
 const goto = (view) => (e) => {
@@ -630,7 +625,7 @@ export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
 
       <div className="s-page-head">
         <div className="s-page-head__art" aria-hidden="true">
-          <img src={heroArt(game.appid)} alt="" decoding="async" />
+          <img src={game.hero} alt="" decoding="async" />
         </div>
         <div className="s-wrap s-page-head__inner">
           <button type="button" className="s-back" onClick={onBack} data-intro>

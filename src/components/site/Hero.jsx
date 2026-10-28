@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Pause, Play, CornerDownLeft } from 'lucide-react';
-import { HERO_GAMES, heroArt, coverArt } from '../../site/showcase';
+import { Pause, Play, CornerDownLeft, ArrowUpRight } from 'lucide-react';
 import { LINKS } from '../../site/links';
+import { heroStat } from '../../site/daily';
 import { gsap, useScene } from '../../site/motion';
 import { HudCorners } from './bits';
 import LiveCount from './LiveCount';
@@ -11,9 +11,9 @@ const MOBILE_MQ = '(max-width: 767px)';
 function ArtLayer({ game, ready, onReady, priority }) {
   return (
     <picture className={`s-hero__layer${ready ? ' is-ready' : ''}`}>
-      <source media={MOBILE_MQ} srcSet={coverArt(game.appid)} />
+      <source media={MOBILE_MQ} srcSet={game.cover} />
       <img
-        src={heroArt(game.appid)}
+        src={game.hero}
         alt=""
         decoding="async"
         fetchPriority={priority ? 'high' : 'auto'}
@@ -24,24 +24,45 @@ function ArtLayer({ game, ready, onReady, priority }) {
   );
 }
 
+/** Steam's own numbers for the game on screen. Showcase games have none and show their name. */
+function Stat({ game }) {
+  const stat = heroStat(game);
+  if (!stat) return <span className="s-hero__now">{game.name}</span>;
+  return (
+    <span className="s-hero__now s-hero__stat">
+      <span><b>#{stat.rank}</b> most played on Steam</span>
+      {stat.move && (
+        <span className="s-hero__move">
+          {stat.move.kind === 'new'
+            ? 'New to the chart'
+            : <><ArrowUpRight size={13} aria-hidden="true" /> {stat.move.by} places this week</>}
+        </span>
+      )}
+      {stat.peak && <span className="s-hero__peak">{stat.peak} at peak</span>}
+    </span>
+  );
+}
+
 /**
- * "Ask anything about {game}." — full-bleed Steam art cycling through six
- * games. The active tab's fill is a CSS animation and doubles as the timer:
- * when it ends, the next game comes in. It pauses off-screen, on request,
- * and never runs for calm pages.
+ * "Ask anything about {game}." — full-bleed Steam art cycling through the
+ * day's six games (src/site/daily.js). The active tab's fill is a CSS
+ * animation and doubles as the timer: when it ends, the next game comes in.
+ * It pauses off-screen, on request, and never runs for calm pages.
  */
-export default function Hero({ calm, onStart, onGame, arcade }) {
+export default function Hero({ games, calm, onStart, onGame, arcade }) {
   const rootRef = useRef(null);
   const nameRef = useRef(null);
+  const lineRef = useRef(null);
+  const measureRef = useRef(null);
   const [idx, setIdx] = useState(0);
   const [prev, setPrev] = useState(null);
   const [ready, setReady] = useState({});
   const [paused, setPaused] = useState(false);
   const [onScreen, setOnScreen] = useState(true);
-  const game = HERO_GAMES[idx];
+  const game = games[idx] || games[0];
 
   const go = (n) => {
-    const next = (n + HERO_GAMES.length) % HERO_GAMES.length;
+    const next = (n + games.length) % games.length;
     if (next === idx) return;
     setPrev(idx);
     setIdx(next);
@@ -50,12 +71,31 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
   // The name is owned by GSAP (ScrambleText rewrites the node), so React
   // never renders it — it only seeds the first value.
   useLayoutEffect(() => {
-    if (nameRef.current) nameRef.current.textContent = HERO_GAMES[0].name;
-  }, []);
+    if (nameRef.current) nameRef.current.textContent = games[0].name;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Long names ("Tom Clancy's Rainbow Six Siege") shrink to fit the line
+  // instead of running off it. A hidden copy is measured at full size.
+  useLayoutEffect(() => {
+    const line = lineRef.current;
+    const probe = measureRef.current;
+    if (!line || !probe) return undefined;
+    const fit = () => {
+      const room = line.parentElement.clientWidth;
+      const need = probe.scrollWidth;
+      line.style.setProperty('--name-fit', need > room ? (room / need).toFixed(3) : '1');
+    };
+    fit();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null;
+    ro?.observe(line.parentElement);
+    return () => ro?.disconnect();
+  }, [game.name]);
+
+  // The accent can arrive after the game does (it is sampled from the art).
+  useEffect(() => { onGame?.(game); }, [game, onGame]);
 
   const first = useRef(true);
   useEffect(() => {
-    onGame?.(game);
     if (first.current) { first.current = false; return undefined; }
     const el = nameRef.current;
     if (!el) return undefined;
@@ -67,9 +107,9 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
     });
     // Warm the cache for the game after this one.
     const t = setTimeout(() => {
-      const after = HERO_GAMES[(idx + 1) % HERO_GAMES.length];
+      const after = games[(idx + 1) % games.length];
       const img = new Image();
-      img.src = window.matchMedia(MOBILE_MQ).matches ? coverArt(after.appid) : heroArt(after.appid);
+      img.src = window.matchMedia(MOBILE_MQ).matches ? after.cover : after.hero;
     }, 1500);
     return () => { tween.kill(); clearTimeout(t); el.textContent = game.name; };
   }, [idx, calm]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -108,13 +148,12 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
   }, [calm]);
 
   const running = !calm && !paused && onScreen;
+  const outgoing = prev != null && prev !== idx ? games[prev] : null;
 
   return (
     <section ref={rootRef} className="s-hero" aria-labelledby="hero-title">
       <div className="s-hero__art" aria-hidden="true">
-        {prev != null && prev !== idx && (
-          <ArtLayer key={HERO_GAMES[prev].appid} game={HERO_GAMES[prev]} ready />
-        )}
+        {outgoing && <ArtLayer key={outgoing.appid} game={outgoing} ready />}
         <ArtLayer
           key={game.appid}
           game={game}
@@ -133,7 +172,12 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
             <span className="sr-only">Ask anything about any game.</span>
             <span aria-hidden="true">
               <span className="s-line"><span>Ask anything about</span></span>
-              <span className="s-line"><span><span className="s-hero__game" ref={nameRef} />.</span></span>
+              <span className="s-line">
+                <span ref={lineRef} className="s-hero__name-line">
+                  <span className="s-hero__game" ref={nameRef} />.
+                  <span ref={measureRef} className="s-hero__game s-hero__measure">{game.name}.</span>
+                </span>
+              </span>
             </span>
           </h1>
           <p className="s-hero__sub" data-intro>
@@ -154,7 +198,7 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
 
         <div className="s-hero__hud" data-intro>
           <div className="s-hero__tabs" role="group" aria-label="Showcased game">
-            {HERO_GAMES.map((g, i) => (
+            {games.map((g, i) => (
               <button
                 key={g.appid}
                 type="button"
@@ -172,7 +216,7 @@ export default function Hero({ calm, onStart, onGame, arcade }) {
               </button>
             ))}
           </div>
-          <span className="s-hero__now" aria-live="off">{game.name}</span>
+          <Stat game={game} />
           {!calm && (
             <button
               type="button"
