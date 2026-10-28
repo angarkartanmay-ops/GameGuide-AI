@@ -71,6 +71,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
   const [period, setPeriod] = useState('year');
   const [rail, setRail] = useState(inIndia() ? 'upi' : 'paypal');
   const [live, setLive] = useState(null);
+  const [unreachable, setUnreachable] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   // The clock the page reads; ticking it keeps "valid for N minutes" honest.
@@ -95,8 +96,18 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
   useEffect(() => {
     if (!billingOpen()) return undefined;
     const ctrl = new AbortController();
-    fetchPlans(buyer && !expired ? token : '', { signal: ctrl.signal }).then(setLive).catch(() => setLive(null));
-    return () => ctrl.abort();
+    let timer = null;
+    // The bot's host sleeps when idle and can take a minute to answer; if it
+    // fails outright, say so and try again rather than "checking" forever.
+    const load = (tries) => fetchPlans(buyer && !expired ? token : '', { signal: ctrl.signal })
+      .then((data) => { setLive(data); setUnreachable(false); })
+      .catch((e) => {
+        if (e?.name === 'AbortError') return;
+        setUnreachable(true);
+        if (tries < 4) timer = setTimeout(() => load(tries + 1), 15_000);
+      });
+    load(1);
+    return () => { ctrl.abort(); clearTimeout(timer); };
   }, [token, buyer, expired]);
 
   useEffect(() => {
@@ -126,7 +137,7 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
   const blocked = (plan, iv) => {
     if (!billingOpen() || (live && !openRails.length)) return 'Payments open soon.';
     if (!linked) return 'Run /upgrade in Discord to link your account first.';
-    if (!live) return 'Loading…';
+    if (!live) return unreachable ? 'Payments are not answering right now.' : 'Loading…';
     if (!sells(railNow, plan, iv)) return 'Not available with this payment method. Try another one.';
     if (plan === 'server' && !buyer.inServer) return 'Run /upgrade inside the server you want to upgrade.';
     if (plan === tier && plan !== 'server' && account?.status !== 'ending') return 'This is your plan.';
@@ -399,7 +410,9 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
 
             {!open && (
               <p className="s-upgrade__note" data-intro>
-                {billingOpen() ? 'Checking which payment methods are open…' : 'Paid plans open soon. Prices above are final.'}
+                {!billingOpen() ? 'Paid plans open soon. Prices above are final.'
+                  : unreachable && !live ? 'Payments are not answering right now. Trying again — or come back in a few minutes.'
+                    : 'Checking which payment methods are open…'}
               </p>
             )}
 
