@@ -136,6 +136,9 @@
   background: var(--cx-accent); transform: rotate(45deg);
 }
 .cx-mark--lg { width: 13px; height: 13px; }
+/* The brand mark in the top bar: ink G, the diamond follows the game's accent. */
+.cx-brand .gg-brandmark { flex: none; color: var(--cx-ink); }
+.cx-brand .gg-brandmark__gem { fill: var(--cx-accent); }
 
 .cx-context {
   justify-self: center; display: flex; align-items: center; gap: 14px;
@@ -229,6 +232,7 @@
 
 .cx-context__game.is-stealth { display: flex; align-items: center; gap: 8px; color: var(--cx-ink); }
 .is-stealth .cx-mark--lg { background: transparent; box-shadow: inset 0 0 0 1.5px var(--cx-ink); }
+.is-stealth .cx-brand .gg-brandmark__gem { fill: none; stroke: var(--cx-ink); stroke-width: 16; }
 .is-stealth .cx-prose img,
 .is-stealth .cx-entry--user img,
 .is-stealth .cx-cover__art img,

@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { ScrollTrigger } from '../../site/motion';
 import { Mark } from './bits';
+import BrandMark from '../BrandMark';
 
 /**
  * The site's top bar: brand, section or page links, a call to action and —
@@ -60,7 +61,7 @@ export default function SiteNav({ links, onBrand, cta, counter }) {
     <header ref={barRef} className={`s-nav${scrolled ? ' is-scrolled' : ''}${open ? ' is-open' : ''}`}>
       <div className="s-nav__inner">
         <button type="button" className="s-brand" onClick={onBrand} aria-label="GameGuide home">
-          <Mark size="lg" />
+          <BrandMark size={24} />
           <span className="s-brand__name">GameGuide</span>
         </button>
 

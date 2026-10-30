@@ -53,7 +53,7 @@ const { createSuperseder } = require('./billing-cancel');
 const { globalProvider, globalCheckoutUrl } = require('./checkout');
 const { priceLabel } = require('./plans');
 const { upgradeUrl } = require('./upgradeLink');
-const { loadMembership, describeMembership } = require('./membership');
+const { loadMembership, describeMembership, planOptions } = require('./membership');
 const { mountBillingApi, availableRails } = require('./billingApi');
 const { safeEqual, secureHeaders, rateLimiter, parseTopggVote } = require('./httpSecurity');
 const { splitForDiscord } = require('./textsplit');
@@ -1438,7 +1438,7 @@ client.on('interactionCreate', async (interaction) => {
         const url = paid
           ? upgradeUrl({ userId, guildId, name: nameOf(interaction.user) })
           : upgradeLinkFor({ userId, guildId, name: nameOf(interaction.user) });
-        const plan = describeMembership({ tier: d.degraded ? 'free' : d.tier, entitlement: m.entitlement, server: m.server });
+        const plan = describeMembership({ tier: d.degraded ? 'free' : d.tier, entitlement: m.entitlement, server: m.server, upsell: false });
 
         const embed = new EmbedBuilder().setColor(plan.badge.color);
         if (paid) {
@@ -1446,7 +1446,7 @@ client.on('interactionCreate', async (interaction) => {
             .setTitle(`${plan.title} — you're on a paid plan`)
             .setDescription(
               `${plan.lines.join('\n')}\n\n` +
-              'Open the plans page to move up to Pro, switch to yearly, go Lifetime, or upgrade this server.\n' +
+              `${planOptions(d.tier)}\n` +
               '-# To cancel or update your card, use the link in your receipt email — or write to gameguideai.support@gmail.com.',
             );
         } else {

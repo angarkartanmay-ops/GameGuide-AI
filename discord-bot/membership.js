@@ -55,7 +55,7 @@ async function loadMembership(supabase, { userId, guildId = null }) {
  * @param entitlement   discord_entitlements row or null
  * @param server        discord_premium_servers row for this server or null
  */
-function describeMembership({ tier = 'free', entitlement = null, server = null, now = Date.now() } = {}) {
+function describeMembership({ tier = 'free', entitlement = null, server = null, now = Date.now(), upsell = true } = {}) {
   const badge = BADGES[tier] || BADGES.free;
   const lines = [];
   const end = entitlement?.current_period_end;
@@ -75,7 +75,7 @@ function describeMembership({ tier = 'free', entitlement = null, server = null, 
       // The stored date includes a short grace period after the renewal charge.
       lines.push(`Renews around ${dateStamp(end)}${via}.`);
     }
-    if (tier === 'base') lines.push('`/upgrade` to Pro for 200 messages a day and the most accurate model on hard questions.');
+    if (tier === 'base' && upsell) lines.push('`/upgrade` to Pro for 200 messages a day and the most accurate model on hard questions.');
   } else if (tier === 'server') {
     const s = server?.expires_at ? dateStamp(server.expires_at) : null;
     lines.push(`This server is on the Premium Server plan${s ? ` until ${s}` : ''} — every member shares it.`);
@@ -89,4 +89,15 @@ function describeMembership({ tier = 'free', entitlement = null, server = null, 
   return { badge, title: `${badge.emoji} ${badge.text}`, lines };
 }
 
-module.exports = { BADGES, loadMembership, describeMembership };
+/** What the plans page can still do for someone on `tier` (the /upgrade card). */
+function planOptions(tier) {
+  switch (tier) {
+    case 'base': return 'Open the plans page to move up to Pro, switch to yearly, go Lifetime, or upgrade this server.';
+    case 'pro': return 'Open the plans page to switch to yearly, go Lifetime, or upgrade this server.';
+    case 'lifetime': return 'You have everything Pro has, for good. The plans page can still upgrade this server.';
+    case 'server': return 'This server is covered. The plans page can get you Pro for yourself, on top of it.';
+    default: return 'Open the plans page to pick a plan.';
+  }
+}
+
+module.exports = { BADGES, loadMembership, describeMembership, planOptions };
