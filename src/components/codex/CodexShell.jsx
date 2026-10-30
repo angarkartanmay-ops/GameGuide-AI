@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import BrandMark from '../BrandMark';
 import ThemeSelector from '../ThemeSelector';
 import UserProfile from '../UserProfile';
 import ChatContainer from '../ChatContainer';
@@ -60,7 +61,7 @@ export default function CodexShell({
 
       <header className="cx-top">
         <button type="button" className="cx-brand" onClick={onHome} aria-label="GameGuide — return to home">
-          <span className="cx-mark cx-mark--lg" aria-hidden="true" />
+          <BrandMark size={22} />
           <span className="cx-brand__name">GameGuide</span>
         </button>
         <ContextPill

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import BrandMark from '../BrandMark';
 import { ArrowRight, Shield } from 'lucide-react';
 import MessageBubble from '../MessageBubble';
 import CodexBackdrop from './CodexBackdrop';
@@ -72,7 +73,7 @@ export default function SharedAnswer({ encoded, onAsk, onHome }) {
 
       <header className="cx-top">
         <button type="button" className="cx-brand" onClick={onHome} aria-label="GameGuide — home">
-          <span className="cx-mark cx-mark--lg" aria-hidden="true" />
+          <BrandMark size={22} />
           <span className="cx-brand__name">GameGuide</span>
         </button>
         <span className="cx-shared__tag">Shared answer{game ? ` · ${game}` : ''}</span>

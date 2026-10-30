@@ -884,6 +884,9 @@ html[data-low-power] .site .s-livecount__dot { animation: none; }
 .s-foot__inner, .s-foot__base { width: min(100%, var(--s-max)); margin-inline: auto; padding-inline: var(--s-gutter); }
 .s-foot__inner { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr); gap: 48px; }
 .s-foot__logo { display: flex; align-items: center; gap: 11px; margin: 0 0 12px; font-weight: 600; font-size: 18px; }
+/* The brand mark: the G in ink, the diamond in the accent of the game on screen. */
+.gg-brandmark { flex: none; color: var(--s-ink); }
+.site .gg-brandmark__gem { fill: var(--s-accent); transition: fill 0.8s; }
 .s-foot__tag { max-width: 36ch; margin: 0 0 22px; font-size: 14.5px; line-height: 1.6; color: var(--s-muted); }
 .s-foot__featured { margin-top: 30px; }
 .s-foot__badges { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; }

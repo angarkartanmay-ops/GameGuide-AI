@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { LINKS, mailto } from '../../site/links';
-import { Mark } from './bits';
+import BrandMark from '../BrandMark';
 
 function Ext({ href, children }) {
   return (
@@ -39,7 +39,7 @@ export default function SiteFooter({ onNavigate, onStart }) {
     <footer className="s-foot">
       <div className="s-foot__inner">
         <div className="s-foot__brand">
-          <p className="s-foot__logo"><Mark size="lg" /> GameGuide</p>
+          <p className="s-foot__logo"><BrandMark size={26} /> GameGuide</p>
           <p className="s-foot__tag">
             A game guide you can talk to. Live answers, set like a strategy guide, that stop where you are in the story.
           </p>

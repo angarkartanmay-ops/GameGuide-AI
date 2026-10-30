@@ -1,14 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Full bleed: the platform applies its own mask. The mark stays inside
-       the central 80% safe zone so no mask shape can clip it. -->
-  <defs>
-    <radialGradient id="g" cx="50%" cy="45%" r="62%">
-      <stop offset="0" stop-color="#c0985b" stop-opacity=".28"/>
-      <stop offset="1" stop-color="#c0985b" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-  <rect width="512" height="512" fill="#07090d"/>
-  <rect width="512" height="512" fill="url(#g)"/>
-  <rect x="179.2" y="179.2" width="153.6" height="153.6" rx="10" fill="#c0985b" transform="rotate(45 256 256)"/>
-  <rect x="223.7" y="223.7" width="64.5" height="64.5" rx="5" fill="#07090d" transform="rotate(45 256 256)"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#0B0E14"/><g transform="translate(256 256) scale(0.92) translate(-256 -256)"><path d="M316 120 L196 120 L120 196 L120 316 L196 392 L316 392 L392 316 L392 262 L330 262" fill="none" stroke="#EDE8DE" stroke-width="60" stroke-linejoin="miter"/><rect x="226" y="226" width="72" height="72" rx="6" fill="#D9A649" transform="rotate(45 262 262)"/></g></svg>

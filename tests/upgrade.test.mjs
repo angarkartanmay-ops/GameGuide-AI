@@ -93,6 +93,11 @@ const NOW = 1_800_000_000_000;
   const later = new Date(NOW + 20 * 864e5).toISOString();
   const d = (o) => membership.describeMembership({ now: NOW, ...o });
   check('free badge and an upgrade nudge', d({ tier: 'free' }).title === '⚪ FREE' && /\/upgrade/.test(d({ tier: 'free' }).lines.join()));
+  // The /upgrade card: never offer someone the plan they already have.
+  check('/upgrade never tells a Pro user to "move up to Pro"', !/move up to Pro/.test(membership.planOptions('pro')) && /yearly/.test(membership.planOptions('pro')));
+  check('/upgrade shows Base the way to Pro', /move up to Pro/.test(membership.planOptions('base')));
+  check('/upgrade shows Lifetime only the server plan', !/Lifetime|yearly/.test(membership.planOptions('lifetime')) && /server/.test(membership.planOptions('lifetime')));
+  check('the /upgrade card does not repeat the Base upsell', !/`\/upgrade` to Pro/.test(d({ tier: 'base', upsell: false, entitlement: { tier: 'base', status: 'active', current_period_end: later } }).lines.join()));
   check('pro badge with its renewal', d({ tier: 'pro', entitlement: { tier: 'pro', status: 'active', source: 'stripe', current_period_end: later } }).lines[0].startsWith('Renews around <t:'));
   check('a cancelled pro says until when', /Cancelled — Pro stays on until <t:/.test(d({ tier: 'pro', entitlement: { tier: 'pro', status: 'ending', current_period_end: later } }).lines[0]));
   check('a failed payment is flagged', /didn't go through/.test(d({ tier: 'pro', entitlement: { tier: 'pro', status: 'past_due', current_period_end: later } }).lines[0]));
