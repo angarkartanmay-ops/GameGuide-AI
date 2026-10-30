@@ -140,7 +140,11 @@ function paypalWorld({ subs = {}, captures = {}, supersede } = {}) {
   const dms = [];
   const api = {
     captured: [],
-    getSubscription: async (id) => { if (!subs[id]) throw new Error('paypal 404'); return subs[id]; },
+    getSubscription: async (id) => {
+      if (id.startsWith('I-GONE')) throw Object.assign(new Error('paypal 404 INVALID_RESOURCE_ID'), { status: 404 });
+      if (!subs[id]) throw new Error('paypal unreachable');
+      return subs[id];
+    },
     captureOrder: async (id) => { api.captured.push(id); return { id, status: 'COMPLETED' }; },
     getCapture: async (id) => captures[id],
   };
@@ -186,6 +190,7 @@ const ev = (event_type, resource) => ({ id: `WH-${crypto.randomUUID()}`, event_t
   check('a subscription not yet paid grants nothing', await w.h.handleEvent(ev('BILLING.SUBSCRIPTION.UPDATED', { id: 'I-PEND' })) === 'ignored' && w.db.t.discord_entitlements.size === 0);
   check('a junk id is ignored without asking PayPal', await w.h.handleEvent(ev('BILLING.SUBSCRIPTION.ACTIVATED', { id: '../../v1/oauth2' })) === 'ignored');
   check('PayPal being down is an error (so the webhook answers 500 and PayPal retries)', await throws(() => w.h.handleEvent(ev('BILLING.SUBSCRIPTION.ACTIVATED', { id: 'I-MISSING1' }))));
+  check('a subscription PayPal says does not exist (simulator events) is acknowledged, not retried', await w.h.handleEvent(ev('BILLING.SUBSCRIPTION.CANCELLED', { id: 'I-GONE123' })) === 'unknown-subscription');
   check('unhandled events are ignored', await w.h.handleEvent(ev('CATALOG.PRODUCT.CREATED', {})) === 'ignored');
 }
 {

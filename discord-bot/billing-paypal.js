@@ -332,7 +332,17 @@ function createPaypalHandlers({ repo, notify = async () => {}, supersede, config
 
   async function subscriptionChanged(id, { failed = false } = {}) {
     if (typeof id !== 'string' || !/^I-[A-Z0-9]{1,60}$/i.test(id)) return 'ignored';
-    const sub = await client.getSubscription(id);   // throws → 5xx → PayPal retries
+    // A failure to read throws → 5xx → PayPal retries. A subscription PayPal
+    // says does not exist (the dashboard's webhook simulator sends made-up
+    // ids) is answered 200: retrying it for days would change nothing.
+    const sub = await client.getSubscription(id).catch((e) => {
+      if (e.status === 404) return null;
+      throw e;
+    });
+    if (!sub) {
+      log.warn(`[paypal] subscription ${id} does not exist at PayPal — ignored`);
+      return 'unknown-subscription';
+    }
     const ref = SUB_REF(sub.id || id);
     const which = planFor(sub.plan_id);
     if (!which) {
@@ -402,7 +412,11 @@ function createPaypalHandlers({ repo, notify = async () => {}, supersede, config
     if (typeof captureId !== 'string' || !captureId) return 'ignored';
     if (why === 'refund') {
       // Only a FULL refund takes Lifetime back; ask PayPal which this was.
-      const cap = await client.getCapture(captureId);
+      const cap = await client.getCapture(captureId).catch((e) => {
+        if (e.status === 404) return null;
+        throw e;
+      });
+      if (!cap) return 'unknown-capture';
       if (cap.status !== 'REFUNDED') return 'partial-refund';
     }
     return core.revokeLifetime(CAP_REF(captureId), why);
