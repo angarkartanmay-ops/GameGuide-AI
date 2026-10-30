@@ -303,6 +303,14 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
               )}
             </div>
 
+            {/* PayPal does not allow payments between two Indian accounts, and
+                a PayPal account registered in India is refused at checkout. */}
+            {railKey === 'paypal' && inIndia() && (
+              <p className="s-upgrade__note" data-intro>
+                PayPal does not accept payments from PayPal accounts registered in India. Paying from India? Use UPI &amp; Indian cards.
+              </p>
+            )}
+
             {error && <p className="s-upgrade__error" role="alert">{error}</p>}
 
             <div className="s-plans">

@@ -194,7 +194,8 @@ async function goRender() {
       'Razorpay webhook (Razorpay has no API for this, so it is a form):',
       '   Dashboard (Test mode) → Account & Settings → Webhooks → Add New Webhook',
       `   URL:     ${BOT_URL}/razorpay-webhook`,
-      '   Secret:  the RAZORPAY_WEBHOOK_SECRET line in discord-bot/.env.render',
+      '   Secret:  ONLY the 48 characters after "RAZORPAY_WEBHOOK_SECRET=" in discord-bot/.env.render',
+      '            (not the name, no spaces). Then `node scripts/billing-sync.js --apply` applies anything missed.',
       '   Events:  subscription.activated, .charged, .pending, .halted, .cancelled, .completed,',
       '            .paused, .resumed, .updated, payment_link.paid, refund.processed, payment.dispute.created',
     ].join('\n'));

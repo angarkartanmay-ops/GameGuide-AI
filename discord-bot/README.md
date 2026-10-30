@@ -279,6 +279,9 @@ ignored unless `LEMON_ALLOW_TEST=1`, because anyone can make one for free.
 - Going live: paste the Razorpay, PayPal and Render keys into `.env`, then
   `node scripts/billing-go-live.js` does the rest (`--diagnose` shows the
   Render service's state and logs).
+- A webhook lost (wrong secret in the Razorpay form, bot down past the retry
+  window)? `node scripts/billing-sync.js --apply` reads every active Razorpay
+  subscription from the API and delivers the best one per person to the bot.
 - Razorpay setup is scripted too: `node scripts/razorpay-setup.js` creates all
   six rupee plans. `node scripts/billing-check.js` checks either provider.
 
