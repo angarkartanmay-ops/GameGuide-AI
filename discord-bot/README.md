@@ -262,6 +262,8 @@ links are also set, `PAYMENT_GLOBAL=lemon` makes Lemon Squeezy the card option
 comes from the **variant id** Lemon Squeezy reports. Test-mode purchases are
 ignored unless `LEMON_ALLOW_TEST=1`, because anyone can make one for free.
 
+**Status and the go-live checklist: [PAYMENTS.md](PAYMENTS.md).**
+
 ### Shared rules (all providers — `billing-core.js`)
 - One set of rules, three dialects: a webhook is verified, mapped to *who* paid
   for *which plan*, then handed to the same core.
