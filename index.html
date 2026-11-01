@@ -2,6 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      /* The site routes on the hash (/#terms). Payment-provider reviewers and
+         crawlers type the plain path (/terms, /refund-policy): send those to
+         the right page instead of the landing page. */
+      (function () {
+        var alias = { 'terms-and-conditions': 'terms', 'terms-of-service': 'terms', 'privacy-policy': 'privacy',
+          'refund': 'refunds', 'refund-policy': 'refunds', 'cancellation': 'refunds', 'cancellation-policy': 'refunds',
+          'shipping': 'delivery', 'shipping-policy': 'delivery', 'delivery-policy': 'delivery',
+          'contact': 'contacts', 'contact-us': 'contacts', 'pricing': 'upgrade', 'plans': 'upgrade' };
+        var p = location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+        var view = alias[p] || p;
+        if (!location.hash && /^(about|terms|privacy|refunds|delivery|contacts|upgrade)$/.test(view)) {
+          location.replace('/#' + view);
+        }
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- Installable: players keep it on a phone as a second screen while they play. -->
