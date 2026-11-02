@@ -13,10 +13,16 @@
           'contact': 'contacts', 'contact-us': 'contacts', 'pricing': 'upgrade', 'plans': 'upgrade' };
         var p = location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
         var view = alias[p] || p;
-        if (!location.hash && /^(about|terms|privacy|refunds|delivery|contacts|upgrade)$/.test(view)) {
+        if (!location.hash && /^(about|terms|privacy|refunds|delivery|contacts|upgrade|chat)$/.test(view)) {
           location.replace('/#' + view);
         }
       })();
+    </script>
+    <script>
+      /* Chrome fires beforeinstallprompt once, usually before the app has
+         mounted. Keep the event (and stop the browser's own mini-infobar) so
+         the Install button, when it appears, still has it. See useInstallPrompt. */
+      window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__ggInstall = e; });
     </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -27,22 +33,22 @@
     <meta name="apple-mobile-web-app-title" content="GameGuide" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-    <title>GameGuide — ask anything about any game</title>
-    <meta name="description" content="A game guide you can talk to. Live answers from wikis, patch notes and the web, set like a strategy guide — and it won't spoil what you haven't reached. Free on the web and in Discord." />
+    <title>GameGuide: ask anything about any game</title>
+    <meta name="description" content="A game guide you can talk to. Live answers from wikis, patch notes and the web, set like a strategy guide. It won't spoil what you haven't reached. Free on the web and in Discord." />
     <meta name="theme-color" content="#07090d" />
     <link rel="canonical" href="https://gameguide.online/" />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="GameGuide" />
-    <meta property="og:title" content="GameGuide — ask anything about any game" />
+    <meta property="og:title" content="GameGuide: ask anything about any game" />
     <meta property="og:description" content="Live answers, set like a strategy guide, that stop where you are in the story." />
     <meta property="og:url" content="https://gameguide.online/" />
     <meta property="og:image" content="https://gameguide.online/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="GameGuide — Ask anything about any game." />
+    <meta property="og:image:alt" content="GameGuide: ask anything about any game." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="GameGuide — ask anything about any game" />
+    <meta name="twitter:title" content="GameGuide: ask anything about any game" />
     <meta name="twitter:description" content="Live answers, set like a strategy guide, that stop where you are in the story." />
     <meta name="twitter:image" content="https://gameguide.online/og.png" />
 
@@ -54,7 +60,7 @@
         "url": "https://gameguide.online/",
         "applicationCategory": "GameApplication",
         "operatingSystem": "Any (web browser), Discord",
-        "description": "A spoiler-safe game guide you can talk to. Live answers from wikis, patch notes and the web, set like a strategy guide — it never spoils what you haven't reached.",
+        "description": "A spoiler-safe game guide you can talk to. Live answers from wikis, patch notes and the web, set like a strategy guide. It never spoils what you haven't reached.",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "featureList": [
           "Spoiler Shield: answers stop where you are in the story",
@@ -67,25 +73,51 @@
       }
     </script>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preconnect" href="https://cdn.akamai.steamstatic.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Geist:wght@300..900&family=Geist+Mono:wght@400..600&display=swap"
-      rel="stylesheet"
-    />
+    <!-- Fonts are self-hosted (src/styles/fonts.css): no third-party stylesheet
+         to wait for before the first paint. Steam serves the art; today's games
+         come from shared. (the hand-picked fallback uses cdn., only if the daily
+         list fails, so it gets no early connection). -->
+    <link rel="preconnect" href="https://shared.akamai.steamstatic.com" />
     <!-- Today's landing games (src/site/daily.js): start the one request now,
          in parallel with the app bundle, when the landing will need it and
-         the day's copy isn't already saved. -->
+         the day's copy isn't already saved. Either way, as soon as the first
+         game is known its art is asked for (the phone's 1x cover or the wide
+         hero, the same files Hero.jsx picks), not after the bundle has run. -->
     <script>
       try {
         var h = location.hash.replace(/^#\/?/, '').toLowerCase();
         var c = JSON.parse(localStorage.getItem('gg.daily.v1') || 'null');
         var landing = h === 'landing' || (!h && sessionStorage.getItem('gg_entered') !== '1');
-        if (landing && !(c && c.day === new Date().toISOString().slice(0, 10))) {
-          window.__ggDaily = fetch('/api/trending-games')
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .catch(function () { return null; });
+        var art = function (body) {
+          var g = body && body.hero && body.hero[0];
+          var ok = /^https:\/\/(shared|cdn)\.akamai\.steamstatic\.com\//;
+          if (!g || !ok.test(g.hero) || !ok.test(g.cover)) return;
+          [[g.cover.replace(/_2x(?=\.jpg)/, ''), '(max-width: 767px)'], [g.hero, '(min-width: 768px)']].forEach(function (a) {
+            var l = document.createElement('link');
+            l.rel = 'preload'; l.as = 'image'; l.href = a[0]; l.media = a[1]; l.fetchPriority = 'high';
+            document.head.appendChild(l);
+          });
+        };
+        if (landing) {
+          // The landing chunk and what it imports (filled in at build time),
+          // asked for now instead of after the entry has run.
+          /*gg-landing-preload*/[].forEach(function (href) {
+            var l = document.createElement('link');
+            var css = /\.css$/.test(href);
+            l.rel = css ? 'preload' : 'modulepreload';
+            if (css) l.as = 'style';
+            l.crossOrigin = '';
+            l.href = href;
+            document.head.appendChild(l);
+          });
+          if (c && c.day === new Date().toISOString().slice(0, 10)) {
+            art(c.body);
+          } else {
+            window.__ggDaily = fetch('/api/trending-games')
+              .then(function (r) { return r.ok ? r.json() : null; })
+              .catch(function () { return null; });
+            window.__ggDaily.then(art);
+          }
         }
       } catch (e) { /* the landing fetches it itself */ }
     </script>
@@ -94,9 +126,24 @@
     <div id="root"></div>
     <noscript>
       <div style="max-width:560px;margin:15vh auto;padding:0 20px;font:16px/1.6 system-ui,sans-serif;color:#ece6da;background:#07090d">
-        <h1 style="font-weight:500">GameGuide needs JavaScript</h1>
+        <h1 style="font-weight:500">GameGuide: a game guide you can talk to</h1>
+        <p>GameGuide is a free, spoiler-safe game guide. Ask anything about any game and get a live answer researched from wikis, official patch notes and the web, set like a strategy guide. Tell it how far you've got and it stops there, so it won't spoil what you haven't reached.</p>
+        <ul>
+          <li>Spoiler Shield: answers stop where you are in the story.</li>
+          <li>Missables checklist built from your current progress.</li>
+          <li>Live research from wikis, official patch notes and the web.</li>
+          <li>Spoiler-safe share links.</li>
+          <li>PC deal and all-time-low price checks.</li>
+          <li>Discord bot with patch-note alerts.</li>
+        </ul>
+        <p>The chat runs in your browser and needs JavaScript. Turn it on to ask a question and to add the Discord bot to your server.</p>
+        <nav aria-label="Pages">
+          <a href="/#about" style="color:#ece6da;margin-right:18px">About</a>
+          <a href="/#privacy" style="color:#ece6da;margin-right:18px">Privacy</a>
+          <a href="/#terms" style="color:#ece6da;margin-right:18px">Terms</a>
+          <a href="/#contacts" style="color:#ece6da">Contact</a>
+        </nav>
         <p>Featured on <a href="https://launchbuff.com/products/gameguide-f9fwfb" style="color:#ece6da">LaunchBuff</a> and <a href="https://www.producthunt.com/products/gameguide-ai?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-gameguide-ai" style="color:#ece6da">Product Hunt</a>.</p>
-        <p>GameGuide is a spoiler-safe game guide you can talk to. Turn on JavaScript to ask it anything — or add the Discord bot to your server.</p>
       </div>
     </noscript>
     <script type="module" src="/src/main.jsx"></script>

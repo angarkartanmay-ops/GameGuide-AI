@@ -117,6 +117,17 @@ function takeEarly() {
   return p;
 }
 
+// ─── Art for the phone's hero ──────────────────────────────────────────────
+
+/**
+ * The cover the full-bleed hero uses on a phone. The list carries Steam's
+ * 2x capsule (134-264 kB each, which the cover wall wants); behind a heavy
+ * scrim a phone's backdrop does fine on the 1x (47-75 kB), and that is the
+ * difference between the art arriving with the page or long after it. Games
+ * with no 2x file (the showcase's) are already 1x and come back unchanged.
+ */
+export const mobileCover = (g) => String(g?.cover || '').replace(/_2x(?=\.jpg)/, '');
+
 // ─── The line under the hero ───────────────────────────────────────────────
 
 /** 356917 → "357k", 1244028 → "1.24M". */

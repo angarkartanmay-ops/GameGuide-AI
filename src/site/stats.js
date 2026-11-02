@@ -9,8 +9,18 @@ const CACHE_KEY = 'gg.site.stats';
 const CACHE_MS = 10 * 60 * 1000;
 const TIMEOUT_MS = 4000;
 
-/** Below this many players the line stays hidden (raise it if you'd rather wait). */
-export const SHOW_FROM_PLAYERS = 1;
+/**
+ * Each number is shown only once it is worth showing. They are all real, and
+ * a number that is left out is simply left out, never rounded up or replaced.
+ * "29 players" reads as an empty room, while "149 answers researched" does
+ * not, so the line leads with whichever has earned its place and the player
+ * count joins it at SHOW_FROM_PLAYERS. Games only ride along with a number
+ * that is already showing. Raise or lower these as the numbers grow.
+ */
+export const SHOW_FROM_PLAYERS = 100;
+export const SHOW_FROM_ANSWERS = 100;
+export const SHOW_FROM_GAMES = 25;
+const FLOORS = { players: SHOW_FROM_PLAYERS, answers: SHOW_FROM_ANSWERS, games: SHOW_FROM_GAMES };
 
 const isCount = (n) => Number.isSafeInteger(n) && n >= 0;
 
@@ -35,13 +45,14 @@ const part = (n, one, many) => ({ value: formatCount(n), label: n === 1 ? one : 
 
 /**
  * The pieces of the line, in reading order: [{ value: '1,284', label: 'players' }, …].
- * Empty when there's nothing honest to show.
+ * Empty when there's nothing worth showing. `floors` is for tests.
  */
-export function statParts(stats) {
-  if (!stats || stats.players < SHOW_FROM_PLAYERS) return [];
-  const parts = [part(stats.players, 'player', 'players')];
-  if (stats.answers > 0) parts.push(part(stats.answers, 'answer researched', 'answers researched'));
-  if (stats.games > 0) parts.push(part(stats.games, 'game', 'games'));
+export function statParts(stats, floors = FLOORS) {
+  if (!stats) return [];
+  const parts = [];
+  if (stats.players >= floors.players) parts.push(part(stats.players, 'player', 'players'));
+  if (stats.answers >= floors.answers) parts.push(part(stats.answers, 'answer researched', 'answers researched'));
+  if (parts.length && stats.games >= floors.games) parts.push(part(stats.games, 'game', 'games'));
   return parts;
 }
 

@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowUpRight, Check, Copy, Mail, MessageSquare } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, Copy, House, Info, Mail, MessageSquare, Tag } from 'lucide-react';
 import { LINKS, mailto } from '../site/links';
 import { lastSiteGame } from '../site/daily';
 import { gsap, useCalm, useScene } from '../site/motion';
+import usePageMeta from '../site/usePageMeta';
 import SiteNav from './site/SiteNav';
 import SiteFooter from './site/SiteFooter';
 import { GitHubGlyph, LinkedInGlyph, Mark } from './site/bits';
@@ -527,6 +528,40 @@ function Delivery() {
   );
 }
 
+// ─── Not found ─────────────────────────────────────────────────────────────
+
+const WAYS_ON = [
+  { key: 'chat', icon: <MessageSquare size={22} />, label: 'Open GameGuide', text: 'Ask about any game; it stops where you are in the story.', view: 'chat' },
+  { key: 'home', icon: <House size={22} />, label: 'Home page', text: 'Today’s most played games, and how it works.', view: 'landing' },
+  { key: 'about', icon: <Info size={22} />, label: 'About', text: 'How it researches answers, and who builds it.', view: 'about' },
+  { key: 'plans', icon: <Tag size={22} />, label: 'Plans and pricing', text: 'What each plan adds.', view: 'upgrade' },
+  { key: 'contact', icon: <Mail size={22} />, label: 'Contact', text: 'Found a broken link? Tell us where.', view: 'contacts' },
+];
+
+function NotFound() {
+  // The address as it was typed, so a slip is easy to spot. Plain text only.
+  const asked = `${window.location.pathname}${window.location.search}${window.location.hash}`.slice(0, 80);
+  return (
+    <>
+      <p className="s-note s-note--asked">You asked for <code>{asked}</code></p>
+      <ul className="s-channels">
+        {WAYS_ON.map((r) => (
+          <li key={r.key} className="s-channel">
+            <a className="s-channel__main" href={r.view === 'landing' ? '/' : `/#${r.view}`} onClick={goto(r.view)}>
+              <span className="s-channel__icon" aria-hidden="true">{r.icon}</span>
+              <span className="s-channel__body">
+                <span className="s-channel__value">{r.label}</span>
+                <span className="s-channel__text">{r.text}</span>
+              </span>
+              <ArrowUpRight className="s-channel__arrow" size={20} aria-hidden="true" />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 // ─── Shell ─────────────────────────────────────────────────────────────────
 
 const PAGES = {
@@ -571,6 +606,12 @@ const PAGES = {
     lead: 'Questions, partnerships, bug reports or copyright concerns. Pick a channel.',
     Body: Contact,
   },
+  notfound: {
+    title: 'Not found', label: 'Not found',
+    heading: 'No page here.',
+    lead: 'The link may be old, or mistyped. These all work.',
+    Body: NotFound,
+  },
 };
 
 export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
@@ -580,12 +621,9 @@ export default function InfoPage({ kind, onBack, onLogo, onNavigate }) {
   const [game] = useState(lastGame);
   const { Body } = page;
 
-  useEffect(() => {
-    const prev = document.title;
-    document.title = `GameGuide · ${page.title}`;
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    return () => { document.title = prev; };
-  }, [page.title]);
+  // Title, description, canonical and (for a 404) noindex come from site/meta.js.
+  usePageMeta(PAGES[kind] ? kind : 'about');
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [kind]);
 
   // Warm the routes reachable from here, so switching doesn't flash the
   // empty route fallback while the chunk downloads.

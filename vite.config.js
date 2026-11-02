@@ -121,34 +121,77 @@ function fandomProxyPlugin() {
   };
 }
 
-// https://vite.dev/config/
-// /api/game-art in dev — the same resolver the Vercel function uses.
-function gameArtDevPlugin() {
+// The landing page is a lazy chunk, so the browser only learns it needs the
+// chunk (and the animation library behind it) after the entry has downloaded
+// AND run: HTML, then entry, then LandingPage and its imports, in turn. On a
+// phone that is three round trips with the CPU idle between them. This writes
+// the chunk list into index.html's inline script (`/*gg-landing-preload*/`),
+// which asks for them alongside the entry, but only on a visit that will show
+// the landing (the same test the daily-games request uses), so someone going
+// straight to the chat or an info page doesn't pay for it.
+function landingPreloadPlugin() {
+  let base = '/'
   return {
-    name: 'game-art-dev',
-    configureServer(server) {
-      server.middlewares.use('/api/game-art', async (req, res) => {
-        const q = new URL(req.url, 'http://localhost').searchParams.get('q') || '';
-        const { status, body, cacheControl } = await resolveSteamArt(q);
-        res.statusCode = status;
-        res.setHeader('Content-Type', 'application/json');
-        if (cacheControl) res.setHeader('Cache-Control', cacheControl);
-        res.end(JSON.stringify(body));
-      });
-      // /api/trending-games in dev — the landing's daily games.
-      server.middlewares.use('/api/trending-games', async (_req, res) => {
-        const { status, body, cacheControl } = await resolveTrending();
-        res.statusCode = status;
-        res.setHeader('Content-Type', 'application/json');
-        if (cacheControl) res.setHeader('Cache-Control', cacheControl);
-        res.end(JSON.stringify(body));
-      });
+    name: 'landing-preload',
+    apply: 'build',
+    configResolved(config) { base = config.base || '/' },
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const chunks = Object.values(ctx.bundle || {}).filter(c => c.type === 'chunk')
+        const byName = new Map(chunks.map(c => [c.fileName, c]))
+        const landing = chunks.find(c => (c.facadeModuleId || '').split('\\').join('/').endsWith('components/LandingPage.jsx'))
+        const entry = chunks.find(c => c.isEntry)
+        if (!landing || !entry) return html
+        const closure = (start) => {
+          const seen = new Set()
+          const walk = (name) => {
+            if (seen.has(name) || !byName.has(name)) return
+            seen.add(name)
+            byName.get(name).imports.forEach(walk)
+          }
+          walk(start.fileName)
+          return seen
+        }
+        const have = closure(entry)
+        const need = [...closure(landing)].filter(n => !have.has(n))
+        const css = need.flatMap(n => [...(byName.get(n).viteMetadata?.importedCss ?? [])])
+        const urls = [...new Set([...need, ...css])].map(n => base + n)
+        return html.replace('/*gg-landing-preload*/[]', JSON.stringify(urls))
+      },
     },
+  }
+}
+
+// https://vite.dev/config/
+// /api/game-art and /api/trending-games in dev and in `vite preview`: the same
+// resolvers the Vercel functions use. Preview matters because a production
+// build can then be measured locally with the real daily games, not the
+// fallback list a missing endpoint would silently produce.
+function gameArtDevPlugin() {
+  const json = (res, { status, body, cacheControl }) => {
+    res.statusCode = status;
+    res.setHeader('Content-Type', 'application/json');
+    if (cacheControl) res.setHeader('Cache-Control', cacheControl);
+    res.end(JSON.stringify(body));
   };
+  // Steam is asked twice per list; a repeated page load shouldn't ask again.
+  let trending = { at: 0, value: null };
+  const mount = (server) => {
+    server.middlewares.use('/api/game-art', async (req, res) => {
+      const q = new URL(req.url, 'http://localhost').searchParams.get('q') || '';
+      json(res, await resolveSteamArt(q));
+    });
+    server.middlewares.use('/api/trending-games', async (_req, res) => {
+      if (!trending.value || Date.now() - trending.at > 5 * 60_000) trending = { at: Date.now(), value: await resolveTrending() };
+      json(res, trending.value);
+    });
+  };
+  return { name: 'game-art-dev', configureServer: mount, configurePreviewServer: mount };
 }
 
 export default defineConfig({
-  plugins: [react(), fandomProxyPlugin(), gameArtDevPlugin(), searchVerificationPlugin()],
+  plugins: [react(), fandomProxyPlugin(), gameArtDevPlugin(), searchVerificationPlugin(), landingPreloadPlugin()],
   server: {
     proxy: {
       '/api/reddit': {

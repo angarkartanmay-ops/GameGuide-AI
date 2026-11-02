@@ -204,6 +204,67 @@ h1, h2, h3, h4, h5, h6 { font-family: 'Geist', sans-serif; }
 /* Shown for the instant a view's chunk is loading. */
 .route-fallback { min-height: 100dvh; background: var(--bg-color); }
 
+/* The shape of a page while its chunk loads (components/RouteSkeleton). Shapes
+   only, pulsing by opacity: cheap, and still under reduced motion. */
+.route-skeleton { min-height: 100dvh; background: var(--bg-color); }
+.route-skeleton__bar {
+  display: flex; align-items: center; justify-content: space-between; height: 64px;
+  padding-inline: clamp(16px, 4vw, 48px);
+}
+.route-skeleton i, .route-skeleton__body span {
+  display: block; height: 20px; border-radius: 6px;
+  background: color-mix(in srgb, var(--text-primary, #fff) 8%, transparent);
+  animation: route-pulse 1.6s ease-in-out infinite;
+}
+.route-skeleton__body {
+  display: grid; justify-items: start; gap: 16px; max-width: 1200px; margin-inline: auto;
+  padding: clamp(96px, 18vh, 200px) clamp(16px, 4vw, 48px) 0;
+}
+.route-skeleton__body .is-kicker { height: 12px; }
+.route-skeleton__body .is-title { height: 52px; border-radius: 10px; }
+@keyframes route-pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .route-skeleton i, .route-skeleton__body span { animation: none; } }
+
+/* "Add to Home Screen" steps (components/InstallButton): shown where the
+   browser has no install prompt of its own. Plain colours, so it reads on any
+   theme or footer. */
+.gg-install { display: inline-flex; }
+/* Tied to the viewport, not to the button: the button sits wherever its footer
+   row puts it, and a bubble centred on it ran off the edge of a phone. */
+.gg-install__hint {
+  position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 64px); transform: translateX(-50%); z-index: 40;
+  width: min(320px, calc(100vw - 32px)); padding: 14px 48px 14px 16px; border-radius: 14px; text-align: left;
+  background: #12151c; color: #ece6da; font: 14px/1.55 'Geist', system-ui, sans-serif; letter-spacing: 0; text-transform: none;
+  box-shadow: 0 0 0 1px rgba(236, 230, 218, 0.18), 0 24px 50px -20px #000;
+}
+.gg-install__title { margin: 0 0 8px; font-weight: 600; color: #ece6da; }
+.gg-install__hint ol { margin: 0; padding-left: 20px; list-style: decimal; }
+.gg-install__hint li + li { margin-top: 4px; }
+.gg-install__hint svg { display: inline-block; vertical-align: -3px; }
+.gg-install__hint .gg-install__close {
+  position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 44px; height: 44px;
+  padding: 0; border: 0; border-radius: 10px; background: transparent; color: rgba(236, 230, 218, 0.7); cursor: pointer;
+}
+.gg-install__hint .gg-install__close:hover { color: #ece6da; }
+.gg-install__hint .gg-install__close:focus-visible { outline: 2px solid #ece6da; outline-offset: -4px; }
+
+/* When a view cannot load: a way out. Plain colours, so it reads on any theme. */
+.route-error {
+  min-height: 100dvh; display: grid; place-items: center; padding: 0 20px;
+  background: var(--bg-color); color: var(--text-primary, #ece6da);
+}
+.route-error__box { max-width: 520px; }
+.route-error h1 { margin: 0 0 10px; font: 600 clamp(26px, 5vw, 34px)/1.15 'Archivo', 'Geist', system-ui, sans-serif; letter-spacing: -0.02em; }
+.route-error p { margin: 0 0 24px; font: 16px/1.65 'Geist', system-ui, sans-serif; opacity: 0.84; }
+.route-error__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.route-error button {
+  min-height: 44px; padding: 0 20px; border: 1px solid rgba(236, 230, 218, 0.28); border-radius: 10px;
+  background: transparent; color: inherit; font: 500 15px 'Geist', system-ui, sans-serif; cursor: pointer;
+}
+.route-error button:hover { border-color: rgba(236, 230, 218, 0.6); }
+.route-error button.is-primary { border-color: transparent; background: #ece6da; color: #07090d; }
+.route-error button:focus-visible { outline: 2px solid #ece6da; outline-offset: 3px; }
+
 /* Glassmorphism utility used by chat app — keep */
 .glass-panel {
   background: var(--panel-bg);

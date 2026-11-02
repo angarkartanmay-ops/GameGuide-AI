@@ -1,22 +1,42 @@
 import { Component } from 'react';
 import { reportError } from '../utils/analytics';
 
-// Last line of defence: without this, one render error unmounts the whole app
-// and the player is left with a blank page. Styled inline on purpose — if the
-// stylesheet or theme code is what broke, this screen must still read.
-export default class ErrorBoundary extends Component {
-  state = { failed: false };
+const changed = (a = [], b = []) => a.length !== b.length || a.some((v, i) => !Object.is(v, b[i]));
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+// A render error unmounts everything under it. Boundaries exist at three
+// sizes, so one failure costs only what it has to:
+//   * no props    the last line of defence (main.jsx): the whole page is a
+//                 plain "that page broke" screen. Styled inline on purpose:
+//                 if the stylesheet or theme code is what broke, it must
+//                 still read.
+//   * `fallback`  one view, one answer, one landing section: whatever it
+//                 returns is shown in place, and the rest keeps working.
+//                 A function gets { error, reset }.
+//   * `scope`     names the boundary in crash reports.
+// `resetKeys` clears the failure when any value in it changes (a new view, a
+// finished answer), so a boundary is not stuck once what broke it is gone.
+export default class ErrorBoundary extends Component {
+  state = { failed: false, error: null };
+
+  static getDerivedStateFromError(error) {
+    return { failed: true, error };
   }
 
   componentDidCatch(error) {
-    reportError(error);
+    reportError(error, this.props.scope);
   }
+
+  componentDidUpdate(prev) {
+    if (this.state.failed && changed(prev.resetKeys, this.props.resetKeys)) this.reset();
+  }
+
+  reset = () => this.setState({ failed: false, error: null });
 
   render() {
     if (!this.state.failed) return this.props.children;
+    const { fallback } = this.props;
+    if (typeof fallback === 'function') return fallback({ error: this.state.error, reset: this.reset });
+    if (fallback !== undefined) return fallback;
     return (
       <div
         role="alert"

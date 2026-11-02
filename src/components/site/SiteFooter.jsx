@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowUpRight } from 'lucide-react';
 import { LINKS, mailto } from '../../site/links';
+import InstallButton from '../InstallButton';
 import BrandMark from '../BrandMark';
 
 function Ext({ href, children }) {
@@ -59,6 +60,7 @@ export default function SiteFooter({ onNavigate, onStart }) {
             <button type="button" className="s-foot__link" onClick={go('refunds')}>Refunds &amp; cancellation</button>
             <button type="button" className="s-foot__link" onClick={go('delivery')}>Delivery</button>
             <button type="button" className="s-foot__link" onClick={go('contacts')}>Contact</button>
+            <InstallButton className="s-foot__link" />
           </div>
           <div>
             <p className="s-foot__head">Connect</p>

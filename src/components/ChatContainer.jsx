@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
 import ResearchBlock from './codex/ResearchBlock';
 import EmptyState from './codex/EmptyState';
+import ErrorBoundary from './ErrorBoundary';
 
 const NEAR_BOTTOM_PX = 140;
 
@@ -19,6 +20,33 @@ function questionBefore(messages, i) {
     return text;
   }
   return '';
+}
+
+/**
+ * What stands in for one message that failed while drawing. Never the raw
+ * text: Spoiler Shield works in the renderer, so showing the source here
+ * could show what the player asked to have held back. A fresh answer is one
+ * tap away instead.
+ */
+function MessageFailed({ sender, question, onAsk, disabled }) {
+  if (sender === 'user') {
+    return <div className="cx-entry cx-entry--user"><div className="cx-query"><p>This message could not be displayed.</p></div></div>;
+  }
+  return (
+    <article className="cx-entry cx-entry--ai" role="alert">
+      <div className="cx-overline">
+        <span className="cx-mark" aria-hidden="true" />
+        <span>GameGuide</span>
+        <span className="cx-overline__rule" aria-hidden="true" />
+      </div>
+      <p className="cx-prose">This answer could not be displayed.</p>
+      {question && (
+        <div className="cx-actions">
+          <button type="button" className="cx-action" onClick={() => onAsk(question)} disabled={disabled}>Ask again</button>
+        </div>
+      )}
+    </article>
+  );
 }
 
 /**
@@ -74,7 +102,9 @@ export default function ChatContainer({
         aria-label="Conversation"
       >
         {messages.length === 0 && !isLoading && (
-          <EmptyState onAsk={onAsk} onDraft={onDraft} onAttach={onAttach} stealthMode={stealthMode} />
+          <ErrorBoundary scope="empty-state" fallback={<p className="cx-empty__lede">Ask about any game below.</p>}>
+            <EmptyState onAsk={onAsk} onDraft={onDraft} onAttach={onAttach} stealthMode={stealthMode} />
+          </ErrorBoundary>
         )}
         {loadingHistory && (
           <div className="cx-skeleton cx-skeleton--history" aria-label="Loading your conversation">
@@ -83,16 +113,28 @@ export default function ChatContainer({
             <span style={{ width: '76%' }} />
           </div>
         )}
-        {messages.map((msg, i) => (
-          <MessageBubble
-            key={msg.id}
-            message={msg}
-            // The question an answer replies to, for its share link.
-            question={msg.sender === 'ai' ? questionBefore(messages, i) : ''}
-            onFollowUpClick={onFollowUpClick}
-            followUpsDisabled={isLoading}
-          />
-        ))}
+        {messages.map((msg, i) => {
+          const question = msg.sender === 'ai' ? questionBefore(messages, i) : '';
+          return (
+            // One answer that fails to draw is replaced by a short note and a
+            // way to ask again; the rest of the conversation stays. It gets one
+            // more try when the answer finishes streaming, not on every token.
+            <ErrorBoundary
+              key={msg.id}
+              scope="message"
+              resetKeys={[!!msg.streaming]}
+              fallback={() => <MessageFailed sender={msg.sender} question={question} onAsk={onFollowUpClick} disabled={isLoading} />}
+            >
+              <MessageBubble
+                message={msg}
+                // The question an answer replies to, for its share link.
+                question={question}
+                onFollowUpClick={onFollowUpClick}
+                followUpsDisabled={isLoading}
+              />
+            </ErrorBoundary>
+          );
+        })}
         {researching && (
           <ResearchBlock streamStage={streamStage} game={gameName} {...intel} />
         )}

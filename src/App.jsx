@@ -6,6 +6,10 @@ import useAuth from './hooks/useAuth';
 import ThemeTransition from './components/ThemeTransition';
 import { THEME_TRANSITION_DURATION, VARIANTS as FX_VARIANTS } from './theme/transition';
 import usePerfMode from './hooks/usePerfMode';
+import ErrorBoundary from './components/ErrorBoundary';
+import RouteSkeleton from './components/RouteSkeleton';
+import RouteError from './components/RouteError';
+import { readViewFromLocation } from './site/route';
 
 // Each view is its own chunk: the landing no longer ships the chat's markdown
 // and streaming code, and the chat no longer ships GSAP.
@@ -20,22 +24,16 @@ const FINE_POINTER = typeof window !== 'undefined' && window.matchMedia('(pointe
 const SharedAnswer = lazy(() => import('./components/codex/SharedAnswer'));
 const UpgradePage = lazy(() => import('./components/site/UpgradePage'));
 
-// Hash-routable static views. Anything outside this set falls back to landing
-// (so a stale or unknown hash never strands the user on a blank page).
+// Hash-routable static views (see site/route.js for how a URL becomes one).
+// "notfound" is a view too, but never one you navigate to: it is what an
+// address that isn't ours shows, instead of quietly showing the landing page.
 const INFO_VIEWS = new Set(['about', 'terms', 'privacy', 'refunds', 'delivery', 'contacts']);
 const ALL_VIEWS = new Set(['landing', 'chat', 'upgrade', ...INFO_VIEWS]);
 // Shared answers live at #share/<payload>. The payload is case-sensitive
 // base64url, so it's read raw — never lowercased, never rewritten.
 const SHARE_PREFIX = 'share/';
 const rawHash = () => (typeof window === 'undefined' ? '' : (window.location.hash || '').replace(/^#\/?/, ''));
-function readViewFromHash() {
-  if (typeof window === 'undefined') return null;
-  const raw = rawHash();
-  if (raw.startsWith(SHARE_PREFIX)) return 'share';
-  if (raw.toLowerCase().startsWith('upgrade')) return 'upgrade';
-  const hash = raw.toLowerCase();
-  return ALL_VIEWS.has(hash) ? hash : null;
-}
+const readView = () => (typeof window === 'undefined' ? null : readViewFromLocation(window.location, ALL_VIEWS));
 
 // The plans page arrives as #upgrade/<signed token> from /upgrade in Discord,
 // or #upgrade/thanks back from a payment. The token is kept for the visit
@@ -76,8 +74,8 @@ function App() {
   // Initial view: explicit hash wins, else fall back to whether the user has
   // already entered the chat in this session.
   const [view, setView] = useState(() => {
-    const fromHash = readViewFromHash();
-    if (fromHash) return fromHash;
+    const fromUrl = readView();
+    if (fromUrl) return fromUrl;
     return sessionStorage.getItem('gg_entered') === '1' ? 'chat' : 'landing';
   });
   const [shareHash, setShareHash] = useState(rawHash);
@@ -169,8 +167,9 @@ function App() {
   // here so the sync itself never adds history entries — actual navigation
   // (navigate()) does pushState.
   useEffect(() => {
-    // The share payload IS the hash; syncing would erase it.
-    if (view === 'share') return;
+    // The share payload IS the hash; syncing would erase it. A 404 keeps the
+    // address that got it there, so the person can see what was wrong with it.
+    if (view === 'share' || view === 'notfound') return;
     const expected = view === 'landing' ? '' : `#${view}`;
     if (window.location.hash !== expected) {
       const url = `${window.location.pathname}${window.location.search}${expected}`;
@@ -182,7 +181,7 @@ function App() {
   // opening a second share link in the same tab shows the new answer.
   useEffect(() => {
     const onPop = () => {
-      setView(readViewFromHash() || 'landing');
+      setView(readView() || 'landing');
       setShareHash(rawHash());
       setUpgrade(readUpgradeHash());
     };
@@ -202,7 +201,9 @@ function App() {
   const navigate = useCallback((next) => {
     if (!ALL_VIEWS.has(next) || viewRef.current === next) return;
     const hash = next === 'landing' ? '' : `#${next}`;
-    const url = `${window.location.pathname}${window.location.search}${hash}`;
+    // Leaving a 404 for a bad path (/asdf) leaves the bad path behind too.
+    const path = viewRef.current === 'notfound' ? '/' : window.location.pathname;
+    const url = `${path}${window.location.search}${hash}`;
     window.history.pushState({ view: next }, '', url);
     viewRef.current = next;
     setView(next);
@@ -291,7 +292,7 @@ function App() {
         onNavigate={navigate}
       />
     );
-  } else if (INFO_VIEWS.has(view)) {
+  } else if (INFO_VIEWS.has(view) || view === 'notfound') {
     viewBody = (
       <InfoPage
         kind={view}
@@ -327,9 +328,18 @@ function App() {
       {/* The reticle suits the landing; the chat and the info pages are for
           reading and selecting text, so they keep the normal cursor. */}
       {view === 'landing' && FINE_POINTER && <Suspense fallback={null}><Crosshair /></Suspense>}
-      <Suspense fallback={<div className="route-fallback" aria-hidden="true" />}>
-        {viewBody}
-      </Suspense>
+      {/* A view that throws (or whose chunk fails to load) must not take the
+          whole app down: this shows a small way out, and clears itself when
+          the view changes. The root boundary in main.jsx is the last resort. */}
+      <ErrorBoundary
+        scope="route"
+        resetKeys={[view]}
+        fallback={({ reset }) => <RouteError onHome={() => { reset(); goLanding(); }} />}
+      >
+        <Suspense fallback={<RouteSkeleton />}>
+          {viewBody}
+        </Suspense>
+      </ErrorBoundary>
       {fxOverlay}
     </>
   );

@@ -1,25 +1,52 @@
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
 import useDailyGames from '../site/useDailyGames';
+import usePageMeta from '../site/usePageMeta';
 import { achievements } from '../site/achievements';
 import { advance, isTypingTarget } from '../site/konami';
-import { gsap, scrollToId, useCalm, useLenis, useScene, scheduleRefresh } from '../site/motion';
+import { gsap, ScrollTrigger, scrollToId, useCalm, useLenis, useScene, scheduleRefresh } from '../site/motion';
 import SiteNav from './site/SiteNav';
 import SiteFooter from './site/SiteFooter';
 import Achievements from './site/Achievements';
 import Hero from './site/Hero';
+import HowItWorks from './site/HowItWorks';
 import AnswerAnatomy from './site/AnswerAnatomy';
 import ShieldDemo from './site/ShieldDemo';
 import LibraryWall from './site/LibraryWall';
 import CapabilityMenu from './site/CapabilityMenu';
 import WatchtowerDemo from './site/WatchtowerDemo';
 import Closing from './site/Closing';
+import ErrorBoundary from './ErrorBoundary';
 import { track } from '../utils/analytics';
 import '../styles/site.css';
 
 const EXIT_MS = 560;
+const WARM_DELAY_MS = 2500;
 const GAME_KEY = 'gg.site.game.v2';
 const DRAFT_KEY = 'gg.startDraft';
 const INTERACTIVE = 'a, button, input, textarea, select, summary, [role="button"], [role="tab"], [contenteditable="true"]';
+
+/** One landing section failing must not blank the page: it is left out and the rest still works. */
+function Safe({ name, children, fallback = null }) {
+  return <ErrorBoundary scope={`landing:${name}`} fallback={fallback}>{children}</ErrorBoundary>;
+}
+
+/** If the hero itself fails, the headline and the way in survive. */
+function HeroFallback({ onStart }) {
+  return (
+    <section className="s-hero" aria-labelledby="hero-title">
+      <div className="s-hero__frame">
+        <div className="s-hero__inner">
+          <h1 id="hero-title" className="s-hero__title">Ask anything about any game.</h1>
+          <p className="s-hero__sub">Live answers from wikis, patch notes and the web. No spoilers past where you are.</p>
+          <div className="s-hero__actions">
+            <button type="button" className="s-btn s-btn--primary s-btn--lg" onClick={onStart}>Press Start</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 const store = achievements();
 const subscribeCount = (fn) => store.subscribe(fn);
@@ -38,25 +65,55 @@ export default function LandingPage({ onEnter, onNavigate }) {
   const count = useSyncExternalStore(subscribeCount, readCount, readCount);
   const daily = useDailyGames();
 
-  useLenis(!calm);
-
+  // The first paint needs the hero and nothing else. Mounting every section in
+  // that same commit made each layout read (the hero's text fit, the cover
+  // wall's measuring, GSAP's) lay out the WHOLE page: about half a second of
+  // forced reflow on a phone before anything showed. So the rest mounts right
+  // after the hero has painted (idle, at most ~0.6 s later), and the nav can
+  // still jump anywhere in the meantime (see `section`).
+  const [rest, setRest] = useState(false);
+  const restRef = useRef(false);
   useEffect(() => {
-    const prev = document.title;
-    document.title = 'GameGuide — ask anything about any game';
-    return () => { document.title = prev; };
-  }, []);
+    if (!daily.ready || restRef.current) return undefined;
+    const mount = () => { restRef.current = true; setRest(true); };
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(mount, { timeout: 600 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = setTimeout(mount, 200);
+    return () => clearTimeout(id);
+  }, [daily.ready]);
+
+  useLenis(!calm && rest);
+
+  usePageMeta('landing');
 
   // Fonts change heights; re-measure once they land. And fetch the chat's
-  // chunk while the visitor reads, so Press Start opens it at once.
+  // chunk while the visitor reads, so Press Start opens it at once, but only
+  // once the landing itself is in (loaded, then a couple of seconds): started
+  // earlier, those ~100 kB share a phone's connection with the page's own
+  // scripts, fonts and art, and the landing is what arrives late.
   useEffect(() => {
     document.fonts?.ready.then(() => scheduleRefresh(0));
-    const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 2500));
-    const cancel = window.cancelIdleCallback || clearTimeout;
-    const id = idle(() => {
-      import('./codex/CodexShell').catch(() => {});
-      import('./InfoPage').catch(() => {});
-    });
-    return () => cancel(id);
+    let cancel = () => {};
+    const warm = () => {
+      const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 0));
+      const stop = window.cancelIdleCallback || clearTimeout;
+      const id = idle(() => {
+        import('./codex/CodexShell').catch(() => {});
+        import('./InfoPage').catch(() => {});
+      });
+      cancel = () => stop(id);
+    };
+    let timer;
+    const afterLoad = () => { timer = setTimeout(warm, WARM_DELAY_MS); };
+    if (document.readyState === 'complete') afterLoad();
+    else window.addEventListener('load', afterLoad, { once: true });
+    return () => {
+      window.removeEventListener('load', afterLoad);
+      clearTimeout(timer);
+      cancel();
+    };
   }, []);
 
   // Chapter headings rise in as they arrive. Built after the chapters' own
@@ -69,7 +126,7 @@ export default function LandingPage({ onEnter, onNavigate }) {
         scrollTrigger: { trigger: el, start: 'top 85%', once: true },
       });
     });
-  }, [calm]);
+  }, [calm, rest]);
 
   // The info pages open on the last game seen here, so they carry its art.
   const onGame = useCallback((game) => {
@@ -80,9 +137,11 @@ export default function LandingPage({ onEnter, onNavigate }) {
     } catch { /* per-visit nicety only */ }
   }, []);
 
-  const start = useCallback((draft) => {
+  // `draft` is a question to leave typed in the chat's bar; `source` says
+  // which control it came from (only the source is tracked, never the text).
+  const start = useCallback((draft, source = 'library') => {
     if (exiting) return;
-    track('press_start', { from: typeof draft === 'string' ? 'library' : 'button' });
+    track('press_start', { from: typeof draft === 'string' ? source : 'button' });
     if (typeof draft === 'string') {
       try { sessionStorage.setItem(DRAFT_KEY, draft); } catch { /* the chat just opens empty */ }
     }
@@ -91,7 +150,8 @@ export default function LandingPage({ onEnter, onNavigate }) {
     setTimeout(onEnter, EXIT_MS);
   }, [calm, exiting, onEnter]);
 
-  const pick = useCallback((game) => start(`What should I know before starting ${game.name}?`), [start]);
+  const pick = useCallback((game) => start(`What should I know before starting ${game.name}?`, 'library'), [start]);
+  const ask = useCallback((question) => start(question, 'sample'), [start]);
 
   // Enter starts (when nothing else has focus); the Konami code toggles arcade mode.
   useEffect(() => {
@@ -126,9 +186,20 @@ export default function LandingPage({ onEnter, onNavigate }) {
     return () => document.documentElement.removeAttribute('data-arcade');
   }, [arcade]);
 
-  const section = (id) => () => scrollToId(id);
+  // A jump before the rest of the page has mounted mounts it first, lets the
+  // chapters measure (their pins move everything below them), then goes at
+  // once: a smooth scroll started now would be cancelled when smooth scrolling
+  // switches on a moment later, and the page would just stay put.
+  const section = (id) => () => {
+    if (restRef.current) { scrollToId(id); return; }
+    flushSync(() => { restRef.current = true; setRest(true); });
+    requestAnimationFrame(() => {
+      ScrollTrigger.refresh();
+      scrollToId(id, { instant: true });
+    });
+  };
   const links = [
-    { label: 'How it works', onClick: section('anatomy') },
+    { label: 'How it works', onClick: section('how') },
     { label: 'Spoiler Shield', onClick: section('shield') },
     { label: 'Library', onClick: section('library') },
     { label: 'Discord', onClick: section('watchtower') },
@@ -138,7 +209,7 @@ export default function LandingPage({ onEnter, onNavigate }) {
   return (
     <div
       ref={rootRef}
-      className={`site s-landing${exiting ? ' is-exiting' : ''}${calm ? ' is-calm' : ''}`}
+      className={`site s-landing${exiting ? ' is-exiting' : ''}${calm ? ' is-calm' : ''}${daily.ready ? '' : ' is-booting'}`}
       style={{ '--s-game-accent': daily.hero[0].accent }}
     >
       <a className="s-skip" href="#main" onClick={(e) => { e.preventDefault(); scrollToId('main'); }}>Skip to content</a>
@@ -154,17 +225,26 @@ export default function LandingPage({ onEnter, onNavigate }) {
             edge-cached request otherwise) so it never opens on one set of
             games and swaps to another. */}
         {daily.ready
-          ? <Hero games={daily.hero} calm={calm} onStart={() => start()} onGame={onGame} arcade={arcade} />
+          ? (
+            <Safe name="hero" fallback={<HeroFallback onStart={() => start()} />}>
+              <Hero games={daily.hero} calm={calm} onStart={() => start()} onAsk={ask} onShield={section('how')} onGame={onGame} arcade={arcade} />
+            </Safe>
+          )
           : <section className="s-hero is-waiting" aria-busy="true" aria-label="Loading today's games" />}
-        <AnswerAnatomy calm={calm} />
-        <ShieldDemo calm={calm} />
-        <LibraryWall calm={calm} onPick={pick} games={daily.wall} today={daily.source === 'steam'} />
-        <CapabilityMenu calm={calm} />
-        <WatchtowerDemo calm={calm} />
-        <Closing calm={calm} onStart={() => start()} arcade={arcade} />
+        {rest && (
+          <>
+            <Safe name="how"><HowItWorks calm={calm} /></Safe>
+            <Safe name="anatomy"><AnswerAnatomy calm={calm} /></Safe>
+            <Safe name="shield"><ShieldDemo calm={calm} /></Safe>
+            <Safe name="library"><LibraryWall calm={calm} onPick={pick} games={daily.wall} today={daily.source === 'steam'} /></Safe>
+            <Safe name="loadout"><CapabilityMenu calm={calm} /></Safe>
+            <Safe name="watchtower"><WatchtowerDemo calm={calm} /></Safe>
+            <Safe name="closing"><Closing calm={calm} onStart={() => start()} arcade={arcade} /></Safe>
+          </>
+        )}
       </main>
 
-      <SiteFooter onNavigate={onNavigate} onStart={() => start()} />
+      {rest && <SiteFooter onNavigate={onNavigate} onStart={() => start()} />}
       <Achievements />
       {arcade && <div className="s-arcade" aria-hidden="true"><span>Arcade mode · Esc to exit</span></div>}
       <div className="s-wipe" aria-hidden="true" />

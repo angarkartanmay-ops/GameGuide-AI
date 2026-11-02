@@ -7,10 +7,12 @@ import ChatInput from '../ChatInput';
 import PriceBadge from '../PriceBadge';
 import LoadingScreen from '../LoadingScreen';
 import FeedbackButton from '../FeedbackButton';
+import InstallButton from '../InstallButton';
 import CodexBackdrop from './CodexBackdrop';
 import ContextPill from './ContextPill';
 import StealthSweep from './StealthSweep';
 import useGameAmbience from '../../hooks/useGameAmbience';
+import usePageMeta from '../../site/usePageMeta';
 import { latestSpoilerMeta } from '../../utils/gameContext';
 import '../../styles/codex.css';
 
@@ -28,6 +30,7 @@ export default function CodexShell({
     priceActive, priceData, SLASH_COMMANDS, stealthMode, stealthFx, streamStage,
   } = chat;
   const inputRef = useRef(null);
+  usePageMeta('chat');
 
   const ambience = useGameAmbience({ messages, streamStage, isLoading, stealthMode });
   const spoiler = latestSpoilerMeta(messages);
@@ -50,6 +53,16 @@ export default function CodexShell({
     } catch { /* storage blocked: nothing was stashed either */ }
     if (text && text.length <= 200) inputRef.current?.setDraft(text);
   }, []);
+
+  // Someone who opens the chat on a laptop is there to type: once the splash
+  // is gone, the cursor is already in the bar. Touch screens are left alone;
+  // focusing would raise the keyboard over the empty state before anyone
+  // chose to type (a draft from the landing focuses the bar itself).
+  useEffect(() => {
+    if (showLoader) return;
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    inputRef.current?.focus();
+  }, [showLoader]);
 
   const style = ambience.accent ? { '--codex-accent': ambience.accent } : undefined;
 
@@ -123,6 +136,7 @@ export default function CodexShell({
           <button type="button" onClick={() => navigate('about')}>About</button>
           <button type="button" onClick={() => navigate('terms')}>Terms</button>
           <button type="button" onClick={() => navigate('contacts')}>Contact</button>
+          <InstallButton />
           <FeedbackButton sessionId={user?.id || null} inline />
           <span>© 2026 GameGuide-AI</span>
         </nav>

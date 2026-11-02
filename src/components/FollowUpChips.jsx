@@ -57,14 +57,15 @@ export function parseFollowUps(text) {
 /**
  * "Ask next" — the answer's follow-up questions as quiet links. Disabled while
  * a request is running: useChat has no concurrency guard, so a click
- * mid-stream would start a second request on top of the first.
+ * mid-stream would start a second request on top of the first. The empty
+ * state reuses it for the sample questions, under its own `label`.
  */
-export default function FollowUpChips({ followUps, onChipClick, disabled = false }) {
+export default function FollowUpChips({ followUps, onChipClick, disabled = false, label = 'Ask next' }) {
   if (!followUps || followUps.length === 0) return null;
 
   return (
-    <div className="cx-next">
-      <span className="cx-label">Ask next</span>
+    <div className="cx-next" role="group" aria-label={label}>
+      <span className="cx-label" aria-hidden="true">{label}</span>
       <ul>
         {followUps.map((question, index) => (
           <li key={index}>

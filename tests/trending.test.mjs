@@ -7,7 +7,7 @@ import {
   resolveTrending, buildItemsUrl, HERO_COUNT, WALL_COUNT,
 } from '../api/_trending.js';
 import {
-  parseDaily, withAccents, readStored, writeStored, fetchDaily, heroStat, compact,
+  parseDaily, withAccents, readStored, writeStored, fetchDaily, heroStat, compact, mobileCover,
   lastSiteGame, utcDay, PENDING_ACCENT, SITE_GAME_KEY,
 } from '../src/site/daily.js';
 import { isAllowedArtUrl } from '../api/_steamArt.js';
@@ -210,6 +210,15 @@ check('showcase games have no stat', heroStat(HERO_GAMES[0]) === null);
   check('…but not with foreign art', lastSiteGame(mem(JSON.stringify({ appid: 9, name: 'x', accent: '#aabbcc', hero: 'https://evil.example/a.jpg' }))) === HERO_GAMES[0]);
   check('…or a bad accent', lastSiteGame(mem(JSON.stringify({ appid: 9, name: 'x', accent: 'red', hero: liveBody.hero[0].hero }))) === HERO_GAMES[0]);
   check('…or junk', lastSiteGame(mem('{oops')) === HERO_GAMES[0] && lastSiteGame(null) === HERO_GAMES[0]);
+}
+// The phone's hero takes the 1x capsule (a third of the bytes); showcase covers have no 2x to drop.
+{
+  const g = parseDaily(liveBody).hero[0];
+  check('the live cover is the 2x capsule', /library_capsule_2x\.jpg/.test(g.cover));
+  check('the phone gets the 1x capsule from the same folder', mobileCover(g) === g.cover.replace('_2x.jpg', '.jpg') && isAllowedArtUrl(mobileCover(g)));
+  check('a 1x cover is left alone', HERO_GAMES.every(s => mobileCover(s) === s.cover));
+  check('no game, no cover', mobileCover(null) === '' && mobileCover({}) === '');
+  check('the query string stays', mobileCover({ cover: 'https://shared.akamai.steamstatic.com/a/b/library_capsule_2x.jpg?t=1' }) === 'https://shared.akamai.steamstatic.com/a/b/library_capsule.jpg?t=1');
 }
 check('showcase games carry their own art', HERO_GAMES.every(g => isAllowedArtUrl(g.hero) && isAllowedArtUrl(g.cover)) && LIBRARY.every(g => isAllowedArtUrl(g.cover)));
 

@@ -84,14 +84,14 @@ export function useLenis(enabled) {
  * Scroll to a section without touching the URL: the app's hash router reads
  * any "#x" as a page, so in-page anchors would strand a reload.
  */
-export function scrollToId(id) {
+export function scrollToId(id, { instant = false } = {}) {
   const el = typeof document !== 'undefined' ? document.getElementById(id) : null;
   if (!el) return;
   // Both paths honour html's scroll-padding-top, which clears the fixed nav.
   if (lenis) {
-    lenis.scrollTo(el, { duration: 1.3 });
+    lenis.scrollTo(el, instant ? { immediate: true } : { duration: 1.3 });
   } else {
-    el.scrollIntoView({ behavior: readCalm() ? 'auto' : 'smooth', block: 'start' });
+    el.scrollIntoView({ behavior: instant || readCalm() ? 'auto' : 'smooth', block: 'start' });
   }
   // Move focus for keyboard and screen-reader users without a second jump.
   if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');

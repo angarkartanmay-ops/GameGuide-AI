@@ -3,11 +3,15 @@ import { Tag, MapPin, Compass, Image as ImageIcon } from 'lucide-react';
 import { buildShelf, loadRecentGames, coverUrl } from '../../utils/recentGames';
 import { loadSpoilerPrefs } from '../../utils/spoilerPrefs';
 import { resolveGameArt } from '../../utils/gameArt';
+import { SAMPLE_QUESTIONS } from '../../site/sampleQuestions';
+import FollowUpChips from '../FollowUpChips';
 
 /**
  * "What are you playing?" — the first screen of a conversation. The shelf is
  * the player's recent games (with where they are, from Spoiler Shield), then
- * curated picks, so a new player still sees real games to start from.
+ * curated picks, so a new player still sees real games to start from. Under
+ * the lede, the same three sample questions the landing's hero offers; one
+ * tap types it into the bar (never sends it), exactly as on the landing.
  */
 export default function EmptyState({ onAsk, onDraft, onAttach, stealthMode }) {
   const [shelf] = useState(() => buildShelf(loadRecentGames(), loadSpoilerPrefs().progress || {}));
@@ -44,6 +48,8 @@ export default function EmptyState({ onAsk, onDraft, onAttach, stealthMode }) {
       <p className="cx-empty__lede">
         Ask about builds, bosses, patches or prices. Tell me where you are and I&apos;ll keep everything past it hidden.
       </p>
+
+      <FollowUpChips followUps={SAMPLE_QUESTIONS} onChipClick={onDraft} label="Try asking" />
 
       <div className="cx-shelf-head">
         <span>{shelf.some((g) => g.progress) ? 'Pick up where you left off' : 'Start with a game'}</span>

@@ -1,7 +1,7 @@
 {
-  "name": "GameGuide — ask anything about any game",
+  "name": "GameGuide: ask anything about any game",
   "short_name": "GameGuide",
-  "description": "A spoiler-safe game guide you can talk to. Live answers from wikis, patch notes and the web — and it never spoils what you haven't reached.",
+  "description": "A spoiler-safe game guide you can talk to. Live answers from wikis, patch notes and the web. It never spoils what you haven't reached.",
   "id": "/",
   "start_url": "/#chat",
   "scope": "/",
