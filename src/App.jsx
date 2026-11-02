@@ -78,6 +78,13 @@ function App() {
   const [view, setView] = useState(() => {
     const fromHash = readViewFromHash();
     if (fromHash) return fromHash;
+    // Back from a Discord sign-in started on the plans page: return there.
+    try {
+      if (sessionStorage.getItem('gg.afterSignIn') === 'upgrade') {
+        sessionStorage.removeItem('gg.afterSignIn');
+        return 'upgrade';
+      }
+    } catch { /* none */ }
     return sessionStorage.getItem('gg_entered') === '1' ? 'chat' : 'landing';
   });
   const [shareHash, setShareHash] = useState(rawHash);

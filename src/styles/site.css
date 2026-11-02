@@ -1147,6 +1147,8 @@ html[data-arcade] .s-closing__title {
 .s-signin .s-btn { justify-self: start; }
 .s-signin__note, .s-signin__error { grid-column: 1 / -1; margin: 0; font-size: 13.5px; color: var(--s-muted); }
 .s-signin__error { color: #f0a36b; }
+.s-upgrade__connect { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 14px; }
+.s-upgrade__connect p { margin: 0; max-width: 60ch; font-size: 13.5px; line-height: 1.5; color: var(--s-muted); }
 .s-upgrade__controls { display: flex; flex-wrap: wrap; gap: 12px 16px; margin-bottom: 28px; }
 .s-seg {
   display: inline-flex; padding: 4px; gap: 4px; border-radius: 12px;

@@ -118,6 +118,24 @@ export async function startCheckout({ token, plan, interval, rail }) {
   return data.url;
 }
 
+/**
+ * A player signed in on the site (Discord, or Google with Discord linked)
+ * trades their Supabase session for the same one-hour link /upgrade gives.
+ * Rejects with 'sign-in-required', 'no-discord' (signed in, no Discord
+ * connected yet) or another API error code.
+ */
+export async function webLink(accessToken) {
+  if (!API) throw new Error('closed');
+  const res = await fetch(`${API}/api/web-link`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_token: accessToken }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || typeof data.token !== 'string') throw new Error(data.error || `web-link ${res.status}`);
+  return data.token;
+}
+
 /** Email sign-in for test / review accounts; resolves to an upgrade token. */
 export async function signIn(email, password) {
   if (!API) throw new Error('closed');
@@ -135,6 +153,7 @@ export async function signIn(email, password) {
 export const CHECKOUT_ERRORS = {
   'link-expired': 'This upgrade link has expired. Run /upgrade in Discord for a fresh one.',
   'needs-server': 'Open /upgrade from inside the server you want to upgrade, so the link knows which server it is.',
+  'no-discord': 'Connect your Discord account first, so the plan goes to the right person.',
   'already-base': 'You already have Base. Pick Pro to move up; Base then stops renewing on its own.',
   'already-pro': 'You already have Pro. To go yearly, cancel the monthly plan from your receipt email and pick yearly once it ends. Or go Lifetime now.',
   'already-lifetime': 'You already have Pro Lifetime, so there is nothing more to buy. Thank you!',

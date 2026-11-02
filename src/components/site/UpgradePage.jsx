@@ -3,8 +3,9 @@ import { ArrowLeft, Check, Lock, ShieldCheck } from 'lucide-react';
 import { LINKS, mailto } from '../../site/links';
 import { lastSiteGame } from '../../site/daily';
 import {
-  PLANS, money, yearlySaving, readUpgradeToken, billingOpen, fetchPlans, startCheckout, signIn, CHECKOUT_ERRORS,
+  PLANS, money, yearlySaving, readUpgradeToken, billingOpen, fetchPlans, startCheckout, signIn, webLink, CHECKOUT_ERRORS,
 } from '../../site/pricing';
+import { supabase } from '../../services/supabaseClient';
 import { gsap, useCalm, useScene } from '../../site/motion';
 import SiteNav from './SiteNav';
 import SiteFooter from './SiteFooter';
@@ -82,6 +83,10 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
   // /upgrade from (payment providers review the checkout this way).
   const [signedIn, setSignedIn] = useState('');
   const [form, setForm] = useState({ open: false, email: '', password: '', busy: false, error: '' });
+  // A player who signed in on the site (Discord, or Google with Discord
+  // linked) is recognised without running /upgrade in Discord.
+  const [siteSession, setSiteSession] = useState(null);
+  const [needsDiscord, setNeedsDiscord] = useState(false);
   const token = signedIn || linkToken;
 
   const buyer = useMemo(() => readUpgradeToken(token), [token]);
@@ -93,6 +98,35 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
     window.scrollTo({ top: 0, behavior: 'instant' });
     return () => { document.title = prev; };
   }, []);
+
+  useEffect(() => {
+    if (linkToken || !billingOpen()) return undefined;
+    let alive = true;
+    const trade = (session) => {
+      if (!alive) return;
+      setSiteSession(session || null);
+      if (!session) return;
+      webLink(session.access_token).then((t) => {
+        if (!alive) return;
+        try { sessionStorage.setItem('gg.upgradeToken', t); } catch { /* still linked for this view */ }
+        setSignedIn(t);
+        setNeedsDiscord(false);
+      }).catch((e) => { if (alive && e.message === 'no-discord') setNeedsDiscord(true); });
+    };
+    supabase.auth.getSession().then(({ data }) => trade(data?.session)).catch(() => {});
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => { if (event === 'SIGNED_IN') trade(session); });
+    return () => { alive = false; sub?.subscription?.unsubscribe(); };
+  }, [linkToken]);
+
+  const connectDiscord = async () => {
+    setError('');
+    try { sessionStorage.setItem('gg.afterSignIn', 'upgrade'); } catch { /* the page just opens on the landing */ }
+    const options = { redirectTo: `${window.location.origin}/` };
+    const { error: err } = siteSession
+      ? await supabase.auth.linkIdentity({ provider: 'discord', options })
+      : await supabase.auth.signInWithOAuth({ provider: 'discord', options });
+    if (err) setError(/not enabled|unsupported/i.test(err.message) ? 'Discord sign-in is not switched on yet. Run /upgrade in Discord instead.' : 'Could not start the Discord sign-in. Please try again.');
+  };
 
   // Live prices, open payment methods and the buyer's current plan.
   useEffect(() => {
@@ -253,6 +287,18 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
                   )}
                 </p>
               )}
+              {!linked && billingOpen() && (
+                <div className="s-upgrade__connect">
+                  <button type="button" className="s-btn s-btn--primary s-btn--sm" onClick={connectDiscord}>
+                    {siteSession && needsDiscord ? 'Connect your Discord' : 'Continue with Discord'}
+                  </button>
+                  <p>
+                    {siteSession && needsDiscord
+                      ? 'You are signed in, but no Discord account is connected yet. Connect it so the plan goes to the right person.'
+                      : 'Sign in with Discord to buy without opening the bot. Your plan is tied to your Discord account, whichever email you use.'}
+                  </p>
+                </div>
+              )}
               {!linked && form.open && (
                 <form className="s-signin" onSubmit={submitSignIn} aria-label="Sign in with email">
                   <label>
@@ -308,6 +354,12 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
             {railKey === 'paypal' && inIndia() && (
               <p className="s-upgrade__note" data-intro>
                 PayPal does not accept payments from PayPal accounts registered in India. Paying from India? Use UPI &amp; Indian cards.
+              </p>
+            )}
+
+            {live && !inIndia() && !rails.paypal && !rails.card && rails.upi && (
+              <p className="s-upgrade__note" data-intro>
+                Payments are in Indian rupees for now (UPI, netbanking and Indian cards). Payments from outside India are coming. GameGuide is free to use meanwhile.
               </p>
             )}
 
@@ -431,7 +483,9 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
               <p><strong>How do I cancel?</strong> From the link in your receipt email. The plan stays on until the end of the period you paid for, then you are back on Free. Nothing else changes.</p>
               <p><strong>Base or Pro?</strong> Both raise the daily limit and skip the queue when the free pool is full. Base answers with the same models as Free. Pro also sends hard questions to the most accurate model first, and gives more than three times the messages and four times the screenshots.</p>
               <p><strong>Moving from Base to Pro?</strong> Buy Pro here. It starts at once and your Base plan stops renewing on its own. Base days already paid for are not refunded.</p>
-              <p><strong>How do I pay?</strong> With PayPal (or a card through PayPal) anywhere in the world, or with UPI, netbanking and Indian cards in rupees. Payments are handled by the payment provider; GameGuide never sees your card or UPI details.</p>
+              <p><strong>How do I pay?</strong> {rails.paypal
+                ? 'With PayPal (or a card through PayPal) anywhere in the world, or with UPI, netbanking and Indian cards in rupees.'
+                : 'With UPI, netbanking or an Indian card, in rupees. Payments from outside India are not open yet.'} Payments are handled by the payment provider; GameGuide never sees your card or UPI details.</p>
               <p><strong>Monthly or yearly?</strong> Yearly costs ten months for twelve. Lifetime is a single payment for Pro, for good.</p>
               <p><strong>Something went wrong?</strong> Write to <a className="s-a" href={mailto('GameGuide plan question')}>{LINKS.email}</a>.</p>
             </section>

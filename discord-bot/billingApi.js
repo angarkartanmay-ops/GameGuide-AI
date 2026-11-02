@@ -31,8 +31,22 @@ const { lemonConfig, lemonOffers, createLemonCheckout } = require('./billing-lem
 const { razorpayConfig, razorpayOffers, createCheckout: createRazorpayCheckout } = require('./billing-razorpay');
 const { paypalConfig, paypalOffers, createPaypalCheckout } = require('./billing-paypal');
 const { loadMembership } = require('./membership');
+const { isSnowflake } = require('./billing-core');
 
 const COOLDOWN_MS = 8_000;
+
+/**
+ * The Discord id of a website user, from the Discord identity Supabase Auth
+ * verified at sign-in (Discord itself vouched for it), or null. An email is
+ * never used for this: anyone can type an email, and a Google address is
+ * often not the one on the Discord account.
+ */
+function discordIdOf(user) {
+  const identity = (user?.identities || []).find(i => i?.provider === 'discord');
+  if (!identity) return null;
+  const d = identity.identity_data || {};
+  return [d.provider_id, d.sub, identity.id].map(v => (v == null ? '' : String(v))).find(isSnowflake) || null;
+}
 
 /** Which ways to pay are open, and what each can sell. */
 function availableRails(env = process.env) {
@@ -62,6 +76,10 @@ const sells = (rail, plan, interval) => !!rail && rail.offers.some(o => o.plan =
  */
 function createBillingApi({
   supabase, env = process.env, checkQuota, creators = {}, now = () => Date.now(), log = console,
+  verifyWebUser = async (accessToken) => {
+    const { data, error } = await supabase.auth.getUser(accessToken);
+    return error ? null : data?.user || null;
+  },
 } = {}) {
   const secret = () => (env.UPGRADE_LINK_SECRET || '').trim();
   const site = () => siteUrl(env);
@@ -222,24 +240,52 @@ function createBillingApi({
     return res.json({ token });
   }
 
-  return { plans, checkout, reviewLogin, cors, availableRails: () => availableRails(env) };
+  // ── Website sign-in ─────────────────────────────────────────────────────
+  // A player signed in on the site (Discord, or Google with Discord linked)
+  // gets the same one-hour link /upgrade would have given them, so they can
+  // open the plans page straight from the site. The id comes from the Discord
+  // identity Supabase verified, never from the request body.
+  async function webLink(req, res) {
+    const b = req.body && typeof req.body === 'object' ? req.body : {};
+    const accessToken = typeof b.access_token === 'string' ? b.access_token : '';
+    if (!accessToken || accessToken.length > 4096) return res.status(401).json({ error: 'sign-in-required' });
+    let user;
+    try {
+      user = await verifyWebUser(accessToken);
+    } catch (e) {
+      log.error(`[upgrade] web sign-in check failed: ${e.message}`);
+      return res.status(502).json({ error: 'provider-unavailable' });
+    }
+    if (!user) return res.status(401).json({ error: 'sign-in-required' });
+    const userId = discordIdOf(user);
+    if (!userId) return res.status(409).json({ error: 'no-discord' });
+    const d = { ...(user.identities || []).find(i => i?.provider === 'discord')?.identity_data, ...user.user_metadata };
+    const token = createUpgradeToken({ userId, guildId: null, name: d.custom_claims?.global_name || d.full_name || d.name || '' }, { secret: secret(), now: now() });
+    if (!token) return res.status(500).json({ error: 'not-available' });
+    log.log(`[upgrade] website sign-in linked user=${userId}`);
+    return res.json({ token });
+  }
+
+  return { plans, checkout, reviewLogin, webLink, cors, availableRails: () => availableRails(env) };
 }
 
 /** Mount the routes. Off unless UPGRADE_LINK_SECRET is set (nothing to verify links with). */
-function mountBillingApi(app, { supabase, checkQuota, guard = (_req, _res, next) => next(), env = process.env, creators } = {}) {
+function mountBillingApi(app, { supabase, checkQuota, guard = (_req, _res, next) => next(), env = process.env, creators, verifyWebUser } = {}) {
   if (!(env.UPGRADE_LINK_SECRET || '').trim()) {
     console.log('[upgrade] plans API off (set UPGRADE_LINK_SECRET to enable /upgrade links)');
     return false;
   }
-  const api = createBillingApi({ supabase, env, checkQuota, creators });
+  const api = createBillingApi({ supabase, env, checkQuota, creators, verifyWebUser });
   app.options('/api/plans', api.cors);
   app.options('/api/checkout', api.cors);
   app.options('/api/review-login', api.cors);
+  app.options('/api/web-link', api.cors);
   app.get('/api/plans', guard, api.cors, (req, res) => api.plans(req, res));
   app.post('/api/checkout', guard, api.cors, (req, res) => api.checkout(req, res));
   app.post('/api/review-login', guard, api.cors, (req, res) => api.reviewLogin(req, res));
+  app.post('/api/web-link', guard, api.cors, (req, res) => api.webLink(req, res));
   console.log('[upgrade] plans API on → GET /api/plans, POST /api/checkout');
   return true;
 }
 
-module.exports = { availableRails, createBillingApi, mountBillingApi };
+module.exports = { availableRails, createBillingApi, mountBillingApi, discordIdOf };

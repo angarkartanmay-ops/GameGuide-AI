@@ -282,5 +282,41 @@ const NOW = 1_800_000_000_000;
   await Promise.all([new Promise(r => s1.close(r)), new Promise(r => s2.close(r))]);
 }
 
+// ═══ website sign-in → plans page ═════════════════════════════════════════
+{
+  const D = '1499466040990634190';   // past 2^53 on purpose: must stay a string
+  const users = {
+    discord: { identities: [{ provider: 'google', identity_data: { sub: 'g-1' } }, { provider: 'discord', identity_data: { provider_id: D, full_name: 'Tanmay' } }], email: 'a@example.com' },
+    google: { identities: [{ provider: 'google', identity_data: { sub: 'g-2' } }], email: 'angarkartanmay@gmail.com' },
+    junk: { identities: [{ provider: 'discord', identity_data: { provider_id: 'not-a-snowflake' }, id: 'x' }] },
+  };
+  const verifyWebUser = async (t) => { if (t === 'boom') throw new Error('supabase down'); return users[t] || null; };
+  const app = express();
+  app.use(express.json());
+  mountBillingApi(app, { supabase: {}, env: { UPGRADE_LINK_SECRET: SECRET }, checkQuota: async () => ({}), verifyWebUser });
+  const srv = await new Promise(r => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
+  const post = async (body) => {
+    const res = await fetch(`http://127.0.0.1:${srv.address().port}/api/web-link`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    return { status: res.status, json: await res.json().catch(() => null) };
+  };
+  const ok = await post({ access_token: 'discord', userId: '999999999999999999' });
+  const who = link.verifyUpgradeToken(ok.json?.token, { secret: SECRET });
+  check('a site user with a Discord identity gets a plans link', ok.status === 200 && !!who);
+  check('…for the Discord id Supabase verified, exact past 2^53, whatever the body claims', who?.userId === D && who.guildId === null);
+  check('the name comes from the Discord profile', who?.name === 'Tanmay');
+  const g = await post({ access_token: 'google' });
+  check('a Google-only user is asked to connect Discord, never matched by email', g.status === 409 && g.json?.error === 'no-discord');
+  check('a Discord identity without a real id is refused', (await post({ access_token: 'junk' })).json?.error === 'no-discord');
+  check('no token, a bad token and an oversized token are 401', (await post({})).status === 401 && (await post({ access_token: 'nope' })).status === 401 && (await post({ access_token: 'x'.repeat(5000) })).status === 401);
+  const down = await post({ access_token: 'boom' });
+  check('an auth outage is a generic 502', down.status === 502 && JSON.stringify(down.json) === '{"error":"provider-unavailable"}');
+  check('the link is off without the link secret', await (async () => {
+    const off = express(); off.use(express.json());
+    return mountBillingApi(off, { supabase: {}, env: {}, checkQuota: async () => ({}), verifyWebUser }) === false;
+  })());
+  srv.closeAllConnections?.();
+  await new Promise(r => srv.close(r));
+}
+
 console.log(`upgrade: ${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
