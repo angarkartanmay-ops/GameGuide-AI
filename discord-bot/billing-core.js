@@ -57,6 +57,11 @@ const isFuture = (iso, now = Date.now()) => !!iso && Date.parse(iso) > now;
 // Every write the webhooks make, behind plain async methods, so the rules
 // below are testable against an in-memory fake.
 
+// Discord ids are 64-bit numbers. PostgREST sends a bigint column as a JSON
+// number, which JavaScript rounds past 2^53 (…634190 reads back as …634200),
+// so every id that is READ is cast to text in the select. Without this a
+// cancel, renewal or refund wrote to a made-up neighbouring account and left
+// the real customer's plan untouched.
 function supabaseRepo(supabase) {
   const now = () => new Date().toISOString();
   const must = (error, what) => { if (error) throw new Error(`${what}: ${error.message}`); };
@@ -87,14 +92,14 @@ function supabaseRepo(supabase) {
     },
     async getUser(userId) {
       const { data, error } = await supabase.from('discord_entitlements')
-        .select('user_id, tier, status, source, provider_ref, current_period_end')
+        .select('user_id::text, tier, status, source, provider_ref, current_period_end')
         .eq('user_id', String(userId)).maybeSingle();
       must(error, 'read entitlement');
       return data || null;
     },
     async getUserByRef(ref) {
       const { data, error } = await supabase.from('discord_entitlements')
-        .select('user_id, tier, status, source, provider_ref, current_period_end').eq('provider_ref', ref).maybeSingle();
+        .select('user_id::text, tier, status, source, provider_ref, current_period_end').eq('provider_ref', ref).maybeSingle();
       must(error, 'read entitlement by ref');
       return data || null;
     },
@@ -107,13 +112,13 @@ function supabaseRepo(supabase) {
     },
     async getGuild(guildId) {
       const { data, error } = await supabase.from('discord_premium_servers')
-        .select('guild_id, granted_by, provider_ref, expires_at').eq('guild_id', String(guildId)).maybeSingle();
+        .select('guild_id::text, granted_by::text, provider_ref, expires_at').eq('guild_id', String(guildId)).maybeSingle();
       must(error, 'read server plan');
       return data || null;
     },
     async getGuildByRef(ref) {
       const { data, error } = await supabase.from('discord_premium_servers')
-        .select('guild_id, granted_by, provider_ref, expires_at').eq('provider_ref', ref).maybeSingle();
+        .select('guild_id::text, granted_by::text, provider_ref, expires_at').eq('provider_ref', ref).maybeSingle();
       must(error, 'read server plan by ref');
       return data || null;
     },
