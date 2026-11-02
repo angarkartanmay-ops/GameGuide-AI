@@ -80,9 +80,11 @@ export default function LandingPage({ onEnter, onNavigate }) {
     } catch { /* per-visit nicety only */ }
   }, []);
 
-  const start = useCallback((draft) => {
+  // `draft` is a question to leave typed in the chat's bar; `source` says
+  // which control it came from (only the source is tracked, never the text).
+  const start = useCallback((draft, source = 'library') => {
     if (exiting) return;
-    track('press_start', { from: typeof draft === 'string' ? 'library' : 'button' });
+    track('press_start', { from: typeof draft === 'string' ? source : 'button' });
     if (typeof draft === 'string') {
       try { sessionStorage.setItem(DRAFT_KEY, draft); } catch { /* the chat just opens empty */ }
     }
@@ -91,7 +93,8 @@ export default function LandingPage({ onEnter, onNavigate }) {
     setTimeout(onEnter, EXIT_MS);
   }, [calm, exiting, onEnter]);
 
-  const pick = useCallback((game) => start(`What should I know before starting ${game.name}?`), [start]);
+  const pick = useCallback((game) => start(`What should I know before starting ${game.name}?`, 'library'), [start]);
+  const ask = useCallback((question) => start(question, 'sample'), [start]);
 
   // Enter starts (when nothing else has focus); the Konami code toggles arcade mode.
   useEffect(() => {
@@ -154,7 +157,7 @@ export default function LandingPage({ onEnter, onNavigate }) {
             edge-cached request otherwise) so it never opens on one set of
             games and swaps to another. */}
         {daily.ready
-          ? <Hero games={daily.hero} calm={calm} onStart={() => start()} onGame={onGame} arcade={arcade} />
+          ? <Hero games={daily.hero} calm={calm} onStart={() => start()} onAsk={ask} onGame={onGame} arcade={arcade} />
           : <section className="s-hero is-waiting" aria-busy="true" aria-label="Loading today's games" />}
         <AnswerAnatomy calm={calm} />
         <ShieldDemo calm={calm} />

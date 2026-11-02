@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pause, Play, CornerDownLeft, ArrowUpRight } from 'lucide-react';
 import { LINKS } from '../../site/links';
 import { heroStat } from '../../site/daily';
+import { SAMPLE_QUESTIONS } from '../../site/sampleQuestions';
 import { gsap, useScene } from '../../site/motion';
 import { HudCorners } from './bits';
 import LiveCount from './LiveCount';
@@ -48,8 +49,10 @@ function Stat({ game }) {
  * day's six games (src/site/daily.js). The active tab's fill is a CSS
  * animation and doubles as the timer: when it ends, the next game comes in.
  * It pauses off-screen, on request, and never runs for calm pages.
+ * Under the buttons, three sample questions: one tap opens the chat with the
+ * question already typed (`onAsk`), never sent on the player's behalf.
  */
-export default function Hero({ games, calm, onStart, onGame, arcade }) {
+export default function Hero({ games, calm, onStart, onAsk, onGame, arcade }) {
   const rootRef = useRef(null);
   const nameRef = useRef(null);
   const lineRef = useRef(null);
@@ -60,6 +63,9 @@ export default function Hero({ games, calm, onStart, onGame, arcade }) {
   const [paused, setPaused] = useState(false);
   const [onScreen, setOnScreen] = useState(true);
   const game = games[idx] || games[0];
+  // The headline ends in a full stop; a name that already ends in one
+  // ("R.E.P.O.") or in "!" / "?" must not get a second.
+  const stop = /[.!?…]$/.test(game.name) ? '' : '.';
 
   const go = (n) => {
     const next = (n + games.length) % games.length;
@@ -174,8 +180,8 @@ export default function Hero({ games, calm, onStart, onGame, arcade }) {
               <span className="s-line"><span>Ask anything about</span></span>
               <span className="s-line">
                 <span ref={lineRef} className="s-hero__name-line">
-                  <span className="s-hero__game" ref={nameRef} />.
-                  <span ref={measureRef} className="s-hero__game s-hero__measure">{game.name}.</span>
+                  <span className="s-hero__game" ref={nameRef} />{stop}
+                  <span ref={measureRef} className="s-hero__game s-hero__measure">{game.name}{stop}</span>
                 </span>
               </span>
             </span>
@@ -193,6 +199,13 @@ export default function Hero({ games, calm, onStart, onGame, arcade }) {
               Add to Discord
             </a>
           </div>
+          {onAsk && (
+            <div className="s-hero__asks" data-intro role="group" aria-label="Try a sample question">
+              {SAMPLE_QUESTIONS.map((q) => (
+                <button key={q} type="button" className="s-ask" onClick={() => onAsk(q)}>{q}</button>
+              ))}
+            </div>
+          )}
           <div data-intro><LiveCount /></div>
         </div>
 
