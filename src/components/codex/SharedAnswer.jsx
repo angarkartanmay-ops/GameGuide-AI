@@ -6,6 +6,7 @@ import CodexBackdrop from './CodexBackdrop';
 import { decodeShare } from '../../utils/share';
 import { resolveGameArt, firstLoadable, backdropCandidates, sampleAccent } from '../../utils/gameArt';
 import { track } from '../../utils/analytics';
+import usePageMeta from '../../site/usePageMeta';
 import '../../styles/codex.css';
 
 /**
@@ -32,16 +33,12 @@ export default function SharedAnswer({ encoded, onAsk, onHome }) {
     return () => { cancelled = true; };
   }, [encoded]);
 
-  useEffect(() => {
-    const prev = document.title;
-    document.title = 'Shared answer · GameGuide';
-    return () => { document.title = prev; };
-  }, []);
-
   // Dress the page in the game's art, same as the chat does. The name came
   // from the link, but /api/game-art only ever puts it in a query string to
   // a fixed host, so a crafted one can't point the lookup anywhere else.
   const game = state.share?.g || null;
+  // Never indexed (see site/meta.js); the tab title names the game when the link says which.
+  usePageMeta('share', game ? { title: `Shared answer: ${String(game).slice(0, 40)} | GameGuide` } : undefined);
   useEffect(() => {
     if (!game) return undefined;
     let cancelled = false;

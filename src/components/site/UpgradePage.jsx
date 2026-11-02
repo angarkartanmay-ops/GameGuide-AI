@@ -6,6 +6,7 @@ import {
   PLANS, money, yearlySaving, readUpgradeToken, billingOpen, fetchPlans, startCheckout, signIn, CHECKOUT_ERRORS,
 } from '../../site/pricing';
 import { gsap, useCalm, useScene } from '../../site/motion';
+import usePageMeta from '../../site/usePageMeta';
 import SiteNav from './SiteNav';
 import SiteFooter from './SiteFooter';
 import '../../styles/site.css';
@@ -87,12 +88,8 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
   const buyer = useMemo(() => readUpgradeToken(token), [token]);
   const expired = !!buyer && buyer.exp * 1000 <= now;
 
-  useEffect(() => {
-    const prev = document.title;
-    document.title = 'GameGuide · Plans';
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    return () => { document.title = prev; };
-  }, []);
+  usePageMeta('upgrade');
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, []);
 
   // Live prices, open payment methods and the buyer's current plan.
   useEffect(() => {

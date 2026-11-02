@@ -1,12 +1,75 @@
 import React, { useRef, useState } from 'react';
-import { Hash, ArrowUpRight } from 'lucide-react';
+import { Hash, ArrowUpRight, ShieldCheck } from 'lucide-react';
 import { LINKS } from '../../site/links';
+import { HOW_DEMO } from '../../site/showcase';
 import { achievements, unlockWhenSeen } from '../../site/achievements';
 import { gsap, ScrollTrigger, useScene } from '../../site/motion';
 import { ChapterHead, Mark } from './bits';
 
 const COMMAND = 'Elden Ring';
 const ALL = 5;
+
+/**
+ * Discord's own spoiler: the bot wraps what the Shield holds back in
+ * ||double bars||, which Discord shows as a dark bar until you click it.
+ * Same keys as the chat's spoilers: Enter or Space.
+ *
+ * While it is hidden the text is not text in the page at all: it is drawn
+ * from `data-text` by CSS (.s-dsp::before), so a screen reader hears only the
+ * label and never the spoiler, and the label does not have to match words
+ * nobody can see. Opening swaps in the real text.
+ */
+function DiscordSpoiler({ text }) {
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen((o) => !o);
+  return (
+    <span
+      className={`s-dsp${open ? ' is-open' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
+      aria-label={open ? undefined : 'Spoiler, hidden. Press to reveal.'}
+      data-text={open ? undefined : text}
+      onClick={toggle}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } }}
+    >
+      {open ? text : null}
+    </span>
+  );
+}
+
+/**
+ * What a Shielded answer looks like in a channel: an @mention, the reply, a
+ * spoiler bar over the late-game line, and the footer the bot really adds
+ * ("Spoilers hidden past: …", `shieldLine` in discord-bot/index.js). An
+ * illustration, labelled as one, in the same style as the server beside it.
+ */
+function DiscordReply() {
+  return (
+    <figure className="s-dcreply">
+      <div className="s-dcreply__feed" role="group" aria-label="Example: a GameGuide reply in Discord with the late-game line behind a spoiler bar">
+        <div className="s-msg is-in">
+          <span className="s-msg__avatar">M</span>
+          <div>
+            <p className="s-msg__who">Mira <span>Today at 18:09</span></p>
+            <p className="s-msg__text"><span className="s-msg__mention">@GameGuide</span> {HOW_DEMO.question.charAt(0).toLowerCase() + HOW_DEMO.question.slice(1)}</p>
+          </div>
+        </div>
+        <div className="s-msg is-in">
+          <span className="s-msg__avatar is-bot"><Mark size="sm" /></span>
+          <div>
+            <p className="s-msg__who">GameGuide <span className="s-msg__app">App</span> <span>Today at 18:09</span></p>
+            <p className="s-msg__text">
+              {HOW_DEMO.gist} Later on, <DiscordSpoiler text="he turns out to be Morgott, the Omen King, in disguise" />.
+            </p>
+            <p className="s-msg__sub"><ShieldCheck size={12} aria-hidden="true" />Spoilers hidden past: {HOW_DEMO.where}</p>
+          </div>
+        </div>
+      </div>
+      <figcaption>An example reply. In Discord the spoiler arrives as a bar; click it to look.</figcaption>
+    </figure>
+  );
+}
 
 /**
  * Chapter 05. Watchtower inside a server: someone runs /watch, the bot
@@ -58,6 +121,7 @@ export default function WatchtowerDemo({ calm }) {
             <li><span>Deals</span> post at an all-time low or 50%+ off, and never twice for the same price.</li>
             <li><span>Also</span> @mention it or use its slash commands for the same answers as the web.</li>
           </ul>
+          <DiscordReply />
           <div className="s-watch__cta">
             <a className="s-btn s-btn--primary" href={LINKS.discordInvite} target="_blank" rel="noopener noreferrer">
               Add to Discord

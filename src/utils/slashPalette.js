@@ -52,3 +52,18 @@ export function selectionAction(cmd, typed = '') {
 export function usageFor(cmd) {
   return PALETTE_META[cmd?.trigger]?.usage || '';
 }
+
+/**
+ * Should this keydown carry the player into the command bar? A bare "/"
+ * pressed anywhere that isn't already a text field, with no shortcut
+ * modifier and no modal open. The caller moves focus and lets the keystroke
+ * through, so the "/" is typed into the bar and the command list opens;
+ * that is why this never asks for preventDefault.
+ */
+export function wantsSlashFocus(e, modalOpen = false) {
+  if (!e || e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.isComposing || e.defaultPrevented) return false;
+  if (modalOpen) return false;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(String(t.tagName || '')))) return false;
+  return true;
+}

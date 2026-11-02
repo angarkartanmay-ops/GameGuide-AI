@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pause, Play, CornerDownLeft, ArrowUpRight } from 'lucide-react';
 import { LINKS } from '../../site/links';
-import { heroStat } from '../../site/daily';
+import { heroStat, mobileCover } from '../../site/daily';
 import { SAMPLE_QUESTIONS } from '../../site/sampleQuestions';
 import { gsap, useScene } from '../../site/motion';
 import { HudCorners } from './bits';
@@ -12,7 +12,7 @@ const MOBILE_MQ = '(max-width: 767px)';
 function ArtLayer({ game, ready, onReady, priority }) {
   return (
     <picture className={`s-hero__layer${ready ? ' is-ready' : ''}`}>
-      <source media={MOBILE_MQ} srcSet={game.cover} />
+      <source media={MOBILE_MQ} srcSet={mobileCover(game)} />
       <img
         src={game.hero}
         alt=""
@@ -49,10 +49,12 @@ function Stat({ game }) {
  * day's six games (src/site/daily.js). The active tab's fill is a CSS
  * animation and doubles as the timer: when it ends, the next game comes in.
  * It pauses off-screen, on request, and never runs for calm pages.
- * Under the buttons, three sample questions: one tap opens the chat with the
- * question already typed (`onAsk`), never sent on the player's behalf.
+ * Above the headline, the "Spoiler-safe: ON" badge (`onShield` scrolls to the
+ * explainer). Under the buttons, three sample questions: one tap opens the
+ * chat with the question already typed (`onAsk`), never sent on the player's
+ * behalf.
  */
-export default function Hero({ games, calm, onStart, onAsk, onGame, arcade }) {
+export default function Hero({ games, calm, onStart, onAsk, onShield, onGame, arcade }) {
   const rootRef = useRef(null);
   const nameRef = useRef(null);
   const lineRef = useRef(null);
@@ -115,7 +117,7 @@ export default function Hero({ games, calm, onStart, onAsk, onGame, arcade }) {
     const t = setTimeout(() => {
       const after = games[(idx + 1) % games.length];
       const img = new Image();
-      img.src = window.matchMedia(MOBILE_MQ).matches ? after.cover : after.hero;
+      img.src = window.matchMedia(MOBILE_MQ).matches ? mobileCover(after) : after.hero;
     }, 1500);
     return () => { tween.kill(); clearTimeout(t); el.textContent = game.name; };
   }, [idx, calm]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -146,7 +148,11 @@ export default function Hero({ games, calm, onStart, onAsk, onGame, arcade }) {
     if (still) return;
     const q = gsap.utils.selector(root);
     gsap.from(q('.s-line > span'), { yPercent: 110, duration: 1.1, ease: 'power4.out', stagger: 0.09, delay: 0.1 });
-    gsap.from(q('[data-intro]'), { y: 22, opacity: 0, duration: 0.9, ease: 'power3.out', stagger: 0.08, delay: 0.35 });
+    // The subtitle is the page's largest first text, so it is on screen from the
+    // first paint and only rises into place: an opacity-0 start with a delay
+    // put that paint 0.35 s (plus the fade) later. The rest still fades in.
+    gsap.from(q('.s-hero__sub'), { y: 16, duration: 0.9, ease: 'power3.out' });
+    gsap.from(q('[data-intro]:not(.s-hero__sub)'), { y: 22, opacity: 0, duration: 0.9, ease: 'power3.out', stagger: 0.08, delay: 0.2 });
     const st = { trigger: root, start: 'top top', end: 'bottom top', scrub: true };
     gsap.fromTo(q('.s-hero__art'), { scale: 1.08 }, { scale: 1, yPercent: 10, ease: 'none', scrollTrigger: st });
     gsap.to(q('.s-hero__inner'), { yPercent: -14, opacity: 0.15, ease: 'none', scrollTrigger: st });
@@ -174,6 +180,19 @@ export default function Hero({ games, calm, onStart, onAsk, onGame, arcade }) {
       <div className="s-hero__frame">
         <HudCorners />
         <div className="s-hero__inner">
+          {onShield && (
+            <button
+              type="button"
+              className="s-shield-badge"
+              data-intro
+              onClick={onShield}
+              // The name starts with the visible text (WCAG 2.5.3, "label in name").
+              aria-label="Spoiler-safe: ON. See how the Spoiler Shield works."
+            >
+              <span className="s-shield-badge__switch" aria-hidden="true" />
+              <span>Spoiler-safe: <b>ON</b></span>
+            </button>
+          )}
           <h1 id="hero-title" className="s-hero__title">
             <span className="sr-only">Ask anything about any game.</span>
             <span aria-hidden="true">

@@ -36,11 +36,22 @@ let started = false;
 let posthog = null;
 let sentry = null;
 const queue = [];
-const errorQueue = [];
+const errorQueue = []; // [{ error, scope }], held until Sentry has loaded
 
+// The two SDKs are ~240 kB gzipped between them. Started at the first idle
+// moment they land while a phone is still pulling the page's own chunks, fonts
+// and art over the same connection, so they wait for the load event and a
+// couple of seconds more. Events and caught errors made meanwhile are queued
+// (see `queue` and `errorQueue`) and sent once the SDKs are up.
+const AFTER_LOAD_MS = 2000;
 function whenIdle(fn) {
-  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(fn, { timeout: 4000 });
-  else setTimeout(fn, 1500);
+  const go = () => {
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(fn, { timeout: 4000 });
+    else setTimeout(fn, 1500);
+  };
+  const afterLoad = () => setTimeout(go, AFTER_LOAD_MS);
+  if (document.readyState === 'complete') afterLoad();
+  else window.addEventListener('load', afterLoad, { once: true });
 }
 
 function startVercel() {
@@ -90,7 +101,7 @@ function startSentry() {
       beforeSend: scrubSentryEvent,
     });
     sentry = S;
-    for (const err of errorQueue.splice(0)) S.captureException(err);
+    for (const { error, scope } of errorQueue.splice(0)) S.captureException(error, scope ? { tags: { boundary: scope } } : undefined);
   }).catch(() => { /* blocked or offline */ });
 }
 
@@ -116,12 +127,15 @@ export function track(name, data) {
   } catch { /* analytics must never break the app */ }
 }
 
-/** Report a crash. Used by the error boundary; Sentry also catches stray errors itself. */
-export function reportError(error) {
+/**
+ * Report a crash. Used by the error boundaries (`scope` says which one caught
+ * it); Sentry also catches stray errors itself.
+ */
+export function reportError(error, scope) {
   if (!SENTRY_DSN) return;
   try {
-    if (sentry) sentry.captureException(error);
-    else if (errorQueue.length < 10) errorQueue.push(error);
+    if (sentry) sentry.captureException(error, scope ? { tags: { boundary: scope } } : undefined);
+    else if (errorQueue.length < 10) errorQueue.push({ error, scope });
   } catch { /* never throw from the error path */ }
 }
 

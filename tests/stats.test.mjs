@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  parseStats, formatCount, statParts, statSentence, fetchPublicStats, SHOW_FROM_PLAYERS,
+  parseStats, formatCount, statParts, statSentence, fetchPublicStats, SHOW_FROM_PLAYERS, SHOW_FROM_ANSWERS, SHOW_FROM_GAMES,
 } from '../src/site/stats.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -139,11 +139,23 @@ check('garbage formats to empty', formatCount(-3) === '' && formatCount(NaN) ===
 const parts = statParts({ players: 1284, answers: 9312, games: 412 });
 check('three parts in order', parts.map(p => p.label).join('|') === 'players|answers researched|games');
 check('sentence reads naturally', statSentence(parts) === '1,284 players, 9,312 answers researched, 412 games');
-check('singulars are singular', statParts({ players: 1, answers: 1, games: 1 }).map(p => p.label).join('|')
+const ONE = { players: 1, answers: 1, games: 1 }; // floors of 1, to see the singular labels
+check('singulars are singular', statParts({ players: 1, answers: 1, games: 1 }, ONE).map(p => p.label).join('|')
   === 'player|answer researched|game');
-check('zero answers and games are left out', statParts({ players: 4, answers: 0, games: 0 }).length === 1);
-check('below the threshold nothing shows', statParts({ players: SHOW_FROM_PLAYERS - 1, answers: 5, games: 1 }).length === 0);
+check('zero answers and games are left out', statParts({ players: 400, answers: 0, games: 0 }).length === 1);
+check('below the thresholds nothing shows', statParts({ players: SHOW_FROM_PLAYERS - 1, answers: SHOW_FROM_ANSWERS - 1, games: 400 }).length === 0);
 check('no stats, no parts', statParts(null).length === 0);
+
+// The floors are per number. Today's real figures were 29 players, 149 answers
+// and 37 games: a thin player count stays out, the other two lead.
+const today = statParts({ players: 29, answers: 149, games: 37 });
+check('a small player count is left out', !today.some(p => /player/.test(p.label)));
+check('answers and games lead instead', statSentence(today) === '149 answers researched, 37 games');
+check('players join once they reach the floor', statSentence(statParts({ players: SHOW_FROM_PLAYERS, answers: 149, games: 37 }))
+  === `${SHOW_FROM_PLAYERS} players, 149 answers researched, 37 games`);
+check('a lone game count never shows by itself', statParts({ players: 5, answers: 5, games: 400 }).length === 0);
+check('games below their floor stay out', statParts({ players: 500, answers: 900, games: SHOW_FROM_GAMES - 1 }).length === 2);
+check('the floors are sensible whole numbers', [SHOW_FROM_PLAYERS, SHOW_FROM_ANSWERS, SHOW_FROM_GAMES].every(n => Number.isInteger(n) && n > 1));
 
 // ── fetchPublicStats: never throws, never invents ──────────────────────────
 globalThis.sessionStorage = (() => {

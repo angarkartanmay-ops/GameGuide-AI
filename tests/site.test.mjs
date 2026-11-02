@@ -8,9 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { KONAMI, advance, isTypingTarget } from '../src/site/konami.js';
 import { ACHIEVEMENTS, createAchievements } from '../src/site/achievements.js';
 import {
-  HERO_GAMES, LIBRARY, SITE_BG, heroArt, coverArt, SHIELD_LINES, SHIELD_MILESTONES, isVisibleAt, visibleCount,
+  HERO_GAMES, LIBRARY, SITE_BG, heroArt, coverArt, SHIELD_LINES, SHIELD_MILESTONES, isVisibleAt, visibleCount, HOW_DEMO,
 } from '../src/site/showcase.js';
 import { LINKS, mailto } from '../src/site/links.js';
+import { parseProgressArgs } from '../src/utils/spoilerPrefs.js';
 import { SAMPLE_QUESTIONS } from '../src/site/sampleQuestions.js';
 import { contrastRatio } from '../src/utils/accent.js';
 import { isAllowedArtUrl } from '../api/_steamArt.js';
@@ -146,6 +147,23 @@ for (const f of SITE_FILES) {
   }
 }
 
+// ── The quick explainer ────────────────────────────────────────────────────
+// One question answered twice. The line it holds back is the Shield demo's
+// own, decided by the same isVisibleAt(), and the command it teaches goes
+// through the app's real /progress parser, so none of it can drift.
+check('the explainer asks one question', HOW_DEMO.question.endsWith('?') && !/[—–]/.test(HOW_DEMO.question));
+check('it opens with a line the player may read', isVisibleAt(HOW_DEMO.lines[0], HOW_DEMO.milestone));
+check('and holds the late-game reveal back', !isVisibleAt(HOW_DEMO.lines[1], HOW_DEMO.milestone));
+check('the held-back line is the Shield demo line, not a copy', HOW_DEMO.lines[1] === SHIELD_LINES[3]);
+check('"where" names the milestone it holds back from', HOW_DEMO.where === SHIELD_MILESTONES[HOW_DEMO.milestone].label);
+{
+  const args = HOW_DEMO.command.replace(/^\/progress\s+/, '');
+  const parsed = parseProgressArgs(args);
+  check('its /progress example parses', !!parsed && parsed.game === HOW_DEMO.game && parsed.where === SHIELD_MILESTONES[HOW_DEMO.milestone].progress, JSON.stringify(parsed));
+}
+check('the one-sentence reply is the spoiler-free opener', HOW_DEMO.lines[0].text.startsWith(HOW_DEMO.gist) && /\.$/.test(HOW_DEMO.gist));
+check('no explainer line carries an em-dash', HOW_DEMO.lines.every(l => !/[—–]/.test(l.text)));
+
 // ── Sample questions ───────────────────────────────────────────────────────
 // The hero's chips (and the chat's empty state) read this one list. The chat
 // only accepts a landing draft up to 200 characters, so a longer question
@@ -154,6 +172,17 @@ check('three sample questions', SAMPLE_QUESTIONS.length === 3);
 check('sample questions are unique', new Set(SAMPLE_QUESTIONS).size === SAMPLE_QUESTIONS.length);
 check('each fits the 200-character draft', SAMPLE_QUESTIONS.every(q => q.length <= 200));
 check('each is a question without an em-dash', SAMPLE_QUESTIONS.every(q => q.endsWith('?') && !/[—–]/.test(q)));
+
+// The landing's hero and the chat's empty state read ONE list. Mechanical
+// guard: both import it, and neither carries a literal copy of a question.
+{
+  const read = (...p) => readFileSync(join(ROOT, ...p), 'utf8');
+  const hero = read('src', 'components', 'site', 'Hero.jsx');
+  const empty = read('src', 'components', 'codex', 'EmptyState.jsx');
+  check('the hero imports the shared questions', /from '\.\.\/\.\.\/site\/sampleQuestions'/.test(hero));
+  check('the empty state imports the shared questions', /from '\.\.\/\.\.\/site\/sampleQuestions'/.test(empty));
+  check('no question is copied into a component', SAMPLE_QUESTIONS.every(q => !hero.includes(q) && !empty.includes(q)));
+}
 
 // ── Static content for crawlers and no-JS visitors ─────────────────────────
 // The app renders in the browser, so index.html carries the real pitch in its
@@ -165,6 +194,49 @@ check('each is a question without an em-dash', SAMPLE_QUESTIONS.every(q => q.end
   check('index.html keeps a heading and the pitch in <noscript>', /<h1[^>]*>[^<]*game guide/i.test(noscript) && /spoiler/i.test(noscript));
   check('the <noscript> pitch links to the info pages', ['about', 'privacy', 'terms', 'contacts'].every(p => noscript.includes(`href="/#${p}"`)));
   check('the <noscript> copy has no em-dash', !/[—–]/.test(noscript));
+}
+
+// ── Fonts are ours, and the page does not wait on a third party for them ───
+// src/styles/fonts.css replaced the render-blocking Google Fonts stylesheet.
+// Guard the three ways that goes wrong: a file the CSS names is missing, a
+// face blocks text while it loads, or the third-party link creeps back.
+{
+  const read = (...p) => readFileSync(join(ROOT, ...p), 'utf8');
+  const css = read('src', 'styles', 'fonts.css');
+  const html = read('index.html');
+  const files = [...css.matchAll(/url\('\/fonts\/([^']+)'\)/g)].map(m => m[1]);
+  const faces = css.match(/@font-face\s*\{[^}]*\}/g) || [];
+  check('fonts.css declares faces', faces.length >= 8 && files.length === faces.length);
+  check('every font file the CSS names is shipped', files.every(f => readdirSync(join(ROOT, 'public', 'fonts')).includes(f)), files.join(', '));
+  check('every face swaps (text shows before the file lands)', faces.every(f => /font-display:\s*swap/.test(f)));
+  check('every face is woff2 and limits its characters', faces.every(f => /format\('woff2'\)/.test(f) && /unicode-range/.test(f)));
+  check('the four families the site uses are all declared', ['Archivo', 'Geist', 'Geist Mono', 'Fraunces'].every(n => css.includes(`font-family: '${n}'`)));
+  check('index.html has no Google Fonts stylesheet or preconnect', !/fonts\.(googleapis|gstatic)\.com/.test(html));
+  check('the main entry loads fonts.css', /styles\/fonts\.css/.test(read('src', 'main.jsx')));
+  check('the fonts carry their licence', /SIL OPEN FONT LICENSE/i.test(read('public', 'fonts', 'LICENSE.txt')));
+}
+
+// ── The first game's art is asked for before the bundle runs ───────────────
+// The inline script in index.html adds the preload; it must stay on Steam's
+// two art hosts and mirror the files Hero.jsx picks (1x capsule on phones).
+{
+  const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
+  const hero = readFileSync(join(ROOT, 'src', 'components', 'site', 'Hero.jsx'), 'utf8');
+  check('the preload covers the phone cover and the wide hero', /\(max-width: 767px\)/.test(html) && /\(min-width: 768px\)/.test(html) && /rel = 'preload'/.test(html));
+  check('the preload only trusts the two Steam art hosts', html.includes(String.raw`(shared|cdn)\.akamai\.steamstatic\.com`));
+  check('the preload and the hero agree on the phone breakpoint', /MOBILE_MQ = '\(max-width: 767px\)'/.test(hero));
+}
+
+// ── Keyboard focus is always visible on controls ───────────────────────────
+// A blanket `[tabindex="-1"]:focus { outline: none }` once removed the ring from
+// the capability tabs' roving items (they are tabindex -1 until selected).
+// Script-focused sections may go ringless; controls may not.
+{
+  const css = readFileSync(join(ROOT, 'src', 'styles', 'site.css'), 'utf8');
+  const rules = css.match(/[^{}]*\[tabindex="-1"\][^{}]*\{[^}]*outline:\s*none[^}]*\}/g) || [];
+  check('a tabindex -1 outline reset exists for focus targets', rules.length >= 1);
+  check('...and it never applies to controls', rules.every(r => /:not\([^)]*button[^)]*\)/.test(r) && /\[role="tab"\]/.test(r)), rules.join(' | '));
+  check('the site draws one focus ring for everything focusable', /\.site :focus-visible \{ outline: 2px solid var\(--s-accent\)/.test(css));
 }
 
 console.log(`site: ${passed} passed, ${failed} failed`);

@@ -65,6 +65,29 @@ export function visibleCount(lines, milestone) {
   return lines.filter(l => isVisibleAt(l, milestone)).length;
 }
 
+// ─── The quick explainer ───────────────────────────────────────────────────
+// One question about Elden Ring, answered twice: with the Spoiler Shield off
+// and with it on at Stormveil. The line that gets held back IS the Shield
+// demo's own Leyndell line, and what is held back is decided by the same
+// isVisibleAt() and milestones, so the two demos can never disagree about
+// where "past Stormveil" starts.
+const AT_STORMVEIL = 1; // index into SHIELD_MILESTONES
+const MARGIT_NOW = 'Margit, the Fell Omen, guards the gate to Stormveil Castle.';
+
+export const HOW_DEMO = {
+  game: 'Elden Ring',
+  question: 'Who is Margit, really?',
+  milestone: AT_STORMVEIL,
+  where: SHIELD_MILESTONES[AT_STORMVEIL].label,
+  command: `/progress Elden Ring: ${SHIELD_MILESTONES[AT_STORMVEIL].progress}`,
+  // The one safe sentence, for the Discord example's short reply.
+  gist: MARGIT_NOW,
+  lines: [
+    { stage: 0, text: `${MARGIT_NOW} His attacks are delayed on purpose, so he punishes early rolls.` },
+    SHIELD_LINES[3],
+  ],
+};
+
 // ─── Anatomy of an answer ──────────────────────────────────────────────────
 
 export const ANATOMY = {

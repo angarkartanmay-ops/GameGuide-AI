@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useImperativeHandle, useId } from 'react';
 import { ArrowUp, Paperclip, X, Square, AlertTriangle } from 'lucide-react';
 import { preprocessImage } from '../utils/imagePreprocess';
-import { paletteState, nextIndex, selectionAction } from '../utils/slashPalette';
+import { paletteState, nextIndex, selectionAction, wantsSlashFocus } from '../utils/slashPalette';
 import CommandPalette from './codex/CommandPalette';
 
 const MAX_CHARS = 1500; // warn above this threshold
@@ -22,6 +22,9 @@ export default function ChatInput({
   const [dismissed, setDismissed] = useState(false);
   const textAreaRef = useRef(null);
   const fileInputRef = useRef(null);
+  // A focus asked for while the bar is disabled (history still loading) waits
+  // here and happens the moment it can.
+  const pendingFocus = useRef(false);
   const paletteId = useId();
 
   const palette = dismissed ? { mode: 'closed', items: [] } : paletteState(inputText, SLASH_COMMANDS);
@@ -39,9 +42,33 @@ export default function ChatInput({
         el.setSelectionRange(text.length, text.length);
       });
     },
-    focus() { textAreaRef.current?.focus(); },
+    focus() {
+      const el = textAreaRef.current;
+      if (!el) return;
+      if (el.disabled) { pendingFocus.current = true; return; }
+      el.focus({ preventScroll: true });
+    },
     openFilePicker() { fileInputRef.current?.click(); },
   }), []);
+
+  useEffect(() => {
+    if (isLoading || !pendingFocus.current) return;
+    pendingFocus.current = false;
+    textAreaRef.current?.focus({ preventScroll: true });
+  }, [isLoading]);
+
+  // "/" from anywhere outside a field lands in the bar, and the "/" itself
+  // types, so the command list opens. Matches the "/ commands" hint.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const el = textAreaRef.current;
+      if (!el || el.disabled) return;
+      if (!wantsSlashFocus(e, !!document.querySelector('[role="dialog"][aria-modal="true"]'))) return;
+      el.focus({ preventScroll: true });
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     const el = textAreaRef.current;
@@ -167,16 +194,17 @@ export default function ChatInput({
   const canSend = !!(inputText.trim() || attachments.length);
   // Short enough to sit on one line in the composer on a phone.
   const placeholder = isLoading
-    ? 'Researching — Stop to cancel'
+    ? 'Researching. Stop to cancel'
     : attachments.length > 0
       ? 'Add a note, or just send it'
       : stealthMode
-        // Reinforce the incognito cue where the typing happens — the banner
+        // Reinforce the incognito cue where the typing happens: the banner
         // can scroll out of view, this never does.
-        ? 'Stealth — nothing is saved'
+        ? 'Stealth: nothing is saved'
         : gameName
           ? `Ask about ${gameName}…`
-          : 'Ask about any game — try /help';
+          // On a phone the "/ commands" hint is hidden, so this carries it.
+          : 'Ask about any game. Try /help';
 
   return (
     <div className={`cx-compose${stealthMode ? ' is-stealth' : ''}`}>
@@ -260,6 +288,7 @@ export default function ChatInput({
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           disabled={isLoading}
+          aria-keyshortcuts="/"
           aria-autocomplete="list"
           aria-controls={palette.mode === 'browse' ? paletteId : undefined}
           aria-activedescendant={palette.mode === 'browse' ? `${paletteId}-${activeIndex}` : undefined}

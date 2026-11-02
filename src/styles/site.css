@@ -34,6 +34,7 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
   --s-hair-2: color-mix(in srgb, var(--s-ink) 18%, transparent);
   --s-glass: color-mix(in srgb, #0c0f15 76%, transparent);
   --s-on-accent: #07090d;
+  --s-warn: #f0a36b; /* only for "a spoiler leaked" and form errors */
   --s-display: 'Archivo', 'Geist', system-ui, sans-serif;
   /* Archivo's width axis. Geist and Geist Mono have none, so setting it on
      .site only widens display type; single rules go wider where they need to. */
@@ -56,7 +57,11 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
 }
 .site ::selection { background: color-mix(in srgb, var(--s-accent) 38%, transparent); color: var(--s-ink); }
 .site :focus-visible { outline: 2px solid var(--s-accent); outline-offset: 3px; border-radius: 4px; }
-.site [tabindex="-1"]:focus { outline: none; }
+/* Sections and headings take focus from script (a nav jump), where a ring
+   around the whole block would be noise. Controls that are only out of the Tab
+   order (the roving items of the capability tabs) keep theirs: arrow keys land
+   on them and that ring is the only sign of where you are. */
+.site [tabindex="-1"]:not(button, a, input, select, textarea, summary, [role="tab"], [role="button"]):focus { outline: none; }
 .site code { font-family: var(--s-mono); }
 
 /* ── Shared pieces ───────────────────────────────────────────────────────── */
@@ -116,7 +121,7 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
   color: var(--s-ink);
 }
 .s-lead {
-  margin: 22px 0 0; max-width: 60ch;
+  margin: 22px 0 0; max-width: 60ch; text-wrap: pretty;
   font-size: clamp(16px, 1.35vw, 18.5px); line-height: 1.65;
   color: var(--s-ink-2);
 }
@@ -215,6 +220,12 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
   box-shadow: 0 1px 0 var(--s-hair);
 }
+/* Until today's games are in, the hero is an empty frame. The bar stays out of
+   sight for that moment (a first visit's one request, normally well under half
+   a second) so the page's first paint is the bar AND the headline together,
+   not the bar alone and the headline a beat later. Browsers (and Lighthouse)
+   then see one paint instead of two, and the page doesn't flash its menu. */
+.s-landing.is-booting .s-nav { visibility: hidden; }
 /* A filtered header would trap the fixed sheet inside its 64px box. */
 .s-nav.is-open { backdrop-filter: none; -webkit-backdrop-filter: none; }
 .s-nav__inner {
@@ -349,6 +360,29 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
   font-size: clamp(16px, 1.45vw, 19px); line-height: 1.6; color: var(--s-ink-2);
 }
 .s-hero__actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 36px; }
+
+/* "Spoiler-safe: ON": the product's one big promise, as a status you can tap.
+   A real state (the shield is on by default), so it gets the one eyebrow slot. */
+.s-shield-badge {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 36px; margin: 0 0 22px; padding: 0 14px 0 8px;
+  border: 1px solid var(--s-hair-2); border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--s-bg) 66%, transparent); color: var(--s-ink-2);
+  font: 500 11.5px/1 var(--s-mono); letter-spacing: 0.14em; text-transform: uppercase;
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+}
+.s-shield-badge:hover { color: var(--s-ink); border-color: color-mix(in srgb, var(--s-accent) 60%, transparent); }
+.s-shield-badge:focus-visible { border-radius: 999px; }
+.s-shield-badge b { font-weight: 600; color: var(--s-accent); }
+.s-shield-badge__switch {
+  position: relative; flex: none; width: 28px; height: 16px; border-radius: 999px;
+  background: color-mix(in srgb, var(--s-accent) 28%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-accent) 70%, transparent);
+}
+.s-shield-badge__switch::after {
+  content: ''; position: absolute; top: 3px; left: 15px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--s-accent);
+}
+@media (max-width: 767px) { .s-shield-badge { min-height: 44px; } }
 
 /* Sample questions under the hero buttons: one tap opens the chat with it
    typed. Their own class: .s-chip is the answer demo's source chip further
@@ -1258,6 +1292,94 @@ html[data-arcade] .s-closing__title {
   .s-seg__opt { flex: 1; justify-content: center; padding: 0 10px; }
   .s-plan__actions .s-btn, .s-plan__once .s-btn { justify-self: stretch; width: 100%; }
 }
+
+/* ── How it works: one question, answered twice ─────────────────────────── */
+.s-how { padding-block: clamp(64px, 9vw, 120px); }
+.s-how__grid {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(32px, 5vw, 80px); align-items: start;
+}
+.s-how .s-chapter__head { margin-bottom: 8px; }
+.s-how .s-h2 { font-size: clamp(30px, 3.5vw, 46px); }
+/* Each beat of the headline is a line of its own, so it never breaks mid-sentence. */
+.s-how__beat { display: block; }
+.s-how__steps { list-style: none; margin: 28px 0 0; padding: 0; }
+.s-how__step {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 12px;
+  padding: 16px 0; border-top: 1px solid var(--s-hair);
+  color: var(--s-muted); transition: color 0.5s;
+}
+.s-how__step:last-child { border-bottom: 1px solid var(--s-hair); }
+.s-how__step.is-on { color: var(--s-ink-2); }
+.s-how__step.is-now { color: var(--s-ink); }
+.s-how__step .s-mark { margin-top: 0.6em; opacity: 0.35; transition: opacity 0.5s; }
+.s-how__step.is-on .s-mark { opacity: 1; }
+.s-how__step-title { margin: 0 0 4px; font: 580 20px/1.25 var(--s-display); letter-spacing: -0.015em; color: inherit; }
+.s-how__step-text { margin: 0; font-size: 14.5px; line-height: 1.55; }
+.s-how__step code {
+  padding: 0.1em 0.4em; border-radius: 5px; font-size: 0.88em; overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--s-ink) 8%, transparent); color: var(--s-ink);
+}
+
+.s-how__frame {
+  --f-accent: var(--s-accent);
+  position: relative; display: flex; flex-direction: column; gap: 18px; margin: 0; overflow: hidden;
+  padding: clamp(18px, 2.4vw, 28px); border-radius: 18px; background: #0b0e14;
+  box-shadow: 0 0 0 1px var(--s-hair-2), 0 40px 90px -50px rgba(0, 0, 0, 0.9);
+}
+.s-how__ask { display: flex; justify-content: flex-end; }
+.s-how__take {
+  padding-top: 16px; border-top: 1px solid var(--s-hair);
+  opacity: 0; transform: translateY(10px);
+  transition: opacity 0.6s, transform 0.6s var(--s-ease);
+}
+.s-how__take.is-in { opacity: 1; transform: none; }
+.s-how__take--on { border-top-color: color-mix(in srgb, var(--s-accent) 45%, transparent); }
+.s-how__line { margin: 10px 0 0; max-width: 62ch; font-size: 15.5px; line-height: 1.6; color: var(--s-ink-2); }
+.s-how__tag {
+  display: inline-block; margin-left: 10px; padding: 2px 7px; border-radius: 5px; vertical-align: 0.12em;
+  font: 600 10px/1.4 var(--s-mono); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--s-warn); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-warn) 55%, transparent);
+}
+.s-how__state { gap: 8px; color: var(--s-ink-2); }
+.s-how__state svg { flex: none; color: var(--s-accent); }
+.s-how__state b { font-weight: 600; color: var(--s-accent); }
+.s-how__where { margin-left: auto; opacity: 0; transition: opacity 0.5s; }
+.s-how__where.is-in { opacity: 1; }
+.s-how__cmd { margin-top: 12px; opacity: 0; transition: opacity 0.5s; }
+.s-how__cmd.is-in { opacity: 1; }
+.s-how__answer { opacity: 0; transform: translateY(8px); transition: opacity 0.6s, transform 0.6s var(--s-ease); }
+.s-how__answer.is-in { opacity: 1; transform: none; }
+.s-how__bar {
+  display: block; width: 100%; margin: 12px 0 0; padding: 0; border: 0; border-radius: 4px;
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.s-how__bar .s-spoiler { display: block; padding: 6px 8px; font: 400 15.5px/1.6 var(--s-body); }
+.s-how__bar:hover .s-spoiler:not(.is-revealed) { background: repeating-linear-gradient(-45deg,
+  color-mix(in srgb, var(--sp) 52%, transparent) 0 6px, color-mix(in srgb, var(--sp) 22%, transparent) 6px 12px); }
+.s-how__bar .s-shield__why { margin-top: 10px; }
+.s-how__replay { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; }
+@media (max-width: 900px) { .s-how__grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── Discord reply example, beside the "Add to Discord" buttons ──────────── */
+.s-dcreply { margin: 28px 0 0; }
+.s-dcreply__feed {
+  display: grid; gap: 12px; padding: 16px; border-radius: 14px; background: #0f1117; font-size: 13.5px;
+  box-shadow: 0 0 0 1px var(--s-hair-2);
+}
+.s-dcreply figcaption { margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: var(--s-muted); }
+/* Discord's own spoiler: a dark bar until you click it. */
+.s-dsp {
+  padding: 0 3px; border-radius: 3px; cursor: pointer; color: transparent; background: #2a2d33;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  transition: background-color 0.15s, color 0.15s;
+}
+.s-dsp:not(.is-open)::before { content: attr(data-text); }
+.s-dsp:hover { background: #363a41; }
+.s-dsp.is-open { color: var(--s-ink); background: color-mix(in srgb, var(--s-ink) 12%, transparent); box-shadow: none; }
+/* Tailwind's preflight makes every svg a block; this one sits inline in the line. */
+.s-msg__sub svg { display: inline-block; vertical-align: -2px; margin-right: 5px; }
 
 /* ── Low power / reduced motion ──────────────────────────────────────────── */
 html[data-low-power] .site .s-grain,

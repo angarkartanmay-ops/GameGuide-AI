@@ -1,7 +1,7 @@
 // Living Codex chat UI — the pure logic behind it: slash palette, game
 // context, accent colour, recent-games shelf. No DOM needed.
 
-import { paletteState, nextIndex, selectionAction, usageFor } from '../src/utils/slashPalette.js';
+import { paletteState, nextIndex, selectionAction, usageFor, wantsSlashFocus } from '../src/utils/slashPalette.js';
 import {
   parseStreamStage, stageLabel, normalizeGameKey, latestGameFromMessages, latestSpoilerMeta,
 } from '../src/utils/gameContext.js';
@@ -111,6 +111,23 @@ check('contrast of white on black is 21', Math.round(contrastRatio({ r: 255, g: 
   check('the cover is never a backdrop', !backdropCandidates(match).includes('C1'));
   check('no art is not a crash', backdropCandidates(null).length === 0 && backdropCandidates({}).length === 0);
 }
+
+// ── The "/" shortcut ───────────────────────────────────────────────────────
+// A bare "/" outside any field moves focus into the bar; anything that could
+// be someone typing, or a shortcut of their own, is left alone.
+const key = (over = {}) => ({ key: '/', target: { tagName: 'BUTTON' }, ...over });
+check('"/" on a button focuses the bar', wantsSlashFocus(key()));
+check('"/" on the page body focuses the bar', wantsSlashFocus(key({ target: { tagName: 'BODY' } })));
+check('"/" with no target focuses the bar', wantsSlashFocus({ key: '/' }));
+check('"/" typed in a field stays in that field', !wantsSlashFocus(key({ target: { tagName: 'INPUT' } })) && !wantsSlashFocus(key({ target: { tagName: 'textarea' } })) && !wantsSlashFocus(key({ target: { tagName: 'SELECT' } })));
+check('"/" in contenteditable stays there', !wantsSlashFocus(key({ target: { tagName: 'DIV', isContentEditable: true } })));
+check('Ctrl/Cmd/Alt + "/" belong to the browser', !wantsSlashFocus(key({ ctrlKey: true })) && !wantsSlashFocus(key({ metaKey: true })) && !wantsSlashFocus(key({ altKey: true })));
+check('Shift + "/" still counts (layouts where "/" needs Shift)', wantsSlashFocus(key({ shiftKey: true })));
+check('other keys do nothing', !wantsSlashFocus(key({ key: 'a' })) && !wantsSlashFocus(key({ key: '?' })) && !wantsSlashFocus(key({ key: 'Enter' })));
+check('an open modal keeps its keys', !wantsSlashFocus(key(), true));
+check('IME composition is never interrupted', !wantsSlashFocus(key({ isComposing: true })));
+check('an already-handled key is left alone', !wantsSlashFocus(key({ defaultPrevented: true })));
+check('nothing is a no', !wantsSlashFocus(null) && !wantsSlashFocus(undefined));
 
 console.log(`codex: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

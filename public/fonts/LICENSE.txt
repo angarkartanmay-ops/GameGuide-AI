@@ -1,0 +1,17 @@
+Fonts served from this folder
+=============================
+
+Archivo         Copyright 2019 The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo)
+Fraunces        Copyright 2020 The Fraunces Project Authors (https://github.com/undercasetype/Fraunces)
+Geist           Copyright 2023 The Geist Project Authors (https://github.com/vercel/geist-font)
+Geist Mono      Copyright 2023 The Geist Project Authors (https://github.com/vercel/geist-font)
+
+All four are licensed under the SIL Open Font License, Version 1.1:
+https://openfontlicense.org/open-font-license-official-text/
+
+The files are the families as published, cut down for the web (the OFL allows
+this): Geist, Geist Mono and Fraunces are the woff2 files Google Fonts serves,
+split by unicode-range; archivo-latin.woff2 is Archivo with its variable axes
+narrowed to weight 500-800 and width 100-125 and its glyphs reduced to Basic
+Latin, Latin-1 and typographic punctuation. To regenerate it, see
+scripts/fonts/trim-archivo.py.

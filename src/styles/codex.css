@@ -493,6 +493,11 @@ html[data-vt^="stealth"] .codex { transition: none; }
 .cx-next__link:hover:not(:disabled) svg { transform: translateX(3px); }
 .cx-next__link:hover:not(:disabled) span { text-decoration: underline; text-decoration-color: var(--cx-hair-2); text-underline-offset: 4px; }
 .cx-next__link:disabled { opacity: 0.45; cursor: not-allowed; }
+/* The sample questions sit above the game shelf: tighter rows for a pointer so
+   the shelf stays in view, 44px targets for a finger. */
+.cx-empty .cx-next { margin-top: 20px; }
+@media (pointer: fine) { .cx-empty .cx-next__link { min-height: 34px; padding: 4px 0; } }
+@media (pointer: coarse) { .cx-empty .cx-next__link { min-height: 44px; } }
 
 /* ── Images ───────────────────────────────────────────────────────────── */
 .cx-images { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 0; }
