@@ -11,6 +11,7 @@ import {
   HERO_GAMES, LIBRARY, SITE_BG, heroArt, coverArt, SHIELD_LINES, SHIELD_MILESTONES, isVisibleAt, visibleCount,
 } from '../src/site/showcase.js';
 import { LINKS, mailto } from '../src/site/links.js';
+import { SAMPLE_QUESTIONS } from '../src/site/sampleQuestions.js';
 import { contrastRatio } from '../src/utils/accent.js';
 import { isAllowedArtUrl } from '../api/_steamArt.js';
 
@@ -143,6 +144,27 @@ for (const f of SITE_FILES) {
     const m = rx.exec(text);
     check(`${f.slice(ROOT.length + 1)}: no ${what}`, !m, m?.[0]);
   }
+}
+
+// ── Sample questions ───────────────────────────────────────────────────────
+// The hero's chips (and the chat's empty state) read this one list. The chat
+// only accepts a landing draft up to 200 characters, so a longer question
+// would open the chat empty.
+check('three sample questions', SAMPLE_QUESTIONS.length === 3);
+check('sample questions are unique', new Set(SAMPLE_QUESTIONS).size === SAMPLE_QUESTIONS.length);
+check('each fits the 200-character draft', SAMPLE_QUESTIONS.every(q => q.length <= 200));
+check('each is a question without an em-dash', SAMPLE_QUESTIONS.every(q => q.endsWith('?') && !/[—–]/.test(q)));
+
+// ── Static content for crawlers and no-JS visitors ─────────────────────────
+// The app renders in the browser, so index.html carries the real pitch in its
+// <noscript> block. It must keep saying what the product is, link to the
+// pages, and follow the site's no-dash rule like the rest of the copy.
+{
+  const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
+  const noscript = /<noscript>([\s\S]*?)<\/noscript>/.exec(html)?.[1] || '';
+  check('index.html keeps a heading and the pitch in <noscript>', /<h1[^>]*>[^<]*game guide/i.test(noscript) && /spoiler/i.test(noscript));
+  check('the <noscript> pitch links to the info pages', ['about', 'privacy', 'terms', 'contacts'].every(p => noscript.includes(`href="/#${p}"`)));
+  check('the <noscript> copy has no em-dash', !/[—–]/.test(noscript));
 }
 
 console.log(`site: ${passed} passed, ${failed} failed`);

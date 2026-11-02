@@ -8,7 +8,7 @@ export function makeDb() {
   const guardDown = () => { if (state.down) throw new Error('connection refused'); };
   const builder = (table) => {
     const rows = t[table], key = KEYS[table];
-    const q = { op: null, payload: null, filter: null };
+    const q = { op: null, payload: null, filter: null, cols: '' };
     const run = () => {
       guardDown();
       if (q.op === 'insert') {
@@ -19,14 +19,22 @@ export function makeDb() {
       const match = [...rows.values()].filter(r => !q.filter || String(r[q.filter[0]]) === String(q.filter[1]));
       if (q.op === 'delete') { match.forEach(r => rows.delete(r[key])); return { error: null }; }
       if (q.op === 'update') { match.forEach(r => Object.assign(r, q.payload)); state.writes++; return { error: null }; }
-      return { data: match[0] ?? null, error: null };
+      // PostgREST sends bigint columns as JSON numbers, which the client's
+      // JSON.parse rounds past 2^53 — unless the select casts them to text.
+      const row = match[0] ? { ...match[0] } : null;
+      if (row) {
+        for (const c of ['user_id', 'guild_id', 'granted_by']) {
+          if (row[c] != null && !q.cols.includes(`${c}::text`)) row[c] = Number(row[c]);
+        }
+      }
+      return { data: row, error: null };
     };
     const api = {
       insert(p) { q.op = 'insert'; q.payload = p; return api; },
       upsert(p) { q.op = 'upsert'; q.payload = p; return api; },
       update(p) { q.op = 'update'; q.payload = p; return api; },
       delete() { q.op = 'delete'; return api; },
-      select() { q.op = 'select'; return api; },
+      select(cols = '') { q.op = 'select'; q.cols = String(cols); return api; },
       eq(c, v) { q.filter = [c, v]; return api; },
       maybeSingle() { return Promise.resolve().then(run); },
       then(res, rej) { return Promise.resolve().then(run).then(res, rej); },

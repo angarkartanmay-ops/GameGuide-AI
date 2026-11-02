@@ -350,6 +350,33 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
 }
 .s-hero__actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 36px; }
 
+/* Sample questions under the hero buttons: one tap opens the chat with it
+   typed. Their own class: .s-chip is the answer demo's source chip further
+   down, and the two must not share rules. A dark fill keeps the text at AA
+   whatever game art sits behind it. */
+.s-hero__asks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.s-ask {
+  display: inline-flex; align-items: center; min-height: 40px; padding: 8px 16px;
+  border: 1px solid var(--s-hair-2); border-radius: 999px; cursor: pointer; text-align: left;
+  background: color-mix(in srgb, var(--s-bg) 72%, transparent);
+  color: var(--s-ink-2); font: 500 13px/1.3 var(--s-body);
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s, transform 0.25s var(--s-ease);
+}
+.s-ask:hover {
+  color: var(--s-ink);
+  border-color: color-mix(in srgb, var(--s-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--s-accent) 14%, var(--s-bg));
+}
+/* The site-wide focus ring squares every corner; a pill keeps its shape. */
+.s-ask:focus-visible { border-radius: 999px; color: var(--s-ink); }
+.s-ask:active { transform: translateY(1px); }
+@media (max-width: 767px) {
+  /* On a phone the questions stack edge to edge like the buttons above them:
+     a rounded bar, never narrower than a 44px target. */
+  .s-hero__asks { flex-direction: column; gap: 8px; }
+  .s-ask, .s-ask:focus-visible { width: 100%; min-height: 44px; border-radius: 22px; }
+}
+
 /* The live count under the hero buttons. The line is reserved before the
    numbers arrive so nothing below it jumps. */
 .s-livecount {
