@@ -15,8 +15,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SRC = readFileSync(join(HERE, '..', 'supabase', 'functions', 'chat-proxy', 'webSearch.ts'), 'utf8');
-const INDEX = readFileSync(join(HERE, '..', 'supabase', 'functions', 'chat-proxy', 'index.ts'), 'utf8');
+// Line endings normalized: the markers below contain '\n', and a Windows
+// checkout may hand us CRLF.
+const read = (file: string) => readFileSync(join(HERE, '..', 'supabase', 'functions', 'chat-proxy', file), 'utf8').replace(/\r\n/g, '\n');
+const SRC = read('webSearch.ts');
+const INDEX = read('index.ts');
 
 let passed = 0;
 let failed = 0;
