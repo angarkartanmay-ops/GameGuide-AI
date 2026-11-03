@@ -33,6 +33,7 @@ const SUITES = [
   ['trending',      'trending.test.mjs'],      // landing's daily games: Steam chart ranking, client cache
   ['price',         'price.test.mjs'],         // /price game+version detection, web/Discord parity
   ['price-proxy',   'price-proxy.test.mjs'],   // /api/price: narrow CheapShark proxy for filtered networks
+  ['reddit-proxy',  'reddit-proxy.test.mjs'],  // /api/reddit: the four client shapes only, not an open proxy
   ['share',         'share.test.mjs'],         // spoiler-safe share links: round trip, hostile input, deflate bomb
   ['share-meta',    'share-meta.test.mjs'],    // a share's preview card: no spoilers, no markup from the payload, noindex
   ['csp-report',    'csp-report.test.mjs'],    // /api/csp-report: both formats, bounded, share payloads blanked
