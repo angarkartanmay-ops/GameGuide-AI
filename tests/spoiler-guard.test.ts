@@ -203,5 +203,50 @@ check('no chips → unchanged', filterChips('Just text.', KNOWN) === 'Just text.
   check('streaming: a half-written plain answer is already hidden', !/Age of the Sta/.test(guardStreaming(mid).replace(/\|\|[\s\S]*?\|\|/g, '')));
 }
 
+// ── adversarial echoes: a hidden name coming back in other markdown shapes ──
+{
+  const reply = [
+    "Here's the arena layout. ||Malenia||",
+    '',
+    "## Malenia's arena",
+    '- **Malenia** heals on every hit',
+    '> MALENIA has a second phase',
+    '',
+    'Wiki: <https://eldenring.wiki.fextralife.com/Malenia+Blade+of+Miquella>',
+  ].join('\n');
+  const out = guardShieldedReply(reply, KNOWN);
+  check('adversarial: echo in a heading, list, quote is barred', !shows(out, 'Malenia'), out);
+  check('adversarial: heading keeps its "##"', /^## /m.test(out), out);
+  check('adversarial: list item keeps its "-"', /^- /m.test(out), out);
+  check('adversarial: a link naming the hidden thing is hidden whole', !/fextralife\.com\/Malenia/.test(visible(out)), out);
+  check('adversarial: balanced', pipesBalanced(out));
+  check('adversarial: idempotent', guardShieldedReply(out, KNOWN) === out);
+}
+{
+  // Two hidden names in one spoiler bar, both echoed in one later sentence.
+  const reply = '||⚠️ Spoiler: Radagon and the Elden Beast are the last fight.||\n\nPrepare for Radagon, then the Elden Beast.';
+  const out = barEchoes(reply, KNOWN);
+  check('adversarial: every name from a spoiler bar is barred', !shows(out, 'Radagon') && !shows(out, 'Elden Beast'), out);
+}
+{
+  // Chips are plain buttons: a chip naming a hidden or never-shown name must go.
+  const reply = [
+    'Keep exploring Limgrave first. ||Malenia||',
+    '',
+    '[?] How do I beat Malenia?',
+    '[?] What does Starscourge Radahn drop?',
+    '[?] Where is Margit?',
+  ].join('\n');
+  const out = filterChips(reply, KNOWN);
+  check('adversarial: chip naming a hidden boss is dropped', !/\[\?\][^\n]*Malenia/.test(out), out);
+  check('adversarial: chip naming something never shown is dropped', !/Radahn/.test(out), out);
+  check('adversarial: chip about what the player knows stays', /\[\?\] Where is Margit\?/.test(out), out);
+}
+{
+  // What the player told us is never hidden from them.
+  const reply = '||Margit||\n\nMargit is weak to bleed.';
+  check('adversarial: a name the player used stays readable', shows(barEchoes(reply, KNOWN), 'Margit'));
+}
+
 console.log(`spoiler-guard: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
