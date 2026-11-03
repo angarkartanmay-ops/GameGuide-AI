@@ -1,9 +1,9 @@
-// Spoiler-safe share links (src/utils/share.js). The fragment is written by
-// anyone who wants to, so decoding is tested as an attack surface: garbage,
+// Spoiler-safe share links (src/utils/share.js). The payload (in a path, or in
+// the fragment of an older link) is written by anyone who wants to, so decoding is tested as an attack surface: garbage,
 // wrong versions, oversized fields and a deflate bomb must all come back as
 // null or clipped — never thrown, never passed through as-is.
 
-import { encodeShare, decodeShare, normalizeShare, buildShareUrl, SHARE_PREFIX } from '../src/utils/share.js';
+import { encodeShare, decodeShare, normalizeShare, buildShareUrl, SHARE_PREFIX, SHARE_ROOT, MAX_PATH_PAYLOAD } from '../src/utils/share.js';
 
 let passed = 0;
 let failed = 0;
@@ -35,9 +35,17 @@ const long = { q: 'Best mage build?', a: ('Intelligence scaling and the Moonveil
 const longEncoded = await encodeShare(long);
 check('a 3.5k-character answer compresses to well under 2k characters', longEncoded.length < 2000, String(longEncoded.length));
 
-const url = await buildShareUrl(SAMPLE, 'https://example.test', '/');
-check('link puts the payload in the fragment', url.startsWith(`https://example.test/#${SHARE_PREFIX}z`));
-check('link payload decodes', (await decodeShare(url.split(`#${SHARE_PREFIX}`)[1]))?.a === SAMPLE.a);
+const url = await buildShareUrl(SAMPLE, 'https://example.test');
+check('link puts the payload in the path (so the host can make a preview card)', url.startsWith(`https://example.test${SHARE_ROOT}/z`) && !url.includes('#'));
+check('link payload decodes', (await decodeShare(url.split(`${SHARE_ROOT}/`)[1]))?.a === SAMPLE.a);
+check('link payload is one path segment, nothing to escape', /^https:\/\/example\.test\/share\/[A-Za-z0-9_-]+$/.test(url));
+
+// A payload too long for a path falls back to the fragment: no preview card, no length limit worth the name.
+const hugeText = Array.from({ length: 4000 }, (_, i) => `w${(i * 2654435761 % 1e9).toString(36)}`).join(' ');
+const hugeUrl = await buildShareUrl({ q: 'q', a: hugeText.slice(0, 15_000) }, 'https://example.test');
+check('an answer too long for a path falls back to the fragment form', hugeUrl.startsWith(`https://example.test/#${SHARE_PREFIX}`), hugeUrl.slice(0, 60));
+check('...which still decodes', (await decodeShare(hugeUrl.split(`#${SHARE_PREFIX}`)[1]))?.a?.length > 10_000);
+check('a link at the limit still goes in the path', url.length - `https://example.test${SHARE_ROOT}/`.length <= MAX_PATH_PAYLOAD);
 
 // ── Hostile / broken input ───────────────────────────────────────────────
 check('empty → null', (await decodeShare('')) === null);

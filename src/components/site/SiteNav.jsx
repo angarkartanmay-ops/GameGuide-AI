@@ -4,6 +4,38 @@ import { ScrollTrigger } from '../../site/motion';
 import { Mark } from './bits';
 import BrandMark from '../BrandMark';
 
+const modified = (e) => e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey;
+
+/**
+ * One entry of the bar or the sheet. A link with an `href` (a page: /about) is
+ * a real anchor, so it can be followed and opened in a new tab, and a plain
+ * click is handled in the app; one without (a jump within the landing) is a button.
+ */
+function NavItem({ link, className, onActivate }) {
+  const current = link.current ? 'page' : undefined;
+  if (link.href) {
+    return (
+      <a
+        href={link.href}
+        className={className}
+        aria-current={current}
+        onClick={(e) => {
+          if (e.defaultPrevented || modified(e)) return;
+          e.preventDefault();
+          onActivate();
+        }}
+      >
+        {link.label}
+      </a>
+    );
+  }
+  return (
+    <button type="button" className={className} onClick={onActivate} aria-current={current}>
+      {link.label}
+    </button>
+  );
+}
+
 /**
  * The site's top bar: brand, section or page links, a call to action and —
  * on the landing — the achievement counter. Transparent over the hero, glass
@@ -67,15 +99,7 @@ export default function SiteNav({ links, onBrand, cta, counter }) {
 
         <nav className="s-nav__links" aria-label="Primary">
           {links.map((l) => (
-            <button
-              key={l.label}
-              type="button"
-              className="s-nav__link"
-              onClick={l.onClick}
-              aria-current={l.current ? 'page' : undefined}
-            >
-              {l.label}
-            </button>
+            <NavItem key={l.label} link={l} className="s-nav__link" onActivate={() => l.onClick?.()} />
           ))}
         </nav>
 
@@ -112,9 +136,7 @@ export default function SiteNav({ links, onBrand, cta, counter }) {
           <ul className="s-sheet__list">
             {links.map((l) => (
               <li key={l.label}>
-                <button type="button" className="s-sheet__link" onClick={run(l.onClick)} aria-current={l.current ? 'page' : undefined}>
-                  {l.label}
-                </button>
+                <NavItem link={l} className="s-sheet__link" onActivate={run(l.onClick)} />
               </li>
             ))}
           </ul>

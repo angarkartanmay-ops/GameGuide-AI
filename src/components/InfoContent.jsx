@@ -1,0 +1,576 @@
+// What the text pages say. Kept apart from the page shell (nav, footer,
+// motion) so the build can render it to static HTML without any of those
+// (scripts/prerender.mjs), and so the shell can change without reloading it.
+// Only components are exported; the table that names them is infoPages.js.
+
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowUpRight, Check, Copy, House, Info, Mail, MessageSquare, Tag } from 'lucide-react';
+import { LINKS, mailto } from '../site/links';
+import { pathForView } from '../site/route';
+import { FAQ } from '../site/faq';
+import { GitHubGlyph, LinkedInGlyph, Mark } from './site/bits';
+
+// A link inside page copy is a real link (/contacts), so it can be opened in a
+// new tab or followed by a crawler; a plain click goes through the app instead.
+const goto = (view) => (e) => {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  window.dispatchEvent(new CustomEvent('gg:navigate', { detail: view }));
+};
+
+// ─── About ─────────────────────────────────────────────────────────────────
+
+const COMMANDS = [
+  ['/progress', 'Tell it where you are, as in /progress Elden Ring: beat Margit. Story answers stay behind that line.'],
+  ['/missables', 'What you can still permanently miss (items, questlines, trophies) from where you are, with nothing past it spoiled.'],
+  ['/spoilers', 'Spoiler Shield on or off. On by default; /spoilers off once you have finished.'],
+  ['/price', 'The best current price for a game across PC stores, and how it compares with its lowest ever. Understands gta 5, bg3, ff7 remake.'],
+  ['/discover', 'A random pro tip, hidden detail or piece of lore.'],
+  ['/stealth', 'A throwaway conversation. Nothing saved, nothing remembered, no art looked up.'],
+  ['/clear', 'Delete your chat history.'],
+  ['/help', 'Every command, in the chat.'],
+];
+
+const PRINCIPLES = [
+  ['No art beats wrong art.', 'If it isn’t sure which game you mean, the page keeps your theme rather than dressing up as the wrong one.'],
+  ['Your story, your pace.', 'Spoiler Shield is on from the start. Nothing past where you are shows unless you click it.'],
+  ['Stealth means stealth.', 'A Stealth conversation is never saved or remembered, and no game art is fetched for it.'],
+  ['Guidance, not authority.', 'Answers cite their sources. When it matters, like a purchase or a choice you can’t undo, check them.'],
+];
+
+export function About() {
+  return (
+    <div className="s-prose">
+      <section aria-labelledby="a-how">
+        <h2 id="a-how" className="s-h3">How it works</h2>
+        <ol className="s-numbered">
+          <li><strong>It looks things up when you ask.</strong> Game wikis, official patch notes and web search are consulted when you ask, so answers follow the current patch rather than last year&rsquo;s.</li>
+          <li><strong>It recognises the game.</strong> The chat takes on that game&rsquo;s Steam art and a colour sampled from it, and the answer is set out like a strategy-guide page.</li>
+          <li><strong>It keeps your place.</strong> Tell it how far you have played and it answers up to there. Screenshots work too, up to three per message.</li>
+        </ol>
+      </section>
+
+      <section aria-labelledby="a-ask">
+        <h2 id="a-ask" className="s-h3">What you can ask</h2>
+        <p>Anything, in plain words. A boss you are stuck on, a build, a quest, whether a game is on sale. These commands do specific jobs:</p>
+        <dl className="s-defs">
+          {COMMANDS.map(([cmd, text]) => (
+            <div key={cmd}><dt><code>{cmd}</code></dt><dd>{text}</dd></div>
+          ))}
+        </dl>
+        <p>
+          In Discord, the bot answers @mentions and slash commands the same way, and <code>/watch</code> posts
+          a game&rsquo;s patch notes and best deals into a channel.
+        </p>
+      </section>
+
+      <section aria-labelledby="a-principles">
+        <h2 id="a-principles" className="s-h3">Principles</h2>
+        <ul className="s-principles">
+          {PRINCIPLES.map(([head, text]) => (
+            <li key={head}><Mark size="sm" /><div><strong>{head}</strong> {text}</div></li>
+          ))}
+        </ul>
+      </section>
+
+      <section aria-labelledby="a-faq">
+        <h2 id="a-faq" className="s-h3">Questions people ask</h2>
+        <dl className="s-defs s-faq">
+          {FAQ.map(({ q, a }) => (
+            <div key={q}><dt>{q}</dt><dd>{a}</dd></div>
+          ))}
+        </dl>
+      </section>
+
+      <section aria-labelledby="a-by">
+        <h2 id="a-by" className="s-h3">Built by</h2>
+        <p>
+          GameGuide is designed and built independently by Tanmay Angarkar. Questions, ideas and bug
+          reports are welcome. See the <a href="/contacts" className="s-a" onClick={goto('contacts')}>contact page</a>.
+        </p>
+        <p className="s-inline-links">
+          <a className="s-a" href={LINKS.github} target="_blank" rel="noopener noreferrer"><GitHubGlyph size={16} /> GitHub</a>
+          <a className="s-a" href={LINKS.linkedin} target="_blank" rel="noopener noreferrer"><LinkedInGlyph size={16} /> LinkedIn</a>
+        </p>
+      </section>
+    </div>
+  );
+}
+
+// ─── Terms ─────────────────────────────────────────────────────────────────
+
+const Email = () => <a href={mailto()} className="s-a">{LINKS.email}</a>;
+
+const TERMS = [
+  {
+    id: 't-acceptance', title: 'Acceptance of terms',
+    body: (
+      <p>
+        By accessing or using GameGuide-AI (the &quot;Service&quot;), you agree to be bound by these Terms.
+        If you do not agree, do not use the Service. We may update these Terms at any time; continued
+        use after changes constitutes acceptance.
+      </p>
+    ),
+  },
+  {
+    id: 't-copyright', title: 'Copyright & content protection',
+    body: (
+      <>
+        <p>
+          <strong>All content, design, code, branding, visualizations, prompts, and architecture of GameGuide-AI
+          are © 2026 Tanmay Angarkar. All rights reserved.</strong>
+        </p>
+        <ul className="s-bullets">
+          <li>The GameGuide-AI name, logo, &quot;Neural Mesh&quot;, &quot;PULSE Search&quot;, and &quot;Vision GODMODE&quot; are protected marks of the project.</li>
+          <li>The source code, UI, animations, copy, and underlying prompt engineering are protected under copyright law and may not be copied, redistributed, mirrored, scraped, fine-tuned on, or used to train any model without prior written consent.</li>
+          <li>Game titles, screenshots, artwork, lore, and patch notes belong to their respective publishers and are referenced under fair use for commentary, research, and player assistance.</li>
+          <li>Reverse engineering, decompiling, or attempting to extract the system prompt, routing logic, or provider configuration is strictly prohibited.</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 't-use', title: 'Acceptable use',
+    body: (
+      <>
+        <p>You agree NOT to use the Service to:</p>
+        <ul className="s-bullets">
+          <li>Generate harassing, illegal, or harmful content.</li>
+          <li>Attempt to bypass rate limits, abuse the AI mesh, or perform automated scraping.</li>
+          <li>Resell, white-label, or sublicense responses without permission.</li>
+          <li>Train competing AI models using GameGuide-AI&apos;s output.</li>
+        </ul>
+      </>
+    ),
+  },
+  {
+    id: 't-ai', title: 'AI-generated content disclaimer',
+    body: (
+      <p>
+        Responses are generated by large language models combined with live web sources. While we
+        optimize for accuracy, all output should be treated as <strong>guidance, not authority</strong>. Verify
+        critical decisions (purchases, irreversible in-game choices, competitive plays) against
+        primary sources. We are not liable for losses arising from reliance on Service output.
+      </p>
+    ),
+  },
+  {
+    id: 't-sources', title: 'Third-party sources',
+    body: (
+      <p>
+        The Service surfaces data from third parties (Steam, CheapShark, Wikipedia and game wikis,
+        official patch notes, RSS feeds, and web search results, which can include community sites such
+        as Reddit). We do not control their accuracy, availability, or terms. Citations are
+        provided for verification; clicking them takes you to the third party&apos;s domain.
+      </p>
+    ),
+  },
+  {
+    id: 't-privacy', title: 'Privacy',
+    body: (
+      <>
+        <p>
+          Sign-in is optional and handled via Supabase Auth. Conversations are stored only for your own
+          session continuity. Spoiler Shield keeps the game progress you tell it (for example
+          “Elden Ring: beat Margit”) in your browser, and in your profile if you are signed in, so
+          later answers stay spoiler-safe. We do not sell your data, and we do not use your prompts to train models.
+          To answer a question, your prompt is sent to third-party AI model providers and search
+          services, which process it under their own terms.
+        </p>
+        <p>
+          When a game comes up, the chat fetches that game&rsquo;s artwork from Steam through our server; only the
+          game&rsquo;s name is sent, and never in Stealth. The last few games you asked about are remembered in
+          your browser, so the chat can offer them again.
+        </p>
+        <p>
+          <strong>Usage counts.</strong> We may count page views and a few anonymous actions (such as pressing
+          Start, sharing an answer or opening a shared one) with Vercel Web Analytics and PostHog. Neither is
+          set up to use cookies or browser storage, neither follows you from one visit to the next, and we
+          switch off PostHog&rsquo;s session recording and automatic capture. We honour Do Not Track, and nothing
+          is counted while Stealth is on. What you type is never part of it, and neither is the content of a
+          shared link: the address is recorded as <code>/share/redacted</code>.
+        </p>
+        <p>
+          <strong>Crash reports.</strong> If the page breaks, Sentry may receive a report of what failed and in
+          which browser, with the address of the page minus anything after the <code>#</code> and with a shared
+          link&rsquo;s contents blanked out. It carries no account details, no cookies and no part of your
+          conversation.
+        </p>
+        <p>
+          <strong>Share links.</strong> When you share an answer, the question and answer are packed into the link
+          itself (<code>/share/…</code>). Nothing is saved in a database, so we cannot edit or delete a shared
+          link, and anyone you send it to can read it, and anyone they forward it to. Because the link is a web
+          address, our host receives it whenever someone opens it or a chat app asks for a preview: it reads the
+          question and the opening of the answer (never the parts hidden behind spoiler bars) to make the preview
+          card, and its ordinary request logs may record the address. Links made before November 2026 keep the
+          text after a <code>#</code>, which browsers never send to a server, and are left that way. Don&rsquo;t share
+          an answer that contains something private. A shared page is a copy made by whoever sent it; GameGuide does
+          not verify its contents.
+        </p>
+        <p><strong>Discord bot.</strong> When you use GameGuide-AI in Discord, the bot stores:</p>
+        <ul className="s-bullets">
+          <li>your Discord user ID, and the server ID when you use it in a server;</li>
+          <li>the messages you send it and its replies, so it can remember the conversation;</li>
+          <li>usage counts, to apply daily limits and show <strong>/stats</strong>;</li>
+          <li>your Spoiler Shield setting and the game progress you tell it, so answers stay spoiler-safe;</li>
+          <li>for servers using <strong>/watch</strong>: the server and channel IDs and the games to post patch notes or deals for — no user IDs. These are deleted with <strong>/watch remove</strong>, when the channel is deleted, or when the bot is removed from the server.</li>
+          <li>if you buy Base, Pro, Pro Lifetime or a server plan: which plan you hold, its status and renewal date, and the payment provider's reference for it. Payment is handled entirely by our payment providers (Razorpay or PayPal, depending on how you pay; Stripe or Lemon Squeezy if offered at checkout) — we never see or store card or UPI details.</li>
+        </ul>
+        <p>
+          The bot only reads messages that <strong>@mention it</strong>, direct messages sent to it, and its slash
+          commands — never the rest of a server&apos;s chat. Stored conversation history is kept for at most
+          <strong> 90 days</strong> and only your <strong>50 most recent</strong> messages are retained; per-message usage records
+          are deleted after 3 days. Run <strong>/clear</strong> in Discord to delete your stored history and saved progress immediately,
+          or email <Email /> to have any other data removed.
+        </p>
+      </>
+    ),
+  },
+  {
+    id: 't-dmca', title: 'DMCA & takedown',
+    body: (
+      <p>
+        If you believe content on this Service infringes your copyright, contact <Email /> with the
+        disputed material, your contact details, and a statement of good-faith belief. We respond
+        within 7 business days.
+      </p>
+    ),
+  },
+  {
+    id: 't-payments', title: 'Paid plans',
+    body: (
+      <p>
+        Base, Pro, Server and Pro Lifetime are digital plans for the GameGuide Discord bot, bought on the{' '}
+        <a href="/pricing" className="s-a" onClick={goto('upgrade')}>plans page</a> and paid through our payment
+        providers (Razorpay or PayPal; Stripe or Lemon Squeezy if offered at checkout), which process the payment under their own terms; we never see
+        card or UPI details. Subscriptions renew until cancelled and can be cancelled at any time. Refunds, cancellation
+        and delivery are covered by the{' '}
+        <a href="/refunds" className="s-a" onClick={goto('refunds')}>refund &amp; cancellation policy</a> and the{' '}
+        <a href="/delivery" className="s-a" onClick={goto('delivery')}>delivery policy</a>.
+      </p>
+    ),
+  },
+  {
+    id: 't-termination', title: 'Termination',
+    body: (
+      <p>
+        We may suspend or terminate access for violations of these Terms without notice. You may stop
+        using the Service at any time.
+      </p>
+    ),
+  },
+  {
+    id: 't-contact', title: 'Contact',
+    body: (
+      <p>
+        Questions about these Terms? Reach out via the{' '}
+        <a href="/contacts" className="s-a" onClick={goto('contacts')}>contact page</a>.
+      </p>
+    ),
+  },
+];
+
+export function Terms({ start }) {
+  const [active, setActive] = useState(start || TERMS[0].id);
+  // Set when a contents entry is clicked. The last sections are too short to
+  // reach the reading line, so the spy falls back to "the final one" at the
+  // bottom of the page — which would otherwise overrule what you just picked.
+  const picked = useRef(false);
+  const pickedTimer = useRef(0);
+  useEffect(() => () => clearTimeout(pickedTimer.current), []);
+
+  // Scroll-spy: you are in the last section whose top has passed the reading
+  // line. An IntersectionObserver band was tried first, but a short section
+  // (§7 DMCA) could sit entirely inside it and never win, so clicking it
+  // highlighted the section after. Offsets are measured once and re-measured
+  // on resize, so scrolling itself never reads layout.
+  useEffect(() => {
+    const LINE = 140; // just below the sticky nav
+    let frame = 0;
+    let tops = [];
+    const measure = () => {
+      tops = TERMS.map(t => {
+        const el = document.getElementById(t.id);
+        return { id: t.id, top: el ? el.getBoundingClientRect().top + window.scrollY : 0 };
+      });
+    };
+    const update = () => {
+      frame = 0;
+      if (!tops.length || picked.current) return;
+      const line = window.scrollY + LINE;
+      let current = tops[0].id;
+      for (const s of tops) if (s.top <= line) current = s.id;
+      // The last sections can be too short to ever reach the line, so at the
+      // bottom of the page the final one is always the right answer.
+      const doc = document.documentElement;
+      if (window.innerHeight + window.scrollY >= doc.scrollHeight - 4) current = tops[tops.length - 1].id;
+      setActive(current);
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
+    measure();
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => { measure(); update(); })
+      : null;
+    ro?.observe(document.body);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      ro?.disconnect();
+    };
+  }, []);
+
+  const jump = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    picked.current = true;
+    clearTimeout(pickedTimer.current);
+    pickedTimer.current = setTimeout(() => { picked.current = false; }, 1200);
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.focus({ preventScroll: true });
+    setActive(id);
+  };
+  // #privacy opens this page at the privacy section. Deferred a tick so it
+  // lands after the shell's scroll-to-top, which runs after this effect, and
+  // repeated once the web fonts are in — their swap reflows the page above
+  // the section and would leave its heading under the nav.
+  useEffect(() => {
+    if (!start) return undefined;
+    let live = true;
+    const go = () => {
+      const el = live && document.getElementById(start);
+      if (!el) return;
+      picked.current = true;
+      clearTimeout(pickedTimer.current);
+      pickedTimer.current = setTimeout(() => { picked.current = false; }, 1200);
+      el.scrollIntoView({ behavior: 'instant', block: 'start' });
+      setActive(start);
+    };
+    const t = setTimeout(go, 0);
+    document.fonts?.ready.then(() => requestAnimationFrame(go));
+    return () => { live = false; clearTimeout(t); };
+  }, [start]);
+
+  const n = TERMS.findIndex(t => t.id === active) + 1;
+
+  return (
+    <div className="s-terms">
+      <nav className="s-toc" aria-label="Terms sections">
+        <p className="s-toc__head">
+          <span>Contents</span>
+          <span className="s-toc__count" aria-hidden="true">§ {n} / {TERMS.length}</span>
+        </p>
+        <ol className="s-toc__list">
+          {TERMS.map((t, i) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                className={`s-toc__link${t.id === active ? ' is-on' : ''}`}
+                aria-current={t.id === active ? 'location' : undefined}
+                onClick={() => jump(t.id)}
+              >
+                <span className="s-toc__num">{String(i + 1).padStart(2, '0')}</span>{t.title}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <div className="s-prose">
+        {TERMS.map((t, i) => (
+          <section key={t.id} id={t.id} className="s-term" tabIndex={-1} aria-labelledby={`${t.id}-h`}>
+            <h2 id={`${t.id}-h`} className="s-h3"><span className="s-term__num">{i + 1}.</span> {t.title}</h2>
+            {t.body}
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Contact ───────────────────────────────────────────────────────────────
+
+export function Contact() {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(LINKS.email);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch { /* clipboard blocked: the mailto link still works */ }
+  };
+
+  const rows = [
+    {
+      key: 'email', icon: <Mail size={22} />, label: 'Email · support', value: LINKS.email, href: mailto(),
+      text: 'Support, partnerships, takedowns and anything else. Replies within about a day.',
+      extra: (
+        <button type="button" className="s-copy" onClick={copy} aria-label={copied ? 'Email address copied' : 'Copy email address'}>
+          {copied ? <Check size={15} /> : <Copy size={15} />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      ),
+    },
+    {
+      key: 'discord', icon: <MessageSquare size={22} />, label: 'Discord · add the bot', value: 'GameGuide for your server',
+      href: LINKS.discordInvite, external: true,
+      text: 'The same guide in your server: @mention it, use its slash commands, or let Watchtower post patch notes.',
+      extra: <a className="s-copy" href={LINKS.topgg} target="_blank" rel="noopener noreferrer"><span>top.gg</span><ArrowUpRight size={14} aria-hidden="true" /></a>,
+    },
+    {
+      key: 'github', icon: <GitHubGlyph size={22} />, label: 'GitHub · code', value: '@angarkartanmay-ops',
+      href: LINKS.github, external: true,
+      text: 'Issues, ideas and pull requests.',
+    },
+    {
+      key: 'linkedin', icon: <LinkedInGlyph size={22} />, label: 'LinkedIn · connect', value: 'Tanmay Angarkar',
+      href: LINKS.linkedin, external: true,
+      text: 'Collaboration, hiring conversations and engineering chats.',
+    },
+  ];
+
+  return (
+    <>
+      <ul className="s-channels">
+        {rows.map((r) => (
+          <li key={r.key} className="s-channel">
+            <a
+              className="s-channel__main"
+              href={r.href}
+              {...(r.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+            >
+              <span className="s-channel__icon" aria-hidden="true">{r.icon}</span>
+              <span className="s-channel__body">
+                <span className="s-channel__label">{r.label}</span>
+                <span className="s-channel__value">{r.value}</span>
+                <span className="s-channel__text">{r.text}</span>
+              </span>
+              <ArrowUpRight className="s-channel__arrow" size={20} aria-hidden="true" />
+            </a>
+            {r.extra && <span className="s-channel__extra">{r.extra}</span>}
+          </li>
+        ))}
+      </ul>
+      <p className="s-note">For DMCA requests, please use email.</p>
+      <p className="s-note">Response times: support email ~24h · LinkedIn ~3 days · GitHub issues triaged weekly.</p>
+      <span className="sr-only" role="status" aria-live="polite">{copied ? 'Email address copied' : ''}</span>
+    </>
+  );
+}
+
+// ─── Refunds & cancellation ────────────────────────────────────────────────
+
+const PRICES_LINE = 'Base ₹199 / $2.99 a month or ₹1,999 / $29.99 a year · Pro ₹399 / $4.99 a month or ₹3,999 / $49.99 a year · Server ₹1,199 / $14.99 a month or ₹11,999 / $149.99 a year · Pro Lifetime ₹3,299 / $39.99 once.';
+
+export function Refunds() {
+  return (
+    <div className="s-prose">
+      <section>
+        <h2 className="s-h2">What you are buying</h2>
+        <p>
+          GameGuide sells digital access to paid plans of the GameGuide Discord bot: <strong>Base</strong> and{' '}
+          <strong>Pro</strong> (each for one Discord account), <strong>Server</strong> (for every member of one Discord server) and <strong>Pro
+          Lifetime</strong> (Pro with a single payment). Current prices: {PRICES_LINE} Prices include any taxes
+          shown at checkout. Plans are bought on the <a href="/pricing" className="s-a" onClick={goto('upgrade')}>plans page</a>.
+        </p>
+      </section>
+      <section>
+        <h2 className="s-h2">Cancelling a subscription</h2>
+        <p>
+          You can cancel a monthly or yearly plan at any time — from the link in the receipt email the payment
+          provider sends you, or by writing to <a className="s-a" href={mailto('Cancel my GameGuide plan')}>{LINKS.email}</a>.
+          Cancelling stops all future charges. Your plan stays on until the end of the period you have already paid
+          for, then the account returns to the free plan. Nothing else is lost.
+        </p>
+      </section>
+      <section>
+        <h2 className="s-h2">Refunds</h2>
+        <ul className="s-bullets">
+          <li><strong>First 7 days.</strong> If the plan is not for you, ask within 7 days of your first payment for it — or within 7 days of a yearly renewal — and you get a full refund.</li>
+          <li><strong>Pro Lifetime.</strong> Full refund if asked within 7 days of purchase.</li>
+          <li><strong>Moving up</strong> from Base to Pro, or from a subscription to Pro Lifetime, starts the new plan at once and stops the old one renewing. Days already paid for on the old plan are not refunded.</li>
+          <li><strong>Monthly renewals</strong> are not refunded once the new month has started; cancel before the renewal date to avoid the charge.</li>
+          <li><strong>Charged twice or by mistake?</strong> Duplicate or erroneous charges are always refunded in full.</li>
+          <li><strong>If the plan never switched on</strong> and we cannot fix it within 24 hours of you telling us, you get a full refund.</li>
+        </ul>
+        <p>
+          To ask for a refund, email <a className="s-a" href={mailto('Refund request')}>{LINKS.email}</a> with the
+          email address you paid with and the payment or receipt ID. Approved refunds are sent to the original payment
+          method within <strong>5–7 working days</strong>; your bank may take a few more days to show it. When a
+          refund is issued, the paid plan it was for ends.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+// ─── Delivery ──────────────────────────────────────────────────────────────
+
+export function Delivery() {
+  return (
+    <div className="s-prose">
+      <section>
+        <h2 className="s-h2">Digital delivery only</h2>
+        <p>
+          Everything GameGuide sells is a digital service. Nothing is shipped and there are no physical goods, so no
+          shipping charges apply and no delivery address is needed.
+        </p>
+      </section>
+      <section>
+        <h2 className="s-h2">When your plan starts</h2>
+        <p>
+          Your plan is attached to the Discord account (or Discord server) you bought it for and usually switches
+          on <strong>within a few minutes</strong> of the payment being confirmed. You will see a confirmation page
+          after paying and a receipt by email from the payment provider; in Discord, <code>/quota</code> shows your
+          plan. Bank transfers and some UPI payments can take longer to confirm — the plan starts as soon as they do.
+        </p>
+      </section>
+      <section>
+        <h2 className="s-h2">If it does not arrive</h2>
+        <p>
+          If your plan has not switched on within an hour of paying, write to{' '}
+          <a className="s-a" href={mailto('My GameGuide plan did not arrive')}>{LINKS.email}</a> with your receipt.
+          We fix it the same day, or refund you in full — see the{' '}
+          <a href="/refunds" className="s-a" onClick={goto('refunds')}>refund policy</a>.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+// ─── Not found ─────────────────────────────────────────────────────────────
+
+const WAYS_ON = [
+  { key: 'chat', icon: <MessageSquare size={22} />, label: 'Open GameGuide', text: 'Ask about any game; it stops where you are in the story.', view: 'chat' },
+  { key: 'home', icon: <House size={22} />, label: 'Home page', text: 'Today’s most played games, and how it works.', view: 'landing' },
+  { key: 'about', icon: <Info size={22} />, label: 'About', text: 'How it researches answers, and who builds it.', view: 'about' },
+  { key: 'plans', icon: <Tag size={22} />, label: 'Plans and pricing', text: 'What each plan adds.', view: 'upgrade' },
+  { key: 'contact', icon: <Mail size={22} />, label: 'Contact', text: 'Found a broken link? Tell us where.', view: 'contacts' },
+];
+
+export function NotFound() {
+  // The address as it was typed, so a slip is easy to spot. Plain text only.
+  const asked = typeof window === 'undefined' ? '' : `${window.location.pathname}${window.location.search}${window.location.hash}`.slice(0, 80);
+  return (
+    <>
+      <p className="s-note s-note--asked">You asked for <code>{asked}</code></p>
+      <ul className="s-channels">
+        {WAYS_ON.map((r) => (
+          <li key={r.key} className="s-channel">
+            <a className="s-channel__main" href={pathForView(r.view)} onClick={goto(r.view)}>
+              <span className="s-channel__icon" aria-hidden="true">{r.icon}</span>
+              <span className="s-channel__body">
+                <span className="s-channel__value">{r.label}</span>
+                <span className="s-channel__text">{r.text}</span>
+              </span>
+              <ArrowUpRight className="s-channel__arrow" size={20} aria-hidden="true" />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}

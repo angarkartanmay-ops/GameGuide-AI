@@ -3,6 +3,7 @@ import { ArrowUpRight } from 'lucide-react';
 import { LINKS, mailto } from '../../site/links';
 import InstallButton from '../InstallButton';
 import BrandMark from '../BrandMark';
+import NavLink from '../NavLink';
 
 function Ext({ href, children }) {
   return (
@@ -35,7 +36,11 @@ function Featured() {
 
 /** Shared footer for the landing and the info pages. */
 export default function SiteFooter({ onNavigate, onStart }) {
-  const go = (view) => () => onNavigate?.(view);
+  // Real links to real pages (so they can be followed and opened in a new
+  // tab); a plain click is handled in the app.
+  const page = (view, label) => (
+    <NavLink view={view} onNavigate={onNavigate} className="s-foot__link">{label}</NavLink>
+  );
   return (
     <footer className="s-foot">
       <div className="s-foot__inner">
@@ -53,13 +58,13 @@ export default function SiteFooter({ onNavigate, onStart }) {
         <nav className="s-foot__cols" aria-label="Footer">
           <div>
             <p className="s-foot__head">Project</p>
-            <button type="button" className="s-foot__link" onClick={go('about')}>About</button>
-            <button type="button" className="s-foot__link" onClick={go('upgrade')}>Plans</button>
-            <button type="button" className="s-foot__link" onClick={go('terms')}>Terms &amp; copyright</button>
-            <button type="button" className="s-foot__link" onClick={go('privacy')}>Privacy</button>
-            <button type="button" className="s-foot__link" onClick={go('refunds')}>Refunds &amp; cancellation</button>
-            <button type="button" className="s-foot__link" onClick={go('delivery')}>Delivery</button>
-            <button type="button" className="s-foot__link" onClick={go('contacts')}>Contact</button>
+            {page('about', 'About')}
+            {page('upgrade', 'Plans')}
+            {page('terms', <>Terms &amp; copyright</>)}
+            {page('privacy', 'Privacy')}
+            {page('refunds', <>Refunds &amp; cancellation</>)}
+            {page('delivery', 'Delivery')}
+            {page('contacts', 'Contact')}
             <InstallButton className="s-foot__link" />
           </div>
           <div>

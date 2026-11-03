@@ -135,6 +135,8 @@ const SITE_FILES = [
   ...files(join(ROOT, 'src', 'site')),
   join(ROOT, 'src', 'components', 'LandingPage.jsx'),
   join(ROOT, 'src', 'components', 'InfoPage.jsx'),
+  join(ROOT, 'src', 'components', 'InfoContent.jsx'),
+  join(ROOT, 'src', 'components', 'infoPages.js'),
   join(ROOT, 'src', 'styles', 'site.css'),
   join(ROOT, 'index.html'),
   join(ROOT, 'public', 'llms.txt'),
@@ -192,7 +194,7 @@ check('each is a question without an em-dash', SAMPLE_QUESTIONS.every(q => q.end
   const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
   const noscript = /<noscript>([\s\S]*?)<\/noscript>/.exec(html)?.[1] || '';
   check('index.html keeps a heading and the pitch in <noscript>', /<h1[^>]*>[^<]*game guide/i.test(noscript) && /spoiler/i.test(noscript));
-  check('the <noscript> pitch links to the info pages', ['about', 'privacy', 'terms', 'contacts'].every(p => noscript.includes(`href="/#${p}"`)));
+  check('the <noscript> pitch links to the info pages', ['about', 'privacy', 'terms', 'contacts'].every(p => noscript.includes(`href="/${p}"`)));
   check('the <noscript> copy has no em-dash', !/[—–]/.test(noscript));
 }
 

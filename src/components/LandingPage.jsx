@@ -4,6 +4,7 @@ import useDailyGames from '../site/useDailyGames';
 import usePageMeta from '../site/usePageMeta';
 import { achievements } from '../site/achievements';
 import { advance, isTypingTarget } from '../site/konami';
+import { pathForView } from '../site/route';
 import { gsap, ScrollTrigger, scrollToId, useCalm, useLenis, useScene, scheduleRefresh } from '../site/motion';
 import SiteNav from './site/SiteNav';
 import SiteFooter from './site/SiteFooter';
@@ -203,7 +204,7 @@ export default function LandingPage({ onEnter, onNavigate }) {
     { label: 'Spoiler Shield', onClick: section('shield') },
     { label: 'Library', onClick: section('library') },
     { label: 'Discord', onClick: section('watchtower') },
-    { label: 'About', onClick: () => onNavigate?.('about') },
+    { label: 'About', href: pathForView('about'), onClick: () => onNavigate?.('about') },
   ];
 
   return (

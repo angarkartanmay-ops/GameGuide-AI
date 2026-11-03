@@ -34,6 +34,11 @@ const SUITES = [
   ['price',         'price.test.mjs'],         // /price game+version detection, web/Discord parity
   ['price-proxy',   'price-proxy.test.mjs'],   // /api/price: narrow CheapShark proxy for filtered networks
   ['share',         'share.test.mjs'],         // spoiler-safe share links: round trip, hostile input, deflate bomb
+  ['share-meta',    'share-meta.test.mjs'],    // a share's preview card: no spoilers, no markup from the payload, noindex
+  ['csp-report',    'csp-report.test.mjs'],    // /api/csp-report: both formats, bounded, share payloads blanked
+  ['seo',           'seo.test.mjs'],           // JSON-LD (Organization, FAQPage, BreadcrumbList) + sitemap rules
+  ['prerender',     'prerender.test.mjs'],     // the static page for every address: tags, text, links, inline-script hashes
+  ['headers',       'security-headers.test.mjs'], // vercel.json: routes, true 404, nosniff, frame-ancestors, report-only CSP
   ['missables',     'missables.test.mjs'],     // /missables prompt + default game, web/Discord parity
   ['discord-format', 'discord-format.test.mjs'], // tables → phone-readable blocks, spoilers intact
   ['corroboration', 'corroboration.test.ts'],  // source-agreement scoring

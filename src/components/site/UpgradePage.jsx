@@ -7,6 +7,7 @@ import {
 } from '../../site/pricing';
 import { gsap, useCalm, useScene } from '../../site/motion';
 import usePageMeta from '../../site/usePageMeta';
+import { pathForView } from '../../site/route';
 import SiteNav from './SiteNav';
 import SiteFooter from './SiteFooter';
 import '../../styles/site.css';
@@ -187,9 +188,9 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
   const serverBlocked = blocked('server', period);
 
   const links = [
-    { label: 'About', onClick: () => onNavigate?.('about') },
-    { label: 'Plans', onClick: () => {}, current: true },
-    { label: 'Contact', onClick: () => onNavigate?.('contacts') },
+    { label: 'About', href: pathForView('about'), onClick: () => onNavigate?.('about') },
+    { label: 'Plans', href: pathForView('upgrade'), onClick: () => {}, current: true },
+    { label: 'Contact', href: pathForView('contacts'), onClick: () => onNavigate?.('contacts') },
   ];
 
   return (

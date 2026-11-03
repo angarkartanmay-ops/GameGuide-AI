@@ -3,19 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <script>
-      /* The site routes on the hash (/#terms). Payment-provider reviewers and
-         crawlers type the plain path (/terms, /refund-policy): send those to
-         the right page instead of the landing page. */
+      /* Pages have real paths (/about, /terms, /pricing ...). Older links name
+         the page in the fragment instead (/#about, /#upgrade/<token>, the return
+         URL a payment provider was given): move those to the path before the
+         app starts. A share stays in its fragment on purpose, because a
+         fragment is never sent to a server. The same rule, tested against this
+         exact script, is legacyRedirect() in src/site/route.js. */
       (function () {
-        var alias = { 'terms-and-conditions': 'terms', 'terms-of-service': 'terms', 'privacy-policy': 'privacy',
-          'refund': 'refunds', 'refund-policy': 'refunds', 'cancellation': 'refunds', 'cancellation-policy': 'refunds',
-          'shipping': 'delivery', 'shipping-policy': 'delivery', 'delivery-policy': 'delivery',
-          'contact': 'contacts', 'contact-us': 'contacts', 'pricing': 'upgrade', 'plans': 'upgrade' };
-        var p = location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
-        var view = alias[p] || p;
-        if (!location.hash && /^(about|terms|privacy|refunds|delivery|contacts|upgrade|chat)$/.test(view)) {
-          location.replace('/#' + view);
-        }
+        var p = location.pathname.replace(/\/+$/, '').toLowerCase();
+        if (p !== '' && p !== '/index.html') return;
+        var raw = location.hash.replace(/^#\/?/, '');
+        if (!raw) return;
+        var lower = raw.toLowerCase();
+        if (lower === 'share' || lower.indexOf('share/') === 0) return;
+        var head = lower.split('/')[0];
+        var paths = { landing: '/', chat: '/chat', about: '/about', terms: '/terms', privacy: '/privacy',
+          refunds: '/refunds', delivery: '/delivery', contacts: '/contacts', upgrade: '/pricing' };
+        if (!Object.prototype.hasOwnProperty.call(paths, head)) return;
+        var rest = head === 'upgrade' ? raw.slice(head.length).replace(/^\/+/, '') : '';
+        var hash = rest ? '#upgrade/' + rest : '';
+        if (paths[head] === '/') history.replaceState(null, '', '/' + location.search);
+        else location.replace(paths[head] + location.search + hash);
       })();
     </script>
     <script>
@@ -40,6 +48,7 @@
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="GameGuide" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content="GameGuide: ask anything about any game" />
     <meta property="og:description" content="Live answers, set like a strategy guide, that stop where you are in the story." />
     <meta property="og:url" content="https://gameguide.online/" />
@@ -52,32 +61,19 @@
     <meta name="twitter:description" content="Live answers, set like a strategy guide, that stop where you are in the story." />
     <meta name="twitter:image" content="https://gameguide.online/og.png" />
 
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "GameGuide",
-        "url": "https://gameguide.online/",
-        "applicationCategory": "GameApplication",
-        "operatingSystem": "Any (web browser), Discord",
-        "description": "A spoiler-safe game guide you can talk to. Live answers from wikis, patch notes and the web, set like a strategy guide. It never spoils what you haven't reached.",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "featureList": [
-          "Spoiler Shield: answers stop where you are in the story",
-          "Missables checklist from your current progress",
-          "Live research from wikis, official patch notes and the web",
-          "Spoiler-safe share links",
-          "PC deal and all-time-low price checks",
-          "Discord bot with patch-note alerts"
-        ]
-      }
-    </script>
+    <!-- Structured data (Organization, WebSite, WebApplication, FAQPage,
+         BreadcrumbList) is written into each page at build time, from
+         src/site/seo.js, by scripts/prerender.mjs. -->
 
     <!-- Fonts are self-hosted (src/styles/fonts.css): no third-party stylesheet
          to wait for before the first paint. Steam serves the art; today's games
          come from shared. (the hand-picked fallback uses cdn., only if the daily
          list fails, so it gets no early connection). -->
     <link rel="preconnect" href="https://shared.akamai.steamstatic.com" />
+    <!-- Written by the build (the landing's chunk files). Data, not script: the
+         inline scripts around it stay byte-for-byte the same on every build,
+         which is what lets a Content-Security-Policy name them by hash. -->
+    <script type="application/json" id="gg-landing-preload">[]</script>
     <!-- Today's landing games (src/site/daily.js): start the one request now,
          in parallel with the app bundle, when the landing will need it and
          the day's copy isn't already saved. Either way, as soon as the first
@@ -85,9 +81,8 @@
          hero, the same files Hero.jsx picks), not after the bundle has run. -->
     <script>
       try {
-        var h = location.hash.replace(/^#\/?/, '').toLowerCase();
         var c = JSON.parse(localStorage.getItem('gg.daily.v1') || 'null');
-        var landing = h === 'landing' || (!h && sessionStorage.getItem('gg_entered') !== '1');
+        var landing = location.pathname === '/' && !location.hash && sessionStorage.getItem('gg_entered') !== '1';
         var art = function (body) {
           var g = body && body.hero && body.hero[0];
           var ok = /^https:\/\/(shared|cdn)\.akamai\.steamstatic\.com\//;
@@ -99,9 +94,11 @@
           });
         };
         if (landing) {
-          // The landing chunk and what it imports (filled in at build time),
-          // asked for now instead of after the entry has run.
-          /*gg-landing-preload*/[].forEach(function (href) {
+          // The landing chunk and what it imports (listed at build time in the
+          // data block below), asked for now instead of after the entry has run.
+          var list = [];
+          try { list = JSON.parse(document.getElementById('gg-landing-preload').textContent); } catch (e) { /* none */ }
+          list.forEach(function (href) {
             var l = document.createElement('link');
             var css = /\.css$/.test(href);
             l.rel = css ? 'preload' : 'modulepreload';
@@ -138,10 +135,10 @@
         </ul>
         <p>The chat runs in your browser and needs JavaScript. Turn it on to ask a question and to add the Discord bot to your server.</p>
         <nav aria-label="Pages">
-          <a href="/#about" style="color:#ece6da;margin-right:18px">About</a>
-          <a href="/#privacy" style="color:#ece6da;margin-right:18px">Privacy</a>
-          <a href="/#terms" style="color:#ece6da;margin-right:18px">Terms</a>
-          <a href="/#contacts" style="color:#ece6da">Contact</a>
+          <a href="/about" style="color:#ece6da;margin-right:18px">About</a>
+          <a href="/privacy" style="color:#ece6da;margin-right:18px">Privacy</a>
+          <a href="/terms" style="color:#ece6da;margin-right:18px">Terms</a>
+          <a href="/contacts" style="color:#ece6da">Contact</a>
         </nav>
         <p>Featured on <a href="https://launchbuff.com/products/gameguide-f9fwfb" style="color:#ece6da">LaunchBuff</a> and <a href="https://www.producthunt.com/products/gameguide-ai?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-gameguide-ai" style="color:#ece6da">Product Hunt</a>.</p>
       </div>

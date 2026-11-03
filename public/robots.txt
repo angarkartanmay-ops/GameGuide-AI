@@ -1,5 +1,10 @@
 User-agent: *
 Allow: /
 
+# A shared answer (/share/...) belongs to whoever shared it. It is not listed
+# here on purpose: link previews (X, Slack, Discord) must be able to fetch the
+# page, and a Disallow would stop them. Every share page says noindex itself,
+# in a meta tag and in an X-Robots-Tag header.
+
 # Sitemap
 Sitemap: https://gameguide.online/sitemap.xml

@@ -1,10 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  What may leave the browser in a usage event or a crash report.
 //
-//  A shared answer lives in the URL fragment (`/#s=…`): the question and the
-//  whole answer, packed into the link so nothing is stored on our side. Any
-//  tool that records `location.href` would therefore record the answer. Every
-//  event passes through these functions first, and they drop the fragment.
+//  A shared answer lives in its link: the question and the whole answer,
+//  packed in so nothing is stored on our side. Today's links carry it in the
+//  path (`/share/<payload>`); older ones carry it in the fragment
+//  (`/#share/<payload>`). Any tool that records `location.href` would
+//  therefore record the answer. Every event passes through these functions
+//  first, and they drop the fragment and blank the share path.
 //
 //  Pure on purpose (no import.meta.env, no DOM): tests/privacy.test.mjs runs
 //  them under plain node.
@@ -17,13 +19,24 @@ export function stripFragment(url) {
   return i === -1 ? url : url.slice(0, i);
 }
 
+/** `https://x.app/share/<payload>?a=1` → `https://x.app/share/redacted?a=1`. Also works on a bare path. */
+export function redactSharePath(url) {
+  if (typeof url !== 'string') return url;
+  return url.replace(/(\/share\/)[^/?#\s]+/i, '$1redacted');
+}
+
+/** Everything a URL may carry out of the browser: no fragment, no share payload. */
+export function scrubUrl(url) {
+  return redactSharePath(stripFragment(url));
+}
+
 /** PostHog `before_send`: scrub the URL-bearing properties, keep everything else. */
 export function scrubPostHogEvent(event) {
   if (!event || typeof event !== 'object') return event;
   const props = event.properties;
   if (props && typeof props === 'object') {
-    for (const key of ['$current_url', '$referrer', '$initial_current_url', '$initial_referrer']) {
-      if (key in props) props[key] = stripFragment(props[key]);
+    for (const key of ['$current_url', '$referrer', '$initial_current_url', '$initial_referrer', '$pathname', '$initial_pathname', '$referring_domain_path']) {
+      if (key in props) props[key] = scrubUrl(props[key]);
     }
   }
   return event;
@@ -39,7 +52,7 @@ export function scrubBreadcrumb(crumb) {
   const data = crumb.data;
   if (data && typeof data === 'object') {
     for (const key of ['url', 'from', 'to']) {
-      if (key in data) data[key] = stripFragment(data[key]);
+      if (key in data) data[key] = scrubUrl(data[key]);
     }
   }
   return crumb;
@@ -49,11 +62,11 @@ export function scrubBreadcrumb(crumb) {
 export function scrubSentryEvent(event) {
   if (!event || typeof event !== 'object') return event;
   if (event.request) {
-    event.request.url = stripFragment(event.request.url);
+    event.request.url = scrubUrl(event.request.url);
     const h = event.request.headers;
     if (h && typeof h === 'object') {
       for (const k of Object.keys(h)) {
-        if (k.toLowerCase() === 'referer') h[k] = stripFragment(h[k]);
+        if (k.toLowerCase() === 'referer') h[k] = scrubUrl(h[k]);
       }
     }
     // Never ship cookies or a request body, whatever the SDK collected.

@@ -9,7 +9,7 @@ import usePerfMode from './hooks/usePerfMode';
 import ErrorBoundary from './components/ErrorBoundary';
 import RouteSkeleton from './components/RouteSkeleton';
 import RouteError from './components/RouteError';
-import { readViewFromLocation } from './site/route';
+import { ALL_VIEWS, INFO_VIEWS, pathForView, readShare, readViewFromLocation } from './site/route';
 
 // Each view is its own chunk: the landing no longer ships the chat's markdown
 // and streaming code, and the chat no longer ships GSAP.
@@ -24,21 +24,22 @@ const FINE_POINTER = typeof window !== 'undefined' && window.matchMedia('(pointe
 const SharedAnswer = lazy(() => import('./components/codex/SharedAnswer'));
 const UpgradePage = lazy(() => import('./components/site/UpgradePage'));
 
-// Hash-routable static views (see site/route.js for how a URL becomes one).
+// Views live at real paths (site/route.js has the table: /about, /pricing, ...).
 // "notfound" is a view too, but never one you navigate to: it is what an
 // address that isn't ours shows, instead of quietly showing the landing page.
-const INFO_VIEWS = new Set(['about', 'terms', 'privacy', 'refunds', 'delivery', 'contacts']);
-const ALL_VIEWS = new Set(['landing', 'chat', 'upgrade', ...INFO_VIEWS]);
-// Shared answers live at #share/<payload>. The payload is case-sensitive
-// base64url, so it's read raw — never lowercased, never rewritten.
-const SHARE_PREFIX = 'share/';
+// A share is at /share/<payload>, or, for a link made before paths existed, in
+// the fragment (#share/<payload>). The payload is case-sensitive base64url, so
+// it is read raw: never lowercased, never rewritten.
 const rawHash = () => (typeof window === 'undefined' ? '' : (window.location.hash || '').replace(/^#\/?/, ''));
-const readView = () => (typeof window === 'undefined' ? null : readViewFromLocation(window.location, ALL_VIEWS));
+const readView = () => (typeof window === 'undefined' ? null : readViewFromLocation(window.location));
+const readSharePayload = () => (typeof window === 'undefined' ? null : readShare(window.location));
 
-// The plans page arrives as #upgrade/<signed token> from /upgrade in Discord,
-// or #upgrade/thanks back from a payment. The token is kept for the visit
-// (sessionStorage) and taken out of the address bar, so a reload still works
-// and a copied URL does not carry it.
+// The plans page arrives as /pricing#upgrade/<signed token> from /upgrade in
+// Discord, or #upgrade/thanks back from a payment (the bot and the payment
+// providers still send /#upgrade/..., which index.html moves to /pricing and
+// keeps this fragment on). The token is kept for the visit (sessionStorage)
+// and taken out of the address bar, so a reload still works and a copied URL
+// does not carry it.
 const UPGRADE_TOKEN_KEY = 'gg.upgradeToken';
 function readUpgradeHash() {
   const raw = rawHash();
@@ -71,14 +72,14 @@ function readThemeChosen() {
 }
 
 function App() {
-  // Initial view: explicit hash wins, else fall back to whether the user has
+  // Initial view: the address wins, else fall back to whether the user has
   // already entered the chat in this session.
   const [view, setView] = useState(() => {
     const fromUrl = readView();
     if (fromUrl) return fromUrl;
     return sessionStorage.getItem('gg_entered') === '1' ? 'chat' : 'landing';
   });
-  const [shareHash, setShareHash] = useState(rawHash);
+  const [share, setShare] = useState(readSharePayload);
   const [upgrade, setUpgrade] = useState(readUpgradeHash);
   const [theme, setTheme] = useState(readStoredTheme);
   const [themeChosen, setThemeChosen] = useState(readThemeChosen);
@@ -161,28 +162,32 @@ function App() {
     return () => clearTimeout(t);
   }, [themeFx]);
 
-  // ── Hash <-> view sync ─────────────────────────────────────
-  // Keep the URL hash aligned with the current view (bare URL for landing,
-  // `#about`/`#terms`/`#contacts`/`#chat` otherwise). We use replaceState
-  // here so the sync itself never adds history entries — actual navigation
-  // (navigate()) does pushState.
+  // ── Address <-> view sync ──────────────────────────────────
+  // Keep the address aligned with the view: the canonical path for a page
+  // (/about, not /refund-policy or /#about), the bare root for the landing.
+  // replaceState, so the sync itself never adds history entries; navigate()
+  // is what pushes them.
   useEffect(() => {
-    // The share payload IS the hash; syncing would erase it. A 404 keeps the
-    // address that got it there, so the person can see what was wrong with it.
+    // A share's address IS its content; a 404 keeps the address that got it
+    // there, so the person can see what was wrong with it.
     if (view === 'share' || view === 'notfound') return;
-    const expected = view === 'landing' ? '' : `#${view}`;
-    if (window.location.hash !== expected) {
-      const url = `${window.location.pathname}${window.location.search}${expected}`;
-      window.history.replaceState(window.history.state, '', url);
+    const path = pathForView(view);
+    if (path == null) return;
+    const { pathname, search, hash } = window.location;
+    // The only fragment worth keeping is the plans page's token, until it has
+    // been read (readUpgradeHash ran when the page loaded, so it is safe to drop).
+    if (pathname !== path || hash) {
+      window.history.replaceState(window.history.state, '', `${path}${search}`);
     }
   }, [view]);
 
-  // Browser back/forward + manual hash edits. The raw hash is tracked too, so
-  // opening a second share link in the same tab shows the new answer.
+  // Browser back/forward, and an old-style #hash edited by hand. The share is
+  // tracked too, so opening a second share link in the same tab shows the new
+  // answer.
   useEffect(() => {
     const onPop = () => {
       setView(readView() || 'landing');
-      setShareHash(rawHash());
+      setShare(readSharePayload());
       setUpgrade(readUpgradeHash());
     };
     window.addEventListener('popstate', onPop);
@@ -200,10 +205,9 @@ function App() {
   useEffect(() => { viewRef.current = view; }, [view]);
   const navigate = useCallback((next) => {
     if (!ALL_VIEWS.has(next) || viewRef.current === next) return;
-    const hash = next === 'landing' ? '' : `#${next}`;
-    // Leaving a 404 for a bad path (/asdf) leaves the bad path behind too.
-    const path = viewRef.current === 'notfound' ? '/' : window.location.pathname;
-    const url = `${path}${window.location.search}${hash}`;
+    // A page's own path, so leaving a 404 for a bad address (/asdf) leaves the
+    // bad address behind too.
+    const url = `${pathForView(next)}${window.location.search}`;
     window.history.pushState({ view: next }, '', url);
     viewRef.current = next;
     setView(next);
@@ -266,8 +270,8 @@ function App() {
       <SharedAnswer
         // Keyed by the link: opening a second share in the same tab starts
         // clean instead of showing the first one's art while it decodes.
-        key={shareHash}
-        encoded={shareHash.startsWith(SHARE_PREFIX) ? shareHash.slice(SHARE_PREFIX.length) : ''}
+        key={share?.encoded ?? ''}
+        encoded={share?.encoded ?? ''}
         onAsk={askFromShare}
         onHome={goLanding}
       />

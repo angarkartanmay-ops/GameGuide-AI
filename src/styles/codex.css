@@ -726,11 +726,12 @@ html[data-vt^="stealth"] .codex { transition: none; }
   display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px 18px;
   font-family: var(--cx-mono); font-size: 10.5px; letter-spacing: 0.08em; color: var(--cx-muted);
 }
-.cx-foot button, .cx-foot__feedback {
+.cx-foot button, .cx-foot a, .cx-foot__feedback {
   display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0;
   border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer;
+  text-decoration: none;
 }
-.cx-foot button:hover { color: var(--cx-ink); }
+.cx-foot button:hover, .cx-foot a:hover { color: var(--cx-ink); }
 .cx-foot__feedback svg { width: 12px; height: 12px; }
 
 /* ── Touch targets ────────────────────────────────────────────────────── */
@@ -739,8 +740,8 @@ html[data-vt^="stealth"] .codex { transition: none; }
    instead of the box, which would push the layout around. */
 @media (pointer: coarse) {
   .cx-foot { gap: 10px 18px; }
-  .cx-foot button, .cx-foot__feedback, .cx-chip--button, .cx-brand { position: relative; }
-  .cx-foot button::after, .cx-foot__feedback::after { content: ''; position: absolute; inset: -8px -6px; }
+  .cx-foot button, .cx-foot a, .cx-foot__feedback, .cx-chip--button, .cx-brand { position: relative; }
+  .cx-foot button::after, .cx-foot a::after, .cx-foot__feedback::after { content: ''; position: absolute; inset: -8px -6px; }
   /* Its label is hidden at this width, leaving a 12px icon to aim at. */
   .cx-foot__feedback::after { inset: -8px -14px; }
   .cx-chip--button::after { content: ''; position: absolute; inset: -8px 0; }

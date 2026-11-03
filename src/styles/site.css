@@ -240,8 +240,8 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
 }
 .s-nav__links { display: flex; gap: 2px; margin-left: auto; }
 .s-nav__link {
-  position: relative; min-height: 44px; padding: 0 12px;
-  border: 0; background: none; cursor: pointer;
+  position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px;
+  border: 0; background: none; cursor: pointer; text-decoration: none;
   font: 500 11.5px var(--s-mono); letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--s-muted); transition: color 0.2s;
 }
@@ -283,7 +283,7 @@ html:has(.site) ::-webkit-scrollbar-thumb:hover { background: rgba(237, 232, 222
 .s-sheet__link {
   display: flex; align-items: baseline; gap: 16px; width: 100%;
   min-height: 64px; padding: 14px 0; border: 0; border-bottom: 1px solid var(--s-hair);
-  background: none; color: var(--s-ink); text-align: left; cursor: pointer;
+  background: none; color: var(--s-ink); text-align: left; cursor: pointer; text-decoration: none;
   font: 560 28px/1.1 var(--s-display); letter-spacing: -0.02em;
 }
 .s-sheet__link[aria-current] { color: var(--s-accent); }
@@ -1082,6 +1082,12 @@ html[data-arcade] .s-closing__title {
 .s-defs > div:last-child { border-bottom: 1px solid var(--s-hair); }
 .s-defs dt code { color: var(--s-accent); background: none; padding: 0; }
 .s-defs dd { margin: 0; }
+/* The About page's questions: a question is a sentence, not a command, so it gets a column to read in. */
+.s-faq > div { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.s-faq dt { font-weight: 600; color: var(--s-ink); }
+@media (min-width: 900px) {
+  .s-faq > div { grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.6fr); gap: 24px; }
+}
 .s-principles { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
 .s-principles li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; }
 .s-principles .s-mark { margin-top: 0.62em; }
@@ -1226,7 +1232,8 @@ html[data-arcade] .s-closing__title {
 .s-seg__opt:disabled { opacity: 0.4; cursor: not-allowed; }
 .s-seg__note {
   padding: 3px 7px; border-radius: 6px; font-size: 10px; letter-spacing: 0.08em;
-  background: color-mix(in srgb, var(--s-accent) 18%, transparent); color: var(--s-accent);
+  /* Ink, not the accent: the accent changes with the game on screen and 3.7:1 on the selected tab was the best it managed. */
+  background: color-mix(in srgb, var(--s-accent) 18%, transparent); color: var(--s-ink);
 }
 
 .s-upgrade__error {

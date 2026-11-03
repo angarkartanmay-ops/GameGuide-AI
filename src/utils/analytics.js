@@ -18,11 +18,12 @@
 //   · No autocapture, no session recording — only the handful of named events
 //     the app sends through track(), with flags, never text the player typed.
 //   · Do Not Track / Global Privacy Control are honoured.
-//   · URL fragments are removed from everything (a shared answer lives there).
+//   · URL fragments are removed from everything, and so is a share link's
+//     payload (a shared answer lives in /share/<payload>, or in the fragment).
 //   · Stealth: events stop for as long as it is on (see setTrackingPaused).
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { scrubPostHogEvent, scrubSentryEvent, scrubBreadcrumb, IGNORED_ERRORS } from './privacy';
+import { scrubPostHogEvent, scrubSentryEvent, scrubBreadcrumb, scrubUrl, IGNORED_ERRORS } from './privacy';
 
 const ENV = import.meta.env;
 const VERCEL = ENV.VITE_ANALYTICS === 'vercel';
@@ -59,6 +60,8 @@ function startVercel() {
   // Vercel's documented queue stub: calls made before the script loads are
   // replayed once it does.
   window.va = function va(...args) { (window.vaq = window.vaq || []).push(args); };
+  // Page views carry the address: a share's payload must not leave with it.
+  window.va('beforeSend', (event) => (event && typeof event.url === 'string' ? { ...event, url: scrubUrl(event.url) } : event));
   const script = document.createElement('script');
   script.defer = true;
   script.src = '/_vercel/insights/script.js';
