@@ -101,8 +101,8 @@ check('Google Fonts: not used anywhere (fonts are self-hosted)', !/fonts\.google
 const rewrites = cfg.rewrites;
 const rewriteOf = (source) => rewrites.find((r) => r.source === source)?.destination;
 check('no catch-all rewrite: an unknown address is a real 404, served from 404.html', !rewrites.some((r) => /\(\?!|\.\*|\(\.\*\)/.test(r.source) && r.destination === '/index.html'));
-const OK_DESTINATION = /^\/(api\/|share-shell\.html$|[a-z]+\/index\.html$)|^https:\/\/www\.reddit\.com\//;
-check('every other rewrite points at a page file, a function or the proxy', rewrites.every((r) => OK_DESTINATION.test(r.destination)), JSON.stringify(rewrites.filter((r) => !OK_DESTINATION.test(r.destination))));
+const OK_DESTINATION = /^\/(api\/|share-shell\.html$|[a-z]+\/index\.html$)/;
+check('every other rewrite points at a page file or a function (no external proxies)', rewrites.every((r) => OK_DESTINATION.test(r.destination)), JSON.stringify(rewrites.filter((r) => !OK_DESTINATION.test(r.destination))));
 for (const r of ROUTES) {
   for (const alias of r.aliases) check(`${alias} serves ${r.path} (200, no redirect), as Razorpay's reviewer typed it`, rewriteOf(alias) === `${r.path}/index.html`);
   check(`...and that file is one the build writes (${r.path.slice(1)}/index.html)`, ROUTES.some((x) => x.path === r.path));
@@ -116,7 +116,7 @@ check('the share function loads the shell the build writes', /share-shell\.html/
 check('/about/ is /about, not a second page', cfg.trailingSlash === false);
 check('/index.html is /', cfg.redirects.some((r) => r.source === '/index.html' && r.destination === '/' && r.permanent));
 check('the old preview host still redirects to the real domain', cfg.redirects.some((r) => r.has?.[0]?.value === 'game-guide-ai-plum.vercel.app' && /gameguide\.online/.test(r.destination)));
-check('the Reddit proxy is untouched', rewriteOf('/api/reddit/:path*') === 'https://www.reddit.com/:path*');
+check('/api/reddit goes through the narrow function, not straight to Reddit', rewriteOf('/api/reddit/:path*') === '/api/reddit?path=:path*');
 check('the build writes the pages the routes need', /prerender\.mjs/.test(read('package.json')));
 
 console.log(`security-headers: ${passed} passed, ${failed} failed`);

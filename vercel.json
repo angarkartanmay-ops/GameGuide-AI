@@ -23,7 +23,7 @@
   "rewrites": [
     {
       "source": "/api/reddit/:path*",
-      "destination": "https://www.reddit.com/:path*"
+      "destination": "/api/reddit?path=:path*"
     },
     {
       "source": "/share",
