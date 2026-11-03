@@ -1,22 +1,138 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "trailingSlash": false,
   "redirects": [
     {
       "source": "/((?!api/).*)",
-      "has": [{ "type": "host", "value": "game-guide-ai-plum.vercel.app" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "game-guide-ai-plum.vercel.app"
+        }
+      ],
       "destination": "https://gameguide.online/$1",
+      "permanent": true
+    },
+    {
+      "source": "/index.html",
+      "destination": "/",
       "permanent": true
     }
   ],
   "rewrites": [
     {
       "source": "/api/reddit/:path*",
-      "destination": "https://www.reddit.com/:path*"
+      "destination": "/api/reddit?path=:path*"
     },
     {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
+      "source": "/share",
+      "destination": "/share-shell.html"
+    },
+    {
+      "source": "/share/:payload",
+      "destination": "/api/share?p=:payload"
+    },
+    {
+      "source": "/terms-and-conditions",
+      "destination": "/terms/index.html"
+    },
+    {
+      "source": "/terms-of-service",
+      "destination": "/terms/index.html"
+    },
+    {
+      "source": "/privacy-policy",
+      "destination": "/privacy/index.html"
+    },
+    {
+      "source": "/refund",
+      "destination": "/refunds/index.html"
+    },
+    {
+      "source": "/refund-policy",
+      "destination": "/refunds/index.html"
+    },
+    {
+      "source": "/cancellation",
+      "destination": "/refunds/index.html"
+    },
+    {
+      "source": "/cancellation-policy",
+      "destination": "/refunds/index.html"
+    },
+    {
+      "source": "/shipping",
+      "destination": "/delivery/index.html"
+    },
+    {
+      "source": "/shipping-policy",
+      "destination": "/delivery/index.html"
+    },
+    {
+      "source": "/delivery-policy",
+      "destination": "/delivery/index.html"
+    },
+    {
+      "source": "/contact",
+      "destination": "/contacts/index.html"
+    },
+    {
+      "source": "/contact-us",
+      "destination": "/contacts/index.html"
+    },
+    {
+      "source": "/upgrade",
+      "destination": "/pricing/index.html"
+    },
+    {
+      "source": "/plans",
+      "destination": "/pricing/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'none'"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Content-Security-Policy-Report-Only",
+          "value": "default-src 'self'; script-src 'self' 'sha256-97+/0eBJKq3ZHIJencjJvBdkLFcSkkSsvUzcC61tkRU=' 'sha256-nXVaL77l0BwLJ0h8M5t99DRu6G4Pvfl+9Ezr8gjf1RQ=' 'sha256-2LC4AcDWIJOCeK3IZ9aQj7itzYcnz0WBnqt0nFRo9zM=' https://us-assets.i.posthog.com https://eu-assets.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://gameguide-bot-7cf4.onrender.com https://us.i.posthog.com https://eu.i.posthog.com https://us-assets.i.posthog.com https://eu-assets.i.posthog.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io; media-src 'self' blob: data:; worker-src 'self' blob:; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; report-uri /api/csp-report"
+        }
+      ]
+    },
+    {
+      "source": "/((?!share/).*)",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        }
+      ]
+    },
+    {
+      "source": "/share/:payload",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
     }
   ]
 }

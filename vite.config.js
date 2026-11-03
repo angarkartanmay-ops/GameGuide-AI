@@ -125,8 +125,8 @@ function fandomProxyPlugin() {
 // chunk (and the animation library behind it) after the entry has downloaded
 // AND run: HTML, then entry, then LandingPage and its imports, in turn. On a
 // phone that is three round trips with the CPU idle between them. This writes
-// the chunk list into index.html's inline script (`/*gg-landing-preload*/`),
-// which asks for them alongside the entry, but only on a visit that will show
+// the chunk list into index.html's data block (#gg-landing-preload), which the
+// inline script there asks for alongside the entry, but only on a visit that will show
 // the landing (the same test the daily-games request uses), so someone going
 // straight to the chat or an info page doesn't pay for it.
 function landingPreloadPlugin() {
@@ -157,7 +157,10 @@ function landingPreloadPlugin() {
         const need = [...closure(landing)].filter(n => !have.has(n))
         const css = need.flatMap(n => [...(byName.get(n).viteMetadata?.importedCss ?? [])])
         const urls = [...new Set([...need, ...css])].map(n => base + n)
-        return html.replace('/*gg-landing-preload*/[]', JSON.stringify(urls))
+        return html.replace(
+          '<script type="application/json" id="gg-landing-preload">[]</script>',
+          () => `<script type="application/json" id="gg-landing-preload">${JSON.stringify(urls)}</script>`,
+        )
       },
     },
   }

@@ -172,7 +172,7 @@ function MessageImages({ images, isUser }) {
 
 /**
  * Copy / Share under a finished answer. Share builds a spoiler-safe link
- * (the answer travels in the URL fragment; nothing is stored) and uses the
+ * (the answer travels in the link, /share/<payload>; nothing is stored) and uses the
  * phone share sheet where there is one, the clipboard otherwise. If the
  * clipboard is blocked, the link is shown to copy by hand.
  */

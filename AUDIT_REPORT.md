@@ -498,7 +498,9 @@ platform health check won't route traffic to a bot that hasn't reached Discord
 yet), and `req.rawBody` arrives as a real Buffer, without which Stripe signature
 verification could not work at all.
 
-**Not fixed, noted deliberately:** the Top.gg webhook compares its auth header
+**Since fixed:** the Top.gg webhook now compares its auth header with
+`safeEqual` (`discord-bot/httpSecurity.js`, SHA-256 + `timingSafeEqual`). Original note:
+the Top.gg webhook compares its auth header
 with `!==` rather than a constant-time comparison. Real but negligible here —
 network jitter swamps the timing signal and the payoff is capped at 20 bonus
 message credits. Not worth a dependency or hand-rolled crypto.
@@ -638,7 +640,7 @@ the assistant sound evasive on an innocuous question.
 | **XSS sinks** | `dangerouslySetInnerHTML`, `eval`, `new Function`, `innerHTML` in `src/` | ✅ None present |
 | **Stripe webhook** | Signature verification path | ✅ Verifies over raw bytes via the `express.json` `verify` hook; fails closed on mismatch |
 
-**Not fixed, stated plainly:** the Top.gg webhook compares its auth header with
+**Since fixed** (`safeEqual` in `discord-bot/httpSecurity.js`). Original note: the Top.gg webhook compares its auth header with
 `!==` rather than a constant-time comparison. Real but negligible — network
 jitter swamps the timing signal, and the payoff is capped at 20 bonus message
 credits by the very cap proven above. Not worth a dependency or hand-rolled

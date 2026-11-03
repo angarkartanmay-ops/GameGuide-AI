@@ -1,14 +1,15 @@
 // What analytics and crash reports may carry (src/utils/privacy.js,
-// src/utils/analytics.js). A shared answer travels in the URL fragment, so the
-// property under test is simple: no event, breadcrumb or report keeps a
-// fragment — and the SDK settings that keep tracking cookieless and
+// src/utils/analytics.js). A shared answer travels in its link (in the path of
+// a link made today, in the fragment of an older one), so the property under
+// test is simple: no event, breadcrumb or report keeps a fragment or a share
+// payload, and the SDK settings that keep tracking cookieless and
 // content-free can't be loosened without this failing.
 
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  stripFragment, scrubPostHogEvent, scrubBreadcrumb, scrubSentryEvent, IGNORED_ERRORS,
+  stripFragment, redactSharePath, scrubUrl, scrubPostHogEvent, scrubBreadcrumb, scrubSentryEvent, IGNORED_ERRORS,
 } from '../src/utils/privacy.js';
 
 let passed = 0;
@@ -28,6 +29,23 @@ check('keeps path and query (utm tags stay useful)', stripFragment(`https://x.ap
 check('a url with no fragment is untouched', stripFragment('https://x.app/a?b=1') === 'https://x.app/a?b=1');
 check('only the first # matters', stripFragment('https://x.app/#a#b') === 'https://x.app/');
 check('non-strings pass through', stripFragment(undefined) === undefined && stripFragment(null) === null && stripFragment(7) === 7);
+
+// ── The share path ─────────────────────────────────────────────────────────
+const PAYLOAD = 'zSECRET-ANSWER-PAYLOAD_abc';
+check('a share path is blanked', redactSharePath(`https://x.app/share/${PAYLOAD}`) === 'https://x.app/share/redacted');
+check('a bare path too', redactSharePath(`/share/${PAYLOAD}`) === '/share/redacted');
+check('the query after it survives', redactSharePath(`https://x.app/share/${PAYLOAD}?utm_source=ph`) === 'https://x.app/share/redacted?utm_source=ph');
+check('other paths are untouched', redactSharePath('https://x.app/about') === 'https://x.app/about' && redactSharePath('https://x.app/sharing') === 'https://x.app/sharing');
+check('scrubUrl does both: the fragment and the path', scrubUrl(`https://x.app/share/${PAYLOAD}#anything`) === 'https://x.app/share/redacted' && scrubUrl(`https://x.app/#share/${PAYLOAD}`) === 'https://x.app/');
+check('scrubUrl lets non-strings through', scrubUrl(undefined) === undefined && scrubUrl(null) === null);
+{
+  const ev = scrubPostHogEvent({ event: '$pageview', properties: { $current_url: `https://x.app/share/${PAYLOAD}`, $pathname: `/share/${PAYLOAD}`, $referrer: `https://x.app/share/${PAYLOAD}`, $initial_pathname: `/share/${PAYLOAD}` } });
+  check('posthog: the share path is blanked in the url, the pathname and the referrer', !JSON.stringify(ev).includes(PAYLOAD));
+  const crumb = scrubBreadcrumb({ category: 'navigation', data: { from: '/', to: `/share/${PAYLOAD}` } });
+  check('sentry breadcrumb: the share path is blanked', !JSON.stringify(crumb).includes(PAYLOAD));
+  const err = scrubSentryEvent({ request: { url: `https://x.app/share/${PAYLOAD}`, headers: { Referer: `https://x.app/share/${PAYLOAD}` } }, breadcrumbs: [{ category: 'navigation', data: { to: `/share/${PAYLOAD}` } }] });
+  check('sentry event: the share path is blanked everywhere', !JSON.stringify(err).includes(PAYLOAD));
+}
 
 // ── PostHog ────────────────────────────────────────────────────────────────
 {
@@ -101,6 +119,7 @@ check('posthog: fragment scrubber wired in', /before_send:\s*scrubPostHogEvent/.
 check('sentry: no default PII', /sendDefaultPii:\s*false/.test(SRC));
 check('sentry: no session replay or tracing', /tracesSampleRate:\s*0/.test(SRC) && !/replayIntegration|replaysSessionSampleRate|browserTracingIntegration/.test(SRC));
 check('sentry: scrubbers wired in', /beforeSend:\s*scrubSentryEvent/.test(SRC) && /beforeBreadcrumb:\s*scrubBreadcrumb/.test(SRC));
+check('vercel analytics page views are scrubbed before they leave', /window\.va\('beforeSend'/.test(SRC) && /scrubUrl\(event\.url\)/.test(SRC));
 check('track() is gated on the stealth flag', /if \(paused/.test(SRC.slice(SRC.indexOf('export function track'))));
 
 // The chat hook must actually flip that flag.

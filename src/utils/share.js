@@ -1,10 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  Spoiler-safe share links — with nothing stored anywhere.
 //
-//  The question and answer ride in the URL fragment (#share/…), which the
-//  browser never sends to a server: deflated, then base64url-encoded. The
-//  reader sees the answer with its spoilers still behind bars, so you can
-//  send a boss guide to a friend who hasn't finished the game.
+//  The question and answer ride in the link itself, deflated, then
+//  base64url-encoded; no database holds them. The reader sees the answer with
+//  its spoilers still behind bars, so you can send a boss guide to a friend
+//  who hasn't finished the game.
+//
+//  Where in the link? Links made today are /share/<payload>, a path, so the
+//  host can read the question and the safe opening of the answer and give the
+//  link a preview card (api/share.js). The price is that the host sees the
+//  address (and its logs may record it). Links made before that kept the
+//  payload in the fragment (/#share/<payload>), which a browser never sends
+//  anywhere; those still open, and are never rewritten into path links.
+//  A payload too long for a path (over MAX_PATH_PAYLOAD) falls back to the
+//  fragment form, which has no preview but no length limit to speak of.
 //
 //  Decoding treats the fragment as hostile — anyone can hand-craft one — so
 //  sizes are capped before AND after inflating (a small deflate stream can
@@ -14,9 +23,11 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const SHARE_PREFIX = 'share/';
+export const SHARE_ROOT = '/share';
 const VERSION = 1;
 
 const MAX_ENCODED = 48_000;      // characters of fragment we'll even look at
+export const MAX_PATH_PAYLOAD = 6_000; // longest payload that goes in a path (chat apps and CDNs balk well before the 14 kB URL limit)
 const MAX_JSON_BYTES = 64 * 1024; // after inflating
 const LIMITS = { q: 1_500, a: 16_000, g: 80, source: 40, sources: 12 };
 
@@ -129,7 +140,15 @@ export async function decodeShare(encoded) {
   }
 }
 
-/** Full link for a share, on whatever origin the app is served from. */
-export async function buildShareUrl(share, origin = window.location.origin, path = window.location.pathname) {
-  return `${origin}${path}#${SHARE_PREFIX}${await encodeShare(share)}`;
+/**
+ * Full link for a share, on whatever origin the app is served from:
+ * /share/<payload>, or, when the payload is too long for a path, the older
+ * /#share/<payload> (no preview card, but it can carry as much as the
+ * decoder will read).
+ */
+export async function buildShareUrl(share, origin = window.location.origin) {
+  const encoded = await encodeShare(share);
+  return encoded.length <= MAX_PATH_PAYLOAD
+    ? `${origin}${SHARE_ROOT}/${encoded}`
+    : `${origin}/#${SHARE_PREFIX}${encoded}`;
 }

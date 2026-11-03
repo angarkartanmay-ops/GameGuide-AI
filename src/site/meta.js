@@ -1,69 +1,74 @@
-// Per-view <title>, description and canonical, set from JavaScript.
+// Per-view <title>, description and canonical.
 //
-// An interim step. The app routes on the hash, so to a crawler every view is
-// the same document at "/": the static tags in index.html describe the home
-// page, and anything that renders JavaScript (search engines that do, a tab
-// title, a bookmark, a share sheet) gets the view's own. Canonicals use the
-// plain paths index.html already forwards (/terms, /refund-policy, ...).
-// Real per-view URLs plus prerendering would replace all of this.
+// Two readers use this one table. The build (scripts/prerender.mjs) writes each
+// view's tags into its own static HTML file, so a crawler, a link preview or a
+// no-JS reader gets them without running anything. And the app (usePageMeta)
+// writes them again when a view is entered by in-app navigation, where the
+// document stays the same one: a tab title, a bookmark or a share sheet then
+// gets the view's own.
 //
 // Pure data plus one small DOM writer, so tests can check every string, and
 // check that the landing's entry here is exactly what index.html says.
 
+import { pathForView } from './route.js';
+
 export const ORIGIN = 'https://gameguide.online';
+export const LOCALE = 'en_US';
 
 export const VIEW_META = {
   landing: {
     title: 'GameGuide: ask anything about any game',
     description: "A game guide you can talk to. Live answers from wikis, patch notes and the web, set like a strategy guide. It won't spoil what you haven't reached. Free on the web and in Discord.",
     share: 'Live answers, set like a strategy guide, that stop where you are in the story.',
-    path: '/',
+    path: pathForView('landing'),
   },
+  // The chat is an app, not a page: nothing for a crawler to read until it runs.
   chat: {
     title: 'Chat | GameGuide',
     description: 'Ask GameGuide about any game. Live answers from wikis, patch notes and the web that stop where you are in the story.',
-    path: '/',
+    path: pathForView('chat'),
+    robots: 'noindex, follow',
   },
   about: {
     title: 'About | GameGuide',
     description: 'How GameGuide researches answers from wikis, patch notes and the web, keeps spoilers behind a Spoiler Shield, and who builds it.',
-    path: '/about',
+    path: pathForView('about'),
   },
   terms: {
     title: 'Terms and copyright | GameGuide',
     description: 'The terms of use, copyright notice and acceptable-use rules for GameGuide.',
-    path: '/terms',
+    path: pathForView('terms'),
   },
   privacy: {
     title: 'Privacy | GameGuide',
     description: 'What GameGuide stores, for how long and who it is shared with, on the web and in the Discord bot.',
-    path: '/privacy',
+    path: pathForView('privacy'),
   },
   refunds: {
     title: 'Refunds and cancellation | GameGuide',
     description: 'Cancel any GameGuide plan at any time, keep what you paid for, and get a full refund in your first 7 days.',
-    path: '/refund-policy',
+    path: pathForView('refunds'),
   },
   delivery: {
     title: 'Delivery | GameGuide',
     description: 'GameGuide plans are digital and switch on in Discord within minutes of paying. Nothing is shipped.',
-    path: '/delivery-policy',
+    path: pathForView('delivery'),
   },
   contacts: {
     title: 'Contact | GameGuide',
     description: 'Email, Discord and GitHub for questions, partnerships, bug reports and copyright concerns.',
-    path: '/contact-us',
+    path: pathForView('contacts'),
   },
   upgrade: {
     title: 'Plans and pricing | GameGuide',
     description: 'Plans and pricing for GameGuide, monthly, yearly or once. A plan stays on until the end of what you paid for.',
-    path: '/pricing',
+    path: pathForView('upgrade'),
   },
-  // What someone shared is theirs, and lives in the link's fragment: never indexed.
+  // What someone shared is theirs: never indexed, and no canonical (each link is its own page).
   share: {
     title: 'Shared answer | GameGuide',
     description: 'An answer someone shared from GameGuide. Spoilers stay hidden until you press them.',
-    path: '/',
+    path: null,
     robots: 'noindex',
   },
   // No canonical: there is no page to point at.
@@ -125,6 +130,7 @@ export function applyMeta(meta, doc = document) {
   // Share cards read these; only touch the ones the page already has.
   const set = (selector, value) => doc.head.querySelector(selector)?.setAttribute('content', value);
   set('meta[property="og:title"]', meta.title);
+  set('meta[property="og:locale"]', LOCALE);
   set('meta[property="og:description"]', social);
   if (url) set('meta[property="og:url"]', url);
   set('meta[name="twitter:title"]', meta.title);

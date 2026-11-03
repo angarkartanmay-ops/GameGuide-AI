@@ -8,6 +8,7 @@ import PriceBadge from '../PriceBadge';
 import LoadingScreen from '../LoadingScreen';
 import FeedbackButton from '../FeedbackButton';
 import InstallButton from '../InstallButton';
+import NavLink from '../NavLink';
 import CodexBackdrop from './CodexBackdrop';
 import ContextPill from './ContextPill';
 import StealthSweep from './StealthSweep';
@@ -133,9 +134,9 @@ export default function CodexShell({
           gameName={ambience.name}
         />
         <nav className="cx-foot" aria-label="Site">
-          <button type="button" onClick={() => navigate('about')}>About</button>
-          <button type="button" onClick={() => navigate('terms')}>Terms</button>
-          <button type="button" onClick={() => navigate('contacts')}>Contact</button>
+          <NavLink view="about" onNavigate={navigate}>About</NavLink>
+          <NavLink view="terms" onNavigate={navigate}>Terms</NavLink>
+          <NavLink view="contacts" onNavigate={navigate}>Contact</NavLink>
           <InstallButton />
           <FeedbackButton sessionId={user?.id || null} inline />
           <span>© 2026 GameGuide-AI</span>

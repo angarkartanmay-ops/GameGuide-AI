@@ -22,6 +22,9 @@ No account is needed to ask. Sign in to keep your conversation history.
 
 ## Optional
 
-- [Terms of Service](https://gameguide.online/#terms)
-- [About](https://gameguide.online/#about)
-- [Contact](https://gameguide.online/#contacts)
+- [Terms of Service](https://gameguide.online/terms)
+- [About](https://gameguide.online/about)
+- [Contact](https://gameguide.online/contacts)
+- [Privacy](https://gameguide.online/privacy)
+- [Refunds and cancellation](https://gameguide.online/refunds)
+- [Plans and pricing](https://gameguide.online/pricing)
