@@ -43,8 +43,15 @@ redeploy, verify.
    EU region also needs `VITE_POSTHOG_HOST=https://eu.i.posthog.com`.
 3. Project settings → turn **on** "Discard client IP data" (the site never needs it).
 4. Events the app sends: `press_start`, `missables`, `share_created`, `share_opened`,
-   `share_broken`, plus `$pageview`. The launch funnel is
+   `share_broken`, `install`, `install_hint`, plus `$pageview`. The launch funnel is
    `$pageview → press_start → share_created → share_opened`.
+5. Money funnel (website): `upgrade_viewed {plan:null, linked}` → `checkout_started
+   {plan, interval, rail}` → (`checkout_failed {plan, interval, reason}`). Usage wall:
+   `quota_hit {tier: anon|signed_in, scope: minute|hour|day}`.
+6. Paid conversions come from the bot, not the browser: set `POSTHOG_KEY` (and
+   `POSTHOG_HOST` if EU) on the bot's Render service to get `subscription_activated
+   {plan, source, upgrade, resumed}` from the payment webhook. Visits and purchases
+   cannot be joined per person (both sides are anonymous by design); compare counts.
 
 Deliberately off: cookies and storage, autocapture, session recording, anything while
 Stealth is on. Tested in `tests/privacy.test.mjs`.

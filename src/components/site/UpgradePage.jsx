@@ -7,6 +7,7 @@ import {
 } from '../../site/pricing';
 import { gsap, useCalm, useScene } from '../../site/motion';
 import usePageMeta from '../../site/usePageMeta';
+import { track } from '../../utils/analytics';
 import { pathForView } from '../../site/route';
 import SiteNav from './SiteNav';
 import SiteFooter from './SiteFooter';
@@ -92,6 +93,16 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
   usePageMeta('upgrade');
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, []);
 
+  // Once per visit to the plans page: the top of the checkout funnel. The page
+  // opens with no plan preselected (no such prop exists), so `plan` is null;
+  // `linked` says whether the visitor came with a /upgrade link and can
+  // actually buy. The post-payment "thanks" screen is not counted: completion
+  // is recorded server-side from the payment webhook, not here.
+  useEffect(() => {
+    if (thanks) return;
+    track('upgrade_viewed', { plan: null, linked: !!buyer });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Live prices, open payment methods and the buyer's current plan.
   useEffect(() => {
     if (!billingOpen()) return undefined;
@@ -164,9 +175,13 @@ export default function UpgradePage({ token: linkToken, thanks, onBack, onLogo, 
     setError('');
     setBusy(`${plan}:${iv}`);
     try {
+      track('checkout_started', { plan, interval: iv, rail: railKey });
       const url = await startCheckout({ token, plan, interval: iv, rail: railKey });
       window.location.assign(url);
     } catch (e) {
+      // e.message is the billing API's short error code (see CHECKOUT_ERRORS)
+      // or a network/HTTP status line, never anything the buyer typed.
+      track('checkout_failed', { plan, interval: iv, reason: String(e?.message || 'unknown').slice(0, 64) });
       setError(CHECKOUT_ERRORS[e.message] || 'Something went wrong starting the payment. Please try again.');
       setBusy('');
     }

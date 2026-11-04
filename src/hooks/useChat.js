@@ -1038,6 +1038,14 @@ export default function useChat(user) {
       // the duplicate guard would otherwise swallow that retry without a word.
       if (aiResponse.meta?.rateLimited || aiResponse.meta?.error) lastMessageRef.current = '';
 
+      // The website's only usage wall: chat-proxy's 429 (per-minute/hour/day
+      // limits, looser when signed in). There is no paid web tier, so `tier`
+      // is just anonymous vs signed in; `scope` says which window ran out.
+      if (aiResponse.meta?.rateLimited) {
+        const scope = typeof aiResponse.meta.scope === 'string' ? aiResponse.meta.scope : null;
+        track('quota_hit', { tier: userId ? 'signed_in' : 'anon', scope });
+      }
+
       const aiImages = (aiResponse.images || []).map(img => ({
         previewUrl: `data:${img.mimeType};base64,${img.data}`,
         mimeType: img.mimeType,
