@@ -57,6 +57,7 @@ const SUITES = [
   ['providers',     'billing-providers.test.mjs'], // razorpay + lemon squeezy: meaning of each webhook, checkouts, which buttons exist
   ['providers-http','providers-http.test.mjs'],   // their real routes, plus index.js wiring
   ['paypal',        'billing-paypal.test.mjs'],  // paypal: signatures, checkouts, events; Base → Pro stops the old plan
+  ['billing-analytics','billing-analytics.test.mjs'], // server-side subscription_activated: once per new plan, no ids
   ['upgrade',       'upgrade.test.mjs'],       // /upgrade link, plans API, yearly prices, /quota badge, interval checkouts
   ['discord-launch','discord-launch.test.mjs'],// invite perms, pings, intents, command wiring
   ['quota-sql',     'quota-sql.test.mjs'],     // the quota function, on real Postgres

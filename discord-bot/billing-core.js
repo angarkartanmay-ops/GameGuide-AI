@@ -37,6 +37,7 @@
 'use strict';
 
 const { PERSONAL_RANK } = require('./plans');
+const { serverAnalytics } = require('./analytics');
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const isSnowflake = (v) => typeof v === 'string' && SNOWFLAKE.test(v);
@@ -146,7 +147,7 @@ function supabaseRepo(supabase) {
  *                   higher plan just replaced (billing-cancel.js). A failure is
  *                   logged for a human and never undoes the grant.
  */
-function createBillingCore({ repo, notify = async () => {}, supersede = async () => {}, log = console }) {
+function createBillingCore({ repo, notify = async () => {}, supersede = async () => {}, capture = serverAnalytics(), log = console }) {
   const rank = (tier) => PERSONAL_RANK[tier] ?? 0;
 
   /**
@@ -177,7 +178,10 @@ function createBillingCore({ repo, notify = async () => {}, supersede = async ()
         await repo.putGuild({ guildId: String(guildId), grantedBy: userId, providerRef, expiresAt: end });
         log.log(`[billing] server plan active → guild=${guildId} by user=${userId} (${source})`);
         // Renewals arrive as the same grant; only a new plan earns a thank-you.
-        if (!known) await notify(userId, 'server');
+        if (!known) {
+          capture('subscription_activated', { plan: 'server', source, upgrade: false }, { dedupeKey: `${providerRef}:server` });
+          await notify(userId, 'server');
+        }
         return 'server';
       }
       // A server price with no server to attach it to. Do not leave the buyer
@@ -215,7 +219,11 @@ function createBillingCore({ repo, notify = async () => {}, supersede = async ()
       }
     }
     // Renewals arrive as the same grant; only a new (or resumed) plan earns a thank-you.
-    if (!known || known.status !== 'active' || known.tier !== plan) await notify(userId, plan);
+    if (!known || known.status !== 'active' || known.tier !== plan) {
+      // The paid-conversion event for analytics (see analytics.js): no ids leave.
+      capture('subscription_activated', { plan, source, upgrade: !!upgrade, resumed: !!known }, { dedupeKey: `${providerRef}:${plan}` });
+      await notify(userId, plan);
+    }
     return plan;
   }
 
