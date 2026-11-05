@@ -37,6 +37,12 @@ async function currentAuthToken(anonKey) {
 // rotated phone or a resized window is right the next time you ask.
 const isNarrow = () => typeof window !== 'undefined' && window.innerWidth < 640;
 
+// The server sends a keepalive frame every 10 s, so this much silence means
+// the connection is dead, not that the answer is slow. Without it, a stream
+// the platform killed held the chat frozen for ~150 s before anything
+// happened (2026-11-05: a 160 s image turn).
+export const STREAM_IDLE_MS = 45_000;
+
 export const streamChatResponse = async (
   prompt,
   chatHistory,
@@ -63,11 +69,26 @@ export const streamChatResponse = async (
   const authToken = await currentAuthToken(anonKey);
 
   let sawToken = false;
+  // Our own abort, chained to the caller's, so an idle stream can be cut
+  // without the caller's AbortError semantics (a user pressing Stop).
+  const idleCtrl = new AbortController();
+  let idleTimedOut = false;
+  let idleTimer = null;
+  const armIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { idleTimedOut = true; idleCtrl.abort(); }, STREAM_IDLE_MS);
+  };
+  const onCallerAbort = () => idleCtrl.abort();
+  if (signal) {
+    if (signal.aborted) idleCtrl.abort();
+    else signal.addEventListener('abort', onCallerAbort, { once: true });
+  }
 
   try {
+    armIdle();
     const res = await fetch(`${supabaseUrl}/functions/v1/chat-proxy`, {
       method: 'POST',
-      signal,
+      signal: idleCtrl.signal,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authToken}`,
@@ -104,6 +125,7 @@ export const streamChatResponse = async (
     let finalMeta = null;
 
     while (true) {
+      armIdle();
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
@@ -134,7 +156,13 @@ export const streamChatResponse = async (
             finalText = ev.text || accumulated;
             finalMeta = ev.meta || null;
           } else if (ev.type === 'error') {
-            throw new Error(ev.message || 'stream error');
+            // The server already gave up on this turn (all models failed, or
+            // it hit its time budget) and says so in words a player can act
+            // on. Re-running the whole turn non-streaming would just repeat
+            // the wait, so show the message instead.
+            const err = new Error(ev.message || 'stream error');
+            err.fromServer = true;
+            throw err;
           }
         }
       }
@@ -146,7 +174,14 @@ export const streamChatResponse = async (
     return { text, images: [], meta: finalMeta };
 
   } catch (error) {
-    if (error.name === 'AbortError') throw error;
+    // A real Stop from the caller stays an abort. Our idle cut is a failure.
+    if (error.name === 'AbortError' && !idleTimedOut) throw error;
+    if (idleTimedOut) error = new Error('STREAM_IDLE_TIMEOUT');
+    if (error.fromServer && !sawToken) {
+      const text = `**Neural Net Disconnected:** ${error.message}`;
+      onFinal(text, { error: true });
+      return { text, images: [], meta: { error: true } };
+    }
 
     // Once tokens have rendered we cannot silently restart — a second answer
     // would contradict what the user already read. Surface it instead.
@@ -162,6 +197,9 @@ export const streamChatResponse = async (
     );
     onFinal(res.text, res.meta);
     return res;
+  } finally {
+    clearTimeout(idleTimer);
+    signal?.removeEventListener?.('abort', onCallerAbort);
   }
 };
 

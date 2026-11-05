@@ -14,8 +14,11 @@ export const STAGE_COPY = {
 };
 
 // Past this many seconds with no answer, the wait is named for what it is
-// even if the server never said so (a slow fallback, a cold start).
-export const DEEP_AFTER_SECONDS = 6;
+// even if the server never said so (a slow fallback, a cold start). Was 6:
+// live retrieval alone takes 3-7 s, so nearly every turn (even "what can you
+// do") was labelled "Thinking in depth". The server's own `deep` stage still
+// shows it straight away on routes that really are slow.
+export const DEEP_AFTER_SECONDS = 20;
 
 /**
  * useChat encodes an optional detail as "stage:detail". Split on the FIRST

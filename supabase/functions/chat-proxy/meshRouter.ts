@@ -100,8 +100,9 @@ export function buildRegistry(): MeshModel[] {
     // the source of truth and now covers Groq too.
     { provider: 'Groq', id: 'openai/gpt-oss-120b', vision: false, tier: 'flagship', dailyCap: groqCap, cost: 0, ctx: 131072 },
     { provider: 'Groq', id: 'openai/gpt-oss-20b',  vision: false, tier: 'balanced', dailyCap: groqCap, cost: 0, ctx: 131072 },
-    { provider: 'Groq', id: 'qwen/qwen3.8-27b',    vision: false, tier: 'balanced', dailyCap: groqCap, cost: 0, ctx: 131042 },
-    { provider: 'Groq', id: 'qwen/qwen3.6-27b',    vision: false, tier: 'fast',     dailyCap: groqCap, cost: 0, ctx: 131072 },
+    // qwen/qwen3.6-27b was removed 2026-11-05: Groq answers 404 for it on
+    // this key (its /models list stopped carrying it on 2026-11-03).
+    { provider: 'Groq', id: 'qwen/qwen3.8-27b',    vision: false, tier: 'fast',     dailyCap: groqCap, cost: 0, ctx: 131042 },
 
     // ── Cerebras: also very fast, separate quota pool. ────────────────────
     { provider: 'Cerebras', id: 'gpt-oss-120b', vision: false, tier: 'flagship', dailyCap: cerebrasCap, cost: 0, ctx: 65000 },
@@ -129,13 +130,15 @@ export function buildRegistry(): MeshModel[] {
 //
 //  compound-mini makes a single tool call at ~3x lower latency; compound
 //  makes several. Reserve the slower one for genuinely deep questions.
-export const GROQ_AGENTIC = {
-  // Verified 2026-08-25: groq/compound returns HTTP 413 for our request size
-  // even with a minimal system prompt, while compound-mini succeeds. Mini is
-  // also ~3x lower latency, which matters because its tool calls run before
-  // the first token. Both entries point at mini until that changes.
-  fast: 'groq/compound-mini',
-  deep: 'groq/compound-mini',
+// Verified 2026-11-03: groq/compound-mini (and groq/compound, which already
+// answered 413 for our request size) now return 404 on this key. Every
+// recency question paid a wasted round trip for it, plus a "Thinking in
+// depth" banner, before the real mesh started. Agentic routing stays off
+// until a working model id is confirmed against Groq's /models list. To turn
+// it back on, set both ids here (and keep DISABLE_AGENTIC unset).
+export const GROQ_AGENTIC: { fast: string | null; deep: string | null } = {
+  fast: null,
+  deep: null,
 };
 
 /**
@@ -148,6 +151,7 @@ export const GROQ_AGENTIC = {
 export function wantsAgentic(need: RouteNeed & { temporal?: boolean }): 'fast' | 'deep' | null {
   if (!Deno.env.get('GROQ_API_KEY')) return null;
   if (Deno.env.get('DISABLE_AGENTIC') === '1') return null;
+  if (!GROQ_AGENTIC.fast) return null;
   // Vision is not supported by the compound systems.
   if (need.vision) return null;
   if (!need.temporal) return null;
@@ -192,11 +196,16 @@ export function geminiCandidates(): GeminiCandidate[] {
   const flashCap = envInt('GEMINI_FLASH_DAILY_CAP', 200);        // docs ballpark ~250
   const previewCap = envInt('GEMINI_PREVIEW_DAILY_CAP', 120);    // preview channels: extra margin
   return [
-    { id: 'gemini-3.6-flash',        dailyCap: flashCap },
+    // Re-verified 2026-11-05 against the live models list plus a real call
+    // each. Dropped: gemini-2.5-flash-lite (404 "no longer available to new
+    // users" in prod). Not added: gemini-3.7-flash and gemini-3.8-flash are
+    // listed, but both answered 503 "high demand" after up to 34 s, or hung
+    // past 40 s with default thinking. Lite models first: with thinking set to
+    // minimal they answered in ~1.3-1.9 s, against ~2-5 s for the flash tier.
     { id: 'gemini-3.5-flash-lite',   dailyCap: liteCap },
     { id: 'gemini-3.1-flash-lite',   dailyCap: liteCap },
+    { id: 'gemini-3.6-flash',        dailyCap: flashCap },
     { id: 'gemini-3.5-flash',        dailyCap: flashCap },
-    { id: 'gemini-2.5-flash-lite',   dailyCap: liteCap },
     { id: 'gemini-2.5-flash',        dailyCap: flashCap },
     { id: 'gemini-3-flash-preview',  dailyCap: previewCap },
   ];
@@ -234,6 +243,39 @@ export function planGeminiRoute(state: MeshState, candidates = geminiCandidates(
 }
 
 export const GEMINI_OCR_MODEL = 'gemini-3.5-flash-lite';
+
+/**
+ * How much a Gemini model may think before it answers.
+ *
+ * Left unset, the flash-tier models think at full strength, and the thinking
+ * counts against maxOutputTokens. Measured 2026-11-05 on a one-line question:
+ * gemini-3.5-flash spent 392 thinking tokens and stopped at MAX_TOKENS with
+ * no answer. gemini-3.5-flash-lite took 28 s at default and 1.5 s at minimal.
+ * In prod, the same effect cut an answer off mid-word.
+ *
+ * Returns the config plus the extra output budget to add, so the visible
+ * answer keeps its full allowance. `undefined` config = leave the model's
+ * default alone (an unknown id might reject a level it doesn't support:
+ * 3.7/3.8-flash answer 400 to "minimal").
+ */
+export function geminiThinking(
+  model: string,
+  effort: 'light' | 'careful',
+): { config?: Record<string, unknown>; extraTokens: number } {
+  // 3.0, 3.1, 3.5, 3.6: thinkingLevel, verified to accept "minimal".
+  if (/^gemini-3(?:\.[0-6])?-/.test(model)) {
+    return effort === 'light'
+      ? { config: { thinkingLevel: 'minimal' }, extraTokens: 256 }
+      : { config: { thinkingLevel: 'low' }, extraTokens: 1536 };
+  }
+  // 2.5 generation: a token budget; flash (not pro) accepts 0.
+  if (/^gemini-2\.5-flash/.test(model)) {
+    return effort === 'light'
+      ? { config: { thinkingBudget: 0 }, extraTokens: 0 }
+      : { config: { thinkingBudget: 1024 }, extraTokens: 1024 };
+  }
+  return { extraTokens: 2048 };
+}
 export const GEMINI_IMAGE_MODELS = [
   'gemini-3.1-flash-image',
   'gemini-2.5-flash-image',

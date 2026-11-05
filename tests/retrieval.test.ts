@@ -138,6 +138,26 @@ for (const q of ['When were they released?', 'what about them', 'when did it com
   check('history still finds the user-named game', carried.some(g => g.includes('silksong')));
 }
 
+// The user never named the game; our reply identified it from a screenshot.
+// The follow-up "when is it coming out?" must research that game, not "coming".
+{
+  const history = [
+    { sender: 'user', text: 'What game is this from?' },
+    { sender: 'ai', text: "That's from **Grand Theft Auto VI**. It's an aerial shot of Vice City, a bit like **Miami**." },
+  ];
+  const carried = gamesFromHistory(history, 3);
+  check('screenshot follow-up carries the game our reply led with', carried.length === 1 && /grand theft auto vi|gta/i.test(carried[0]));
+}
+{
+  // A user-named game still wins over anything we said.
+  const history = [
+    { sender: 'user', text: 'is hollow knight silksong worth it?' },
+    { sender: 'ai', text: 'If you liked **Elden Ring**, yes.' },
+  ];
+  const carried = gamesFromHistory(history, 3);
+  check('assistant lead title is only a fallback', carried.every(g => !g.includes('elden ring')));
+}
+
 check('empty history is harmless', gamesFromHistory([], 3).length === 0);
 check('malformed history is harmless', gamesFromHistory([null, {}, { text: 42 }] as any, 3).length === 0);
 

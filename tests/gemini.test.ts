@@ -147,6 +147,22 @@ check('noteLocalFailure is never called with the literal "vision" as a model id 
 check('geminiFirst no longer keys off a single hardcoded cooldown bucket',
   routerSrc.includes("state.cooldowns['Gemini|vision']"), false);
 
+// 2026-11-05: the OCR pass was still hardcoded to gemini-2.0-flash (404 on
+// every screenshot), and gemini-2.5-flash-lite answered 404 "no longer
+// available to new users" on every turn it was tried.
+const visionSrc = readFileSync(join(REPO_ROOT, 'supabase', 'functions', 'chat-proxy', 'visionPipeline.ts'), 'utf8');
+check('OCR pass never hardcodes a model id (uses GEMINI_OCR_MODEL)',
+  /model:\s*'gemini-/.test(visionSrc), false);
+check('OCR pass uses the shared OCR model constant', visionSrc.includes('model: GEMINI_OCR_MODEL'), true);
+check('the dead gemini-2.5-flash-lite is out of the rotation', ids.includes('gemini-2.5-flash-lite'), false);
+
+// Every Gemini call must carry a deadline: the SDK sets none, and one hung
+// stream froze an image turn for ~150 s.
+check('no bare generateContent call left in index.ts (all go through geminiGenerate)',
+  /geminiAi\.models\.generateContent\(|opts\.geminiAi\.models\.generateContent\(/.test(idxSrc), false);
+check('streamed Gemini calls pass a first-token deadline',
+  /firstTokenMs:\s*need\.vision \? GEMINI_FIRST_TOKEN_MS_VISION : GEMINI_FIRST_TOKEN_MS/.test(idxSrc), true);
+
 if (failures.length) console.log(`\nGEMINI ROTATION FAILURES:\n${failures.join('\n')}`);
 console.log(`gemini: ${pass} passed, ${failures.length} failed`);
 process.exitCode = failures.length ? 1 : 0;

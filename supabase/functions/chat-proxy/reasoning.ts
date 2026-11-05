@@ -57,6 +57,33 @@ export function stripReasoning(text: string): string {
 }
 
 /**
+ * Planning text written as the answer, with no tags around it.
+ *
+ * Some models (Gemini flash-tier on a long system prompt is the one seen in
+ * prod, 2026-11-05) skip the <think> wrapper and write their drafting plan
+ * straight into the reply: "5. **Drafting final text:** …", "Follow-up
+ * suggestions at the bottom (2-4 in user's voice)". No tag means nothing to
+ * strip, so the whole reply is unusable and should go to the next model.
+ *
+ * The markers are deliberately narrow, the kind of phrasing a real answer
+ * about a game never contains. A false positive costs one retry. A false
+ * negative shows the player our prompt.
+ */
+const PLAN_LEAK_RX: RegExp[] = [
+  /\bdrafting\s+(?:the\s+)?(?:final\s+)?(?:text|answer|response|reply|output)\s*\**\s*:/i,
+  /\bconstraint\s+checklist\b/i,
+  /\bmental\s+sandbox\b/i,
+  /\bconfidence\s+score\s*:\s*\d/i,
+  /\(\s*2\s*[-–]\s*4\s+in\s+(?:the\s+)?user'?s\s+voice\s*\)/i,
+  /\bfollow[-\s]?up\s+suggestions\s+at\s+the\s+bottom\b/i,
+];
+
+export function looksLikeLeakedPlan(text: string): boolean {
+  if (!text) return false;
+  return PLAN_LEAK_RX.some(rx => rx.test(text));
+}
+
+/**
  * Streaming filter.
  *
  * A reasoning model streams its scratchpad token by token, so the user would

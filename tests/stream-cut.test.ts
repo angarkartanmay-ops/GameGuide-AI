@@ -101,8 +101,65 @@ async function runGemini(chunks: Array<{ text?: string; finishReason?: string }>
   check('Gemini STOP returns its text', r.text === 'All done');
 }
 {
-  const r = await runGemini([{ text: 'Long', finishReason: 'MAX_TOKENS' }]);
-  check('Gemini MAX_TOKENS is kept', r.text === 'Long');
+  const long = 'A complete answer that simply ran long. '.repeat(15);
+  const r = await runGemini([{ text: long, finishReason: 'MAX_TOKENS' }]);
+  check('Gemini MAX_TOKENS on a long answer is kept', r.text === long.trim());
+}
+{
+  // Thinking spent the budget: the visible reply stops mid-word (prod,
+  // 2026-11-05: '... 5. **Drafting final text:** "Take-Two').
+  const r = await runGemini([{ text: 'That releases on', finishReason: 'MAX_TOKENS' }]);
+  check('Gemini MAX_TOKENS on a short reply → StreamCutError(max_tokens)',
+    r.err instanceof StreamCutError && (r.err as StreamCutError).reason === 'max_tokens');
+}
+{
+  const leaked = `direct response. * Follow-up suggestions at the bottom (2-4 in user's voice).\n5. **Drafting final text:** "Take-Two`;
+  const r = await runGemini([{ text: leaked, finishReason: 'STOP' }]);
+  check('Gemini reply that is its own drafting plan → StreamCutError(leaked_plan)',
+    r.err instanceof StreamCutError && (r.err as StreamCutError).reason === 'leaked_plan');
+}
+{
+  // A stream that never yields used to hold the turn until the platform
+  // killed the function (~150 s). It must now give way within firstTokenMs.
+  const hung = { models: { generateContentStream: async () => (async function* () {
+    await new Promise(() => {});   // never resolves
+  })() } };
+  const t0 = Date.now();
+  let err: unknown = null;
+  try { await streamGemini(hung, 'g', [], '', { onDelta: () => {}, firstTokenMs: 150, timeoutMs: 5000 }); }
+  catch (e) { err = e; }
+  const ms = Date.now() - t0;
+  check('hung Gemini stream rejects at firstTokenMs', !!err && /FIRST_TOKEN_TIMEOUT/.test((err as Error).message) && ms < 1500);
+  check('a hang before any text is NOT a cut (so the next model may run)', !(err instanceof StreamCutError));
+}
+{
+  // The request itself never returns a stream.
+  const stuck = { models: { generateContentStream: () => new Promise(() => {}) } };
+  let err: unknown = null;
+  try { await streamGemini(stuck, 'g', [], '', { onDelta: () => {}, firstTokenMs: 150 }); }
+  catch (e) { err = e; }
+  check('a Gemini request that never opens a stream also times out', !!err && /TIMEOUT/.test((err as Error).message));
+}
+{
+  // Text arrived, then silence: that IS a cut, and what was said is kept.
+  const stall = { models: { generateContentStream: async () => (async function* () {
+    yield { text: 'Partial answer so far', candidates: [{}] };
+    await new Promise(() => {});
+  })() } };
+  let err: unknown = null;
+  try { await streamGemini(stall, 'g', [], '', { onDelta: () => {}, firstTokenMs: 1000, timeoutMs: 200 }); }
+  catch (e) { err = e; }
+  check('stall after text → StreamCutError(timeout) carrying the partial',
+    err instanceof StreamCutError && (err as StreamCutError).reason === 'timeout' && (err as StreamCutError).partial === 'Partial answer so far');
+}
+{
+  let seen: any = null;
+  const spy = { models: { generateContentStream: async (args: any) => { seen = args; return (async function* () {
+    yield { text: 'ok', candidates: [{ finishReason: 'STOP' }] };
+  })(); } } };
+  await streamGemini(spy, 'g', [], '', { onDelta: () => {}, thinkingConfig: { thinkingLevel: 'minimal' } });
+  check('thinkingConfig is passed through to Gemini', seen?.config?.thinkingConfig?.thinkingLevel === 'minimal');
+  check('an abort signal is passed to the SDK', seen?.config?.abortSignal instanceof AbortSignal);
 }
 {
   const r = await runGemini([{ text: 'Here is everything.\n\n### 1. Right' }, { finishReason: 'RECITATION' }]);

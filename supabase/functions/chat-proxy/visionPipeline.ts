@@ -23,6 +23,9 @@
 //  drop by an estimated 55–70%.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { GEMINI_OCR_MODEL, geminiThinking } from './meshRouter.ts';
+import { geminiGenerate } from './streaming.ts';
+
 // imagescript compiles a WASM decoder when it loads. Only screenshot turns
 // need it, so it is loaded on first use instead of on every cold boot.
 type Image = any;
@@ -56,8 +59,14 @@ export interface VisionEnrichment {
 // (Minecraft hotbar, MOBA ability bar, FPS ammo/health, ARPG skill bar).
 const HUD_STRIP_PCT = 0.22;
 
-// Skip cropping below this height — too small to meaningfully zoom.
-const MIN_CROP_HEIGHT = 480;
+// Skip cropping below this height — too small to meaningfully zoom. Was 480,
+// but a frame under ~1000 px tall already fits the VLM's own tiling, so the
+// crop added a second image's tokens and no detail. Checked from the file
+// header, before the 2-3 s WASM decode, which used to run just to find out.
+const MIN_CROP_HEIGHT = 1000;
+
+// The OCR pass is an enrichment, not the answer: if it is slow, go without.
+const OCR_TIMEOUT_MS = 8000;
 
 // 5-min cache keyed on (mimeType + base64 prefix hash) so repeated submissions
 // of the same screenshot don't re-run OCR + crop.
@@ -100,8 +109,12 @@ async function runOCR(
     return { text: '', lines: 0, latencyMs: 0 };
   }
   try {
-    const result = await geminiAi.models.generateContent({
-      model: 'gemini-2.0-flash',
+    // Was hardcoded to 'gemini-2.0-flash', which Google retired: every OCR
+    // pass in prod returned 404 and the ground-truth block silently never
+    // appeared. The id now lives in meshRouter.ts with the other model ids.
+    const thinking = geminiThinking(GEMINI_OCR_MODEL, 'light');
+    const result = await geminiGenerate(geminiAi, {
+      model: GEMINI_OCR_MODEL,
       contents: [{
         role: 'user',
         parts: [
@@ -109,8 +122,12 @@ async function runOCR(
           { text: OCR_PROMPT },
         ],
       }],
-      config: { temperature: 0.0, maxOutputTokens: 1500 },
-    });
+      config: {
+        temperature: 0.0,
+        maxOutputTokens: 1500 + thinking.extraTokens,
+        ...(thinking.config ? { thinkingConfig: thinking.config } : {}),
+      },
+    }, OCR_TIMEOUT_MS);
     const raw = (
       result?.text
       || result?.candidates?.[0]?.content?.parts?.[0]?.text
@@ -133,6 +150,8 @@ async function cropHudStrip(
 ): Promise<{ crop: VisionAttachment | null; width?: number; height?: number }> {
   try {
     const bytes = base64ToBytes(att.data);
+    const dims = imageSize(bytes);
+    if (dims && dims.height < MIN_CROP_HEIGHT) return { crop: null };
     const decoded = await decode(bytes);
     // decode() may return Image (static) or GIF (animated). For GIF, use first frame.
     const img: Image = (decoded as any)?.frames?.[0] || (decoded as Image);
@@ -267,6 +286,37 @@ async function fingerprint(att: VisionAttachment): Promise<string> {
     .slice(0, 12)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+/**
+ * Width/height from a PNG or JPEG header, without decoding pixels.
+ * null for anything else (WebP, GIF, a truncated file): the caller then
+ * decodes as before.
+ */
+export function imageSize(b: Uint8Array): { width: number; height: number } | null {
+  // PNG: 8-byte signature, then the IHDR chunk with big-endian width/height.
+  if (b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    return { width: dv.getUint32(16), height: dv.getUint32(20) };
+  }
+  // JPEG: walk the markers to the first start-of-frame (SOF0-SOF15, except
+  // DHT C4, JPG C8 and DAC CC, which share the range but carry no size).
+  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const marker = b[i + 1];
+      if (marker === 0xff) { i++; continue; }          // fill byte
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue; }
+      const len = (b[i + 2] << 8) | b[i + 3];
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { height: (b[i + 5] << 8) | b[i + 6], width: (b[i + 7] << 8) | b[i + 8] };
+      }
+      if (len < 2) return null;
+      i += 2 + len;
+    }
+  }
+  return null;
 }
 
 function base64ToBytes(b64: string): Uint8Array {

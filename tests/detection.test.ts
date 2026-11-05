@@ -1,4 +1,4 @@
-import { detectGame } from './.generated/detection.ts';
+import { detectGame, isSmallTalk } from './.generated/detection.ts';
 
 const cases: Array<[string, string | null]> = [
   // The actual reported bug: installment number must survive.
@@ -42,5 +42,32 @@ for (const [input, expected] of cases) {
   if (ok) { pass++; }
   else { fail++; console.log(`FAIL  ${JSON.stringify(input)}\n      expected=${JSON.stringify(expected)}  got=${JSON.stringify(got)}`); }
 }
+// ── Small talk skips live retrieval ────────────────────────────────────────
+// "what can you do" used to run a web search for "what can you do 2026",
+// inherit GTA VI from history, and sit under "Thinking in depth".
+const smallTalk: Array<[string, boolean]> = [
+  ['what can you do', true],
+  ['What can you do?', true],
+  ['hi', true],
+  ['heyyy', true],
+  ['thanks bro', true],
+  ['thank you so much!', true],
+  ['who are you?', true],
+  ['how can you help me', true],
+  ['what is gameguide ai', true],
+  // Real questions, even short ones, still get retrieval.
+  ['what can you do in elden ring', false],
+  ['when is it coming out?', false],
+  ['help me beat malenia', false],
+  ['hi, best build for elden ring?', false],
+  ['thanks, and what about the dlc?', false],
+  ['minecraft', false],
+];
+for (const [input, expected] of smallTalk) {
+  const got = isSmallTalk(input);
+  if (got === expected) pass++;
+  else { fail++; console.log(`FAIL  isSmallTalk(${JSON.stringify(input)}) expected=${expected} got=${got}`); }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
