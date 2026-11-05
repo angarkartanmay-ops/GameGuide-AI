@@ -19,7 +19,7 @@
 //  reply ended at "### 1. Right" and was delivered as complete.)
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { createReasoningFilter, stripReasoning } from './reasoning.ts';
+import { createReasoningFilter, looksLikeLeakedPlan, stripReasoning } from './reasoning.ts';
 
 export type SseEvent =
   | { type: 'stage'; stage: string; detail?: string }
@@ -74,6 +74,16 @@ export class SseWriter {
       this.ctrl.enqueue(encodeSse(ev));
     } catch {
       // Client hung up mid-write; stop trying.
+      this.closed = true;
+    }
+  }
+
+  /** SSE comment frame: keeps proxies and the client's idle timer from giving up. */
+  ping() {
+    if (this.closed) return;
+    try {
+      this.ctrl.enqueue(new TextEncoder().encode(': keepalive\n\n'));
+    } catch {
       this.closed = true;
     }
   }
@@ -221,6 +231,7 @@ export async function streamOpenAICompat(
     // No finish_reason and no [DONE]: the connection ended mid-answer.
     if (!sawDone && !finishReason) throw new StreamCutError('dropped', cleaned);
     if (finishReason === 'content_filter') throw new StreamCutError('content_filter', cleaned);
+    if (looksLikeLeakedPlan(cleaned)) throw new StreamCutError('leaked_plan', cleaned);
     return cleaned;
   } catch (e) {
     // A network error after text was shown is a cut, not a clean failure.
@@ -237,6 +248,52 @@ export async function streamOpenAICompat(
 //  Gemini streaming (native SDK)
 // ───────────────────────────────────────────────────────────────────────────
 
+/**
+ * Reject when `signal` aborts, whatever `p` is doing.
+ *
+ * The Gemini SDK's own abort support does not reliably interrupt a stream
+ * that is waiting on its next chunk, so the wait itself is raced. Measured
+ * 2026-11-05: one image turn's stream produced nothing for ~150 s until the
+ * platform killed the function. The player saw a frozen chat, and then a
+ * retry, for a total of ~160 s.
+ */
+export function raceAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason ?? new Error('ABORTED'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new Error('ABORTED'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    p.then(
+      v => { signal.removeEventListener('abort', onAbort); resolve(v); },
+      e => { signal.removeEventListener('abort', onAbort); reject(e); },
+    );
+  });
+}
+
+/**
+ * Non-streaming Gemini call with a hard deadline (the SDK sets none).
+ * Rejects with a message containing TIMEOUT so callers can tell a hung model
+ * from a refusing one.
+ */
+export async function geminiGenerate(ai: any, args: { model: string; config?: Record<string, unknown>; [k: string]: unknown }, ms: number): Promise<any> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(new Error(`TIMEOUT: Gemini/${args.model} exceeded ${ms}ms`)), ms);
+  try {
+    return await raceAbort(
+      ai.models.generateContent({ ...args, config: { ...(args.config || {}), abortSignal: ctrl.signal } }),
+      ctrl.signal,
+    );
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+/**
+ * Below this many visible characters, a MAX_TOKENS stop means the budget went
+ * to thinking, not to the answer: the reply ends mid-sentence. Seen in prod
+ * as a leaked plan cut at "Take-Two".
+ */
+export const MAX_TOKENS_MIN_CHARS = 400;
+
 export async function streamGemini(
   ai: any,
   model: string,
@@ -245,26 +302,46 @@ export async function streamGemini(
   opts: {
     temperature?: number;
     maxOutputTokens?: number;
+    /** Gemini thinkingConfig; omitted = the model's default (full) thinking. */
+    thinkingConfig?: Record<string, unknown>;
     onDelta: (text: string) => void;
     onFirstToken?: () => void;
+    /** Give up (and let the next model try) if nothing visible arrives by then. */
+    firstTokenMs?: number;
+    /** Hard ceiling on the whole stream. */
+    timeoutMs?: number;
   },
 ): Promise<string> {
-  const stream = await ai.models.generateContentStream({
-    model,
-    contents,
-    config: {
-      systemInstruction,
-      temperature: opts.temperature ?? 0.72,
-      maxOutputTokens: opts.maxOutputTokens ?? 2400,
-    },
-  });
+  const ctrl = new AbortController();
+  const total = setTimeout(
+    () => ctrl.abort(new Error(`TIMEOUT: Gemini/${model} exceeded ${opts.timeoutMs ?? 60_000}ms`)),
+    opts.timeoutMs ?? 60_000,
+  );
+  const firstTimer = opts.firstTokenMs
+    ? setTimeout(() => ctrl.abort(new Error(`FIRST_TOKEN_TIMEOUT: Gemini/${model} silent for ${opts.firstTokenMs}ms`)), opts.firstTokenMs)
+    : null;
 
   let full = '';
   let sawToken = false;
   let finish: string | null = null;
   const reasoning = createReasoningFilter();
   try {
-    for await (const chunk of stream) {
+    const stream = await raceAbort(ai.models.generateContentStream({
+      model,
+      contents,
+      config: {
+        systemInstruction,
+        temperature: opts.temperature ?? 0.72,
+        maxOutputTokens: opts.maxOutputTokens ?? 2400,
+        ...(opts.thinkingConfig ? { thinkingConfig: opts.thinkingConfig } : {}),
+        abortSignal: ctrl.signal,
+      },
+    }), ctrl.signal);
+
+    const it = (stream as AsyncIterable<any>)[Symbol.asyncIterator]();
+    for (;;) {
+      const { done, value: chunk } = await raceAbort(it.next(), ctrl.signal);
+      if (done) break;
       const reason = chunk?.candidates?.[0]?.finishReason;
       if (typeof reason === 'string' && reason) finish = reason;
       const t = chunk?.text;
@@ -272,14 +349,24 @@ export async function streamGemini(
         full += t;
         const visible = reasoning.push(t);
         if (visible) {
-          if (!sawToken) { sawToken = true; opts.onFirstToken?.(); }
+          if (!sawToken) {
+            sawToken = true;
+            if (firstTimer) clearTimeout(firstTimer);
+            opts.onFirstToken?.();
+          }
           opts.onDelta(visible);
         }
       }
     }
   } catch (e) {
-    if (sawToken) throw new StreamCutError('network', stripReasoning(full));
+    if (sawToken) {
+      const why = /TIMEOUT/.test((e as Error)?.message || '') ? 'timeout' : 'network';
+      throw new StreamCutError(why, stripReasoning(full));
+    }
     throw e;
+  } finally {
+    clearTimeout(total);
+    if (firstTimer) clearTimeout(firstTimer);
   }
   const tail = reasoning.finish();
   if (tail) {
@@ -291,5 +378,7 @@ export async function streamGemini(
   // RECITATION, SAFETY, OTHER…: the model stopped, and the SDK hands back
   // the half answer as though it were complete.
   if (finish && !GEMINI_DONE.has(finish)) throw new StreamCutError(finish.toLowerCase(), cleaned);
+  if (finish === 'MAX_TOKENS' && cleaned.length < MAX_TOKENS_MIN_CHARS) throw new StreamCutError('max_tokens', cleaned);
+  if (looksLikeLeakedPlan(cleaned)) throw new StreamCutError('leaked_plan', cleaned);
   return cleaned;
 }

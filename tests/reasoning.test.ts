@@ -9,7 +9,7 @@
 // discovered at RUNTIME, so a reasoning model can join the rotation any day
 // without a code change. Stripping has to hold for models nobody has seen yet.
 
-import { stripReasoning, createReasoningFilter } from '../supabase/functions/chat-proxy/reasoning.ts';
+import { stripReasoning, createReasoningFilter, looksLikeLeakedPlan } from '../supabase/functions/chat-proxy/reasoning.ts';
 
 let pass = 0;
 const failures: string[] = [];
@@ -93,6 +93,21 @@ check('stream: reports false when no reasoning present',
 // A long scratchpad must not be buffered unboundedly, and must still resolve.
 check('stream: survives a very long scratchpad and still emits the answer',
   streamThrough(['<think>' + 'x'.repeat(20000), 'more'.repeat(500), '</think>Done']), 'Done');
+
+// ── Untagged planning text (no <think>, so nothing to strip) ───────────────
+// The prod reply from 2026-11-05, as the player saw it.
+check('leak: the prod drafting-plan reply is caught',
+  looksLikeLeakedPlan(`" direct response. * Follow-up suggestions at the bottom (2-4 in user's voice).\n\n5. **Drafting final text:** "Take-Two`), true);
+check('leak: "Drafting the response:" heading',
+  looksLikeLeakedPlan('1. Analyze the request.\n2. **Drafting the response:** keep it short'), true);
+check('leak: constraint checklist', looksLikeLeakedPlan('Constraint Checklist & Confidence Score:\n1. Markdown? Yes.'), true);
+check('leak: confidence score line', looksLikeLeakedPlan('Confidence Score: 5/5'), true);
+// Real answers that brush past the same words must survive.
+check('no leak: a normal answer with follow-up chips',
+  looksLikeLeakedPlan('GTA VI launches **November 19, 2026** on PS5 and Xbox Series X|S.\n\n[?] Will it come to PC?\n[?] What editions are there?'), false);
+check('no leak: drafting as a game term', looksLikeLeakedPlan('In the fantasy draft, drafting a strong QB first pays off.'), false);
+check('no leak: "final text" in a lore answer', looksLikeLeakedPlan('The final text of the tablet reads: "The flame fades."'), false);
+check('no leak: empty', looksLikeLeakedPlan(''), false);
 
 if (failures.length) console.log(`\nREASONING FAILURES:\n${failures.join('\n')}`);
 console.log(`reasoning: ${pass} passed, ${failures.length} failed`);

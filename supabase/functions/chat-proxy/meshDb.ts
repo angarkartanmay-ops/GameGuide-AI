@@ -38,7 +38,11 @@ async function rpc<T>(fn: string, args: Record<string, unknown>, timeoutMs = 250
       console.warn(`[MESH-DB] ${fn} → HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 160)}`);
       return null;
     }
-    return await res.json() as T;
+    // Void RPCs (gg_record_usage, gg_report_provider) answer 204 with no
+    // body. Parsing that threw "Unexpected end of JSON input" on every call,
+    // burying real failures under a warning that meant nothing.
+    const body = await res.text();
+    return body ? JSON.parse(body) as T : null;
   } catch (e) {
     console.warn(`[MESH-DB] ${fn} failed:`, (e as Error).message);
     return null;

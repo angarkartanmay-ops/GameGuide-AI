@@ -3,15 +3,16 @@ import { enrichVisionAttachments, VisionEnrichment } from './visionPipeline.ts';
 import {
   PROVIDERS, ProviderConfig, MeshModel, planRoute, geminiFirst, buildRegistry,
   GEMINI_IMAGE_MODELS, planGeminiRoute, geminiCandidates, GeminiCandidate,
-  GROQ_AGENTIC, wantsAgentic,
+  GROQ_AGENTIC, wantsAgentic, geminiThinking,
 } from './meshRouter.ts';
 import { getDiscoveredModels } from './modelCatalog.ts';
 import { extractProfileFacts, buildProfileBlock } from './playerMemory.ts';
 import {
   SseWriter, sseHeaders, streamOpenAICompat, streamGemini, StreamCutError,
+  geminiGenerate, MAX_TOKENS_MIN_CHARS,
 } from './streaming.ts';
 import { corroborate, CorroborationInput } from './corroboration.ts';
-import { stripReasoning, createReasoningFilter } from './reasoning.ts';
+import { stripReasoning, createReasoningFilter, looksLikeLeakedPlan } from './reasoning.ts';
 import {
   resolveShield, buildShieldDirective, buildShieldReminder, buildSpoilItNote, shieldChips,
   shieldPersonaOverlay, isMissablesQuestion,
@@ -323,8 +324,8 @@ So: identify the **series** with confidence, but treat the **specific installmen
    "🚫 **I can't read this image clearly.** Specifically: [describe what's wrong — e.g. 'the text is below ~10px and pixelated', 'the screen is mostly black except a small region']. Please re-upload a higher-resolution screenshot, or describe what you're seeing in text and I'll help that way."
    Do NOT proceed to STEP 1-4 in this case. Do NOT guess. Do NOT pad with generic advice.
 
-## REQUIRED ANALYSIS WORKFLOW (THINK OUT LOUD):
-You must structure your initial analysis strictly using these steps before answering the user:
+## REQUIRED ANALYSIS WORKFLOW (DO THIS SILENTLY — NEVER PRINT THE STEPS)
+Work through Steps 1-3 in your head before answering. They are your checklist, NOT your output: never write "STEP 1", "STEP 2", "OCR & TEXT EXTRACTION", "VISUAL INVENTORY" or any of these headings in the reply. The player asked a question; they want the answer, not your notes. (Printing the steps made image answers ~3x longer and slower, and read like a lab report.)
 
 ### STEP 1: OCR & TEXT EXTRACTION
 If an "🔠 OCR GROUND TRUTH" block is present in your context, COPY its tokens here verbatim — do NOT re-OCR from the image. Then proceed.
@@ -342,8 +343,10 @@ List the items, icons, and HUD elements you see. **If a HUD strip crop (second a
 ### STEP 3: ENVIRONMENT & CONTEXT
 Describe the game world. What biome is it? What structures or mobs are visible? What is the lighting like?
 
-### STEP 4: ANSWER THE USER's QUESTION
-Using ONLY the verified data from Steps 1-3 (and any provided live INTEL blocks), answer the user's specific question. 
+### STEP 4: ANSWER THE USER's QUESTION — THIS IS THE ONLY PART YOU WRITE
+Using ONLY the verified data from Steps 1-3 (and any provided live INTEL blocks), answer the user's specific question.
+- Lead with the answer itself. When the visual evidence matters, add ONE short line such as "**What I see:** F3 overlay reads 53 FPS, diamond pickaxe in slot 1" — the specific readings that back the answer, nothing more.
+- Quote exact text/numbers you relied on (from OCR or the pixels) inline.
 - Use the active persona's formatting rules.
 - If your advice depends on an item or stat, ensure it matches your findings in Steps 1 and 2.
 - Do NOT provide generic advice that contradicts the visual evidence.
@@ -780,7 +783,17 @@ function gamesFromHistory(history: any[], max = 3): string[] {
     }
     if (out.length >= max) break;
   }
-  return out;
+  if (out.length) return out;
+  // The user never named a game, but we did: a screenshot turn ("what game
+  // is this from?") answered "That's from **Grand Theft Auto VI**". Then
+  // "when is it coming out?" searched the web for "coming", and the answer
+  // said there was no release date (the prod reply in the 2026-11-05 report).
+  // Only in this case, take the title our own latest reply LED with: its
+  // first bolded name, not any title it mentioned in passing.
+  const lastAi = [...history].reverse().find(m => m?.sender && m.sender !== 'user' && typeof m?.text === 'string');
+  const lead = /\*\*([^*\n]{2,60})\*\*/.exec(lastAi?.text || '')?.[1];
+  const g = lead ? detectGames(lead, 1)[0] : undefined;
+  return g ? [g] : [];
 }
 // Connectives that join two titles the user wants weighed against each other.
 const COMPARE_SPLIT_RX = /\s+(?:vs\.?|versus|compared\s+to|against|and|or)\s+/i;
@@ -928,6 +941,19 @@ Applies to BOTH kinds:
 - This message is a CONTINUATION of the current conversation, never a new or off-topic question. Do not change the subject and never emit any kind of scope or refusal message.
 ${game ? `6. The corrected subject appears to be **${game}**. Any live INTEL block below about it outranks both your training data and your earlier answer.\n` : ''}${game ? '7' : '6'}. If you have no reliable information about what they named — likely if it released after your training cutoff — say so honestly and ask what they're seeing. Do not invent details, and do not fall back to describing the older entry in the series as if it were the one they named.
 === END USER CORRECTION ===`;
+}
+
+// Greetings, thanks, and questions about GameGuide itself. The whole prompt
+// has to be one of these: "what can you do" matches, "what can you do in
+// Elden Ring" does not. Anchoring both ends keeps this from swallowing real
+// questions, and a miss here only costs the old (slower) path.
+const SMALL_TALK_RX = /^(?:hi+|hey+|hello+|heya|hiya|yo|sup|what'?s\s+up|howdy|gm|good\s+(?:morning|afternoon|evening|night)|thanks?(?:\s+(?:you|a\s+lot|so\s+much|again))?|thank\s+you(?:\s+(?:so\s+much|again))?|thx|ty|ok(?:ay)?|cool|nice|great|awesome|lol|lmao|bye|see\s+ya|cya|who\s+are\s+you|what\s+are\s+you|who\s+made\s+you|what\s+(?:can|do)\s+you\s+do|what\s+else\s+can\s+you\s+do|what\s+can\s+you\s+help(?:\s+me)?\s+with|how\s+(?:can|do)\s+you\s+help(?:\s+me)?|what\s+(?:is|are)\s+your\s+(?:features|capabilities|abilities|commands)|what\s+is\s+(?:this|gameguide(?:[-\s]?ai)?)|help|how\s+are\s+you(?:\s+doing)?|are\s+you\s+(?:a\s+bot|an\s+ai|real|human))(?:\s+(?:bro|man|dude|mate|buddy|gameguide))?[\s!?.,]*$/i;
+
+function isSmallTalk(prompt: string): boolean {
+  const p = (prompt || '').trim();
+  if (!p || p.length > 60) return false;
+  if (detectGame(p)) return false;
+  return SMALL_TALK_RX.test(p);
 }
 
 function scoreComplexity(prompt: string, history: any[]): 'simple' | 'medium' | 'deep' {
@@ -1157,6 +1183,8 @@ async function callOpenAICompat(
     // so the mesh falls through to another model rather than rendering blank.
     throw new Error('EMPTY_RESPONSE');
   }
+  // Untagged drafting notes written as the answer: unusable, next model.
+  if (looksLikeLeakedPlan(text)) throw new Error('LEAKED_PLAN: model wrote its drafting notes as the answer');
   return text;
 }
 
@@ -1212,6 +1240,28 @@ function isRetryable(errMsg: string): boolean {
     m.includes('unavailable') || m.includes('demand') || m.includes('empty_response') ||
     m.includes('network')
   );
+}
+
+// A provider whose KEY was refused (401/403) refuses every model on every
+// request until the secret is replaced. In prod on 2026-11-05 all three of
+// Groq, Cerebras and OpenRouter answered 401 on every turn, and each turn paid
+// those round trips again before reaching Gemini. Remember the refusal for a
+// while in this isolate, and say loudly what to fix.
+const KEY_REJECT_MS = 10 * 60 * 1000;
+const keyRejectedUntil = new Map<string, number>();
+function keyRejected(provider: string): boolean {
+  return (keyRejectedUntil.get(provider) || 0) > Date.now();
+}
+function noteKeyRejected(provider: string, raw: string) {
+  const payment = /\b402\b|payment required|payment_required/i.test(raw);
+  if (!payment && !/\b40[13]\b|unauthorized|forbidden|invalid api key|invalid_api_key|wrong api key|user not found/i.test(raw)) return;
+  if (!keyRejected(provider)) {
+    const fix = payment
+      ? `the ${provider} account needs billing set up (HTTP 402)`
+      : `replace the ${PROVIDERS[provider]?.keyEnv || provider} secret`;
+    console.error(`[MESH] ${provider} REFUSED OUR ACCOUNT — ${fix}. Skipping ${provider} for ${KEY_REJECT_MS / 60000} min in this isolate.`);
+  }
+  keyRejectedUntil.set(provider, Date.now() + KEY_REJECT_MS);
 }
 
 function isProviderFatal(errMsg: string): boolean {
@@ -1817,6 +1867,10 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
 const PAID_BOT_TIERS = new Set(['pro', 'lifetime', 'server']);
 
 const PULSE_BUDGET_MS = 4500;
+// Game-from-screenshot pre-check: worth ~1-2 s, never worth 30.
+const RESOLVER_TIMEOUT_MS = 8000;
+// Vision second opinion: useful when it is quick, never worth a long wait.
+const SECOND_OPINION_TIMEOUT_MS = 12_000;
 const OMNI_BUDGET_MS = 4000;
 const OMNI_BUDGET_DEEP_MS = 6000;
 const OMNI_CONTEXT_CHARS = 3500;
@@ -1865,9 +1919,12 @@ async function resolveGameFromImage(geminiAi: any, attachments: any[], meshState
 
   // Try OpenRouter first — separate quota pool from native Gemini, so a cheap
   // identification pass here preserves the Gemini budget for the real answer.
-  const orProvider = PROVIDERS.OpenRouter;
+  // A pre-check, so it gets a short leash: OpenRouter's free pool queues (up
+  // to 80 s measured), and its 30 s provider timeout made this "quick" pass
+  // cost more than the answer it was meant to speed up.
+  const orProvider = PROVIDERS.OpenRouter ? { ...PROVIDERS.OpenRouter, timeoutMs: RESOLVER_TIMEOUT_MS } : null;
   const orVisionModel = 'google/gemma-4-31b-it:free';
-  if (orProvider && Deno.env.get(orProvider.keyEnv)) {
+  if (orProvider && Deno.env.get(orProvider.keyEnv) && !keyRejected(orProvider.name)) {
     try {
       const messages = buildOpenAIMessages('You identify video games from screenshots.', [], tinyPrompt, attachments, true);
       const txt = await callOpenAICompat(orProvider, orVisionModel, messages, {
@@ -1880,6 +1937,7 @@ async function resolveGameFromImage(geminiAi: any, attachments: any[], meshState
       }
     } catch (e: any) {
       console.warn(`[GAME-RESOLVER] OR pass-1 failed: ${e.message}`);
+      noteKeyRejected(orProvider.name, e.message || '');
     }
   }
 
@@ -1894,11 +1952,11 @@ async function resolveGameFromImage(geminiAi: any, attachments: any[], meshState
     for (const { id: model } of candidates.slice(0, 2)) {   // quick pass — don't exhaust every candidate on a pre-check
       try {
         const contents = buildGeminiContents([], tinyPrompt, attachments);
-        const result = await geminiAi.models.generateContent({
+        const result = await geminiGenerate(geminiAi, {
           model,
           contents,
-          config: { temperature: 0.1, maxOutputTokens: 60 },
-        });
+          config: { temperature: 0.1, ...geminiBudget(model, 60, false) },
+        }, RESOLVER_TIMEOUT_MS);
         const txt = result?.text || '';
         const m = txt.match(/GAME:\s*([^|\n]+?)\s*\|\s*CONFIDENCE:\s*(high|medium|low)/i);
         recordUsage('Gemini', model);
@@ -1911,7 +1969,7 @@ async function resolveGameFromImage(geminiAi: any, attachments: any[], meshState
         const msg = (e.message || String(e)).toLowerCase();
         console.warn(`[GAME-RESOLVER] Gemini/${model} pass-1 failed: ${e.message}`);
         recordUsage('Gemini', model, 0, 0, true);
-        if (msg.includes('429') || msg.includes('quota')) noteLocalFailure('Gemini', model);
+        if (msg.includes('429') || msg.includes('quota') || isGeminiBusy(msg)) noteLocalFailure('Gemini', model);
         // else: try the next candidate (e.g. a retired/unknown id)
       }
     }
@@ -1981,9 +2039,47 @@ function answerTokens(complexity: 'simple' | 'medium' | 'deep'): number {
   return complexity === 'simple' ? 1100 : complexity === 'medium' ? 1500 : 2000;
 }
 
+// Vision answers no longer print their STEP 1-3 working (see
+// VISION_GODMODE_INSTRUCTION), so they need about half the old 3500.
+const VISION_MAX_TOKENS = 1800;
+
+// When the server tells the client "Thinking in depth" on its own (no known
+// slow route): only once nothing has streamed for this long.
+const DEEP_STAGE_AFTER_MS = 15_000;
+
+// ── Gemini deadlines ───────────────────────────────────────────────────────
+// No Gemini call had a timeout. One image turn on 2026-11-05 streamed nothing
+// for ~150 s until the platform killed the function. A silent model now gives
+// way to the next one.
+const GEMINI_FIRST_TOKEN_MS = 15_000;
+const GEMINI_FIRST_TOKEN_MS_VISION = 12_000;   // a healthy model starts in ~3-6 s; a silent one rarely recovers
+const GEMINI_STREAM_MS = 60_000;
+const GEMINI_CALL_MS = 30_000;
+const GEMINI_CALL_MS_VISION = 45_000;
+
+/** maxOutputTokens + thinkingConfig for one Gemini call. See geminiThinking(). */
+function geminiBudget(model: string, answerBudget: number, careful: boolean) {
+  const t = geminiThinking(model, careful ? 'careful' : 'light');
+  return {
+    maxOutputTokens: answerBudget + t.extraTokens,
+    ...(t.config ? { thinkingConfig: t.config } : {}),
+  };
+}
+
+/** Overloaded or timed out: worth a short cooldown, not an immediate retry. */
+function isGeminiBusy(msg: string): boolean {
+  return /\b503\b|high demand|overloaded|unavailable|timeout|deadline/i.test(msg);
+}
+
 /** "Request too large" for the provider's tokens-per-minute ceiling: about this request, not the model. */
 function isTooLarge(raw: string): boolean {
-  return /HTTP_413|request too large|tokens per minute|TPM|context_length|maximum context/i.test(raw);
+  // A 429 that mentions tokens-per-minute is different: the request fits, but
+  // THIS model's minute is used up. Groq meters TPM per model, so its sibling
+  // models can still answer. Treating it as "too large" wrote off all of Groq
+  // after one busy model (seen locally 2026-11-05: qwen3.8 429 → straight to
+  // OpenRouter's 10 s queue, skipping both gpt-oss models).
+  if (/HTTP_429/.test(raw)) return false;
+  return /HTTP_413|request too large|tokens per minute|\bTPM\b|context_length|maximum context/i.test(raw);
 }
 
 async function runGeminiAttempt(opts: {
@@ -2016,23 +2112,31 @@ async function runGeminiAttempt(opts: {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         console.log(`[MESH] Gemini → ${model} (attempt ${attempt})`);
-        const result = await opts.geminiAi.models.generateContent({
+        // Deep text questions get a little thinking. Vision does not: the
+        // checklist in VISION_GODMODE_INSTRUCTION already structures the look,
+        // and with "low" thinking, flash-lite sat silent for 25 s on a
+        // screenshot (local run, 2026-11-05) where "minimal" answered in ~6 s.
+        const careful = !opts.hasVision && opts.complexity === 'deep';
+        const result = await geminiGenerate(opts.geminiAi, {
           model,
           contents,
           config: {
             systemInstruction: opts.systemInstruction,
             // Vision runs cold: the zero-hallucination protocol does not
             // tolerate creative padding.
-            ...(opts.hasVision
-              ? { temperature: 0.15, maxOutputTokens: 3500 }
-              : { temperature: textTemperature(opts.rawPrompt), maxOutputTokens: answerTokens(opts.complexity ?? 'medium') }),
+            temperature: opts.hasVision ? 0.15 : textTemperature(opts.rawPrompt),
+            ...geminiBudget(model, opts.hasVision ? VISION_MAX_TOKENS : answerTokens(opts.complexity ?? 'medium'), careful),
           },
-        });
-        if (result?.text) {
+        }, opts.hasVision ? GEMINI_CALL_MS_VISION : GEMINI_CALL_MS);
+        const text = stripReasoning(result?.text || '');
+        const finish = result?.candidates?.[0]?.finishReason;
+        if (text && finish === 'MAX_TOKENS' && text.length < MAX_TOKENS_MIN_CHARS) throw new Error('MAX_TOKENS_SHORT: thinking used the answer budget');
+        if (text && looksLikeLeakedPlan(text)) throw new Error('LEAKED_PLAN: model wrote its drafting notes as the answer');
+        if (text) {
           console.log(`[MESH] ✓ Gemini/${model}`);
           reportProvider('Gemini', model, true);
           recordUsage('Gemini', model);
-          return { text: result.text, provider: 'Gemini', model };
+          return { text, provider: 'Gemini', model };
         }
         throw new Error('EMPTY_RESPONSE');
       } catch (e: any) {
@@ -2047,6 +2151,12 @@ async function runGeminiAttempt(opts: {
 
         // Retired / unknown model id — no retry will fix it.
         if (msg.includes('404') || msg.includes('not found') || msg.includes('not supported')) break;
+        // Bad output from this model: the next model, not the same one again.
+        if (msg.includes('leaked_plan') || msg.includes('max_tokens_short')) break;
+        // Overloaded ("503 high demand") or hung: retrying the same id
+        // straight away fails the same way and costs another 3-12 s. Cool it
+        // down so the next turn starts on a healthy model instead.
+        if (isGeminiBusy(msg)) { noteLocalFailure('Gemini', model); break; }
 
         // One-shot MIME normalization retry for legacy attachment types.
         if ((msg.includes('400') || msg.includes('invalid') || msg.includes('unsupported'))
@@ -2087,7 +2197,7 @@ async function runPlannedMesh(opts: {
 
   for (const { provider, model, reason } of opts.route) {
     if (!provider) continue;
-    if (deadProviders.has(provider.name)) continue;
+    if (deadProviders.has(provider.name) || keyRejected(provider.name)) continue;
 
     const messages = buildOpenAIMessages(
       opts.systemInstruction,
@@ -2102,7 +2212,7 @@ async function runPlannedMesh(opts: {
         console.log(`[MESH] ${provider.name} → ${model.id} (${reason}, attempt ${attempt})`);
         const text = await callOpenAICompat(provider, model.id, messages, {
           temperature: textTemperature(opts.rawPrompt),
-          maxTokens: opts.hasVision ? 3500 : answerTokens(opts.complexity ?? 'medium'),
+          maxTokens: opts.hasVision ? VISION_MAX_TOKENS : answerTokens(opts.complexity ?? 'medium'),
         });
         console.log(`[MESH] ✓ ${provider.name}/${model.id}`);
         reportProvider(provider.name, model.id, true);
@@ -2124,11 +2234,15 @@ async function runPlannedMesh(opts: {
         // A bad key or a suspended account kills the whole provider, not just
         // this model — stop wasting attempts on its siblings.
         if (isProviderFatal(raw) || code === 402) {
+          noteKeyRejected(provider.name, raw);
           deadProviders.add(provider.name);
           break;
         }
         // A retired model id returns 404/400; siblings may still be fine.
         if (code === 404 || code === 400) break;
+        // Rate-limited: this model's minute is spent, retrying it 0.8 s later
+        // fails the same way. Its siblings have their own limits.
+        if (code === 429) break;
         if (!isRetryable(raw)) break;
         if (attempt < 2) await new Promise(r => setTimeout(r, 800 * attempt));
       }
@@ -2189,6 +2303,7 @@ async function tryAgentic(opts: {
   const key = Deno.env.get(provider.keyEnv);
   if (!key) return null;
   const modelId = mode === 'deep' ? GROQ_AGENTIC.deep : GROQ_AGENTIC.fast;
+  if (!modelId) return null;
 
   const system = AGENTIC_SYSTEM.replace("${TODAY}", new Date().toISOString().slice(0, 10));
   // Only the last few turns: compound re-derives context by searching, and a
@@ -2299,15 +2414,21 @@ async function runNeuralMeshStreaming(opts: {
   onReset?: () => void;
   /** Tell the reader this turn is taking the slow, careful path. */
   onDeep?: () => void;
+  /** Epoch ms after which no new candidate is started (whole-turn budget). */
+  deadlineAt?: number;
 }): Promise<MeshResult> {
   const errors: string[] = [];
   // "Thinking in depth" — said once, either because the route is known to be
   // slow (deep question, verified missables list, live search) or because
-  // nothing has started streaming after a few seconds of fallbacks.
+  // nothing has started streaming after a while of fallbacks. The timer used
+  // to be 6 s, and retrieval alone takes 3-7 s, so nearly every turn (even
+  // "what can you do") was labelled deep. Now it only fires when a turn is
+  // genuinely stuck.
   let saidDeep = false;
   const sayDeep = () => { if (!saidDeep) { saidDeep = true; opts.onDeep?.(); } };
   let committed = false;
-  const deepTimer = setTimeout(() => { if (!committed) sayDeep(); }, 6000);
+  const deepTimer = setTimeout(() => { if (!committed) sayDeep(); }, DEEP_STAGE_AFTER_MS);
+  const pastDeadline = () => !!opts.deadlineAt && Date.now() > opts.deadlineAt;
   const onCommit = (provider: string, model: string) => {
     committed = true;
     clearTimeout(deepTimer);
@@ -2329,14 +2450,18 @@ async function runNeuralMeshStreaming(opts: {
   const clearShown = () => { if (shown) { opts.onReset?.(); shown = false; } };
   const recover = (e: unknown, provider: string, model: string) => {
     clearShown();
-    if (e instanceof StreamCutError && e.partial.trim()
+    // A leaked drafting plan, or a reply the thinking budget cut short, is not
+    // worth keeping even as a last resort.
+    const unusable = e instanceof StreamCutError && (e.reason === 'leaked_plan' || e.reason === 'max_tokens');
+    if (e instanceof StreamCutError && !unusable && e.partial.trim()
       && (!bestPartial || e.partial.length > bestPartial.text.length)) {
       bestPartial = { text: e.partial, provider, model };
     }
   };
   const visionCfg = need.vision
-    ? { temperature: 0.15, maxTokens: 3500 }
+    ? { temperature: 0.15, maxTokens: VISION_MAX_TOKENS }
     : { temperature: textTemperature(opts.rawPrompt), maxTokens: answerTokens(need.complexity) };
+  const careful = !need.vision && need.complexity === 'deep';   // see runGeminiAttempt
 
   const tryGemini = async (): Promise<MeshResult | null> => {
     if (!opts.geminiAi) return null;
@@ -2350,10 +2475,18 @@ async function runNeuralMeshStreaming(opts: {
     }
     const contents = buildGeminiContents(opts.chatHistory, opts.userPrompt, opts.attachments);
     for (const model of models) {
+      if (pastDeadline()) { errors.push('turn deadline reached'); break; }
       try {
+        // Logged before the call: the hung 2026-11-05 turn left no trace of
+        // which model it was waiting on.
+        console.log(`[MESH-STREAM] Gemini → ${model}`);
+        const budget = geminiBudget(model, visionCfg.maxTokens, careful);
         const text = await streamGemini(opts.geminiAi, model, contents, opts.systemInstruction, {
           temperature: visionCfg.temperature,
-          maxOutputTokens: visionCfg.maxTokens,
+          maxOutputTokens: budget.maxOutputTokens,
+          thinkingConfig: budget.thinkingConfig,
+          firstTokenMs: need.vision ? GEMINI_FIRST_TOKEN_MS_VISION : GEMINI_FIRST_TOKEN_MS,
+          timeoutMs: GEMINI_STREAM_MS,
           onDelta,
           onFirstToken: () => onCommit('Gemini', model),
         });
@@ -2368,9 +2501,11 @@ async function runNeuralMeshStreaming(opts: {
         const status = /\b(429|503|500|404|400)\b/.exec(raw)?.[1];
         reportProvider('Gemini', model, false, status ? parseInt(status, 10) : undefined, raw);
         recordUsage('Gemini', model, 0, 0, true);
-        if (raw.toLowerCase().includes('429') || raw.toLowerCase().includes('quota')) {
+        if (raw.toLowerCase().includes('429') || raw.toLowerCase().includes('quota') || isGeminiBusy(raw)) {
           // Fast local echo so a follow-up request in the same burst does not
           // re-pay a guaranteed-fail round trip before the DB write lands.
+          // 503 "high demand" and timeouts count too: they took 3-12 s each
+          // to fail in prod, and nothing stopped the next turn retrying them.
           noteLocalFailure('Gemini', model);
         }
       }
@@ -2381,7 +2516,8 @@ async function runNeuralMeshStreaming(opts: {
   const tryMesh = async (list = route): Promise<MeshResult | null> => {
     const dead = new Set<string>();
     for (const { provider, model, reason } of list) {
-      if (!provider || dead.has(provider.name)) continue;
+      if (pastDeadline()) { errors.push('turn deadline reached'); break; }
+      if (!provider || dead.has(provider.name) || keyRejected(provider.name)) continue;
       const key = Deno.env.get(provider.keyEnv);
       if (!key) continue;
 
@@ -2416,7 +2552,7 @@ async function runNeuralMeshStreaming(opts: {
         recordUsage(provider.name, model.id, 0, 0, true);
         noteLocalFailure(provider.name, model.id);
         // 402: the account needs payment — every model on it will say the same.
-        if (isProviderFatal(raw) || status === '402') dead.add(provider.name);
+        if (isProviderFatal(raw) || status === '402') { noteKeyRejected(provider.name, raw); dead.add(provider.name); }
       }
     }
     return null;
@@ -2814,13 +2950,27 @@ Deno.serve(async (req) => {
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         const sse = new SseWriter(controller);
+        // Keeps the connection visibly alive while retrieval and a slow model
+        // run, so the client's idle timeout only fires on a dead connection.
+        const keepalive = setInterval(() => sse.ping(), SSE_KEEPALIVE_MS);
+        let overrun: ReturnType<typeof setTimeout> | undefined;
         void (async () => {
           try {
-            await runChatPipeline(req, rawBody, startTime, sse);
+            // Whole-turn ceiling. The platform kills the function at ~150 s
+            // without closing the stream cleanly, and the player watched a
+            // frozen chat for all of it. Answer with an error well before that.
+            await Promise.race([
+              runChatPipeline(req, rawBody, startTime, sse),
+              new Promise((_, reject) => {
+                overrun = setTimeout(() => reject(new Error(`TURN_TIMEOUT after ${TURN_BUDGET_MS}ms`)), TURN_BUDGET_MS);
+              }),
+            ]);
           } catch (error: any) {
             console.error('[FATAL-STREAM]', error);
             sse.send({ type: 'error', message: friendlyError(error) });
           } finally {
+            clearInterval(keepalive);
+            clearTimeout(overrun);
             sse.close();
           }
         })();
@@ -2829,12 +2979,33 @@ Deno.serve(async (req) => {
     return new Response(body, { headers: sseHeaders(corsHeaders) });
   }
 
-  return await runChatPipeline(req, rawBody, startTime, null) as Response;
+  let overrun: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      runChatPipeline(req, rawBody, startTime, null) as Promise<Response>,
+      new Promise<Response>((_, reject) => {
+        overrun = setTimeout(() => reject(new Error(`TURN_TIMEOUT after ${TURN_BUDGET_MS}ms`)), TURN_BUDGET_MS);
+      }),
+    ]);
+  } catch (error: any) {
+    console.error('[FATAL]', error);
+    return jsonResponse({ text: `**Neural Net Disconnected:** ${friendlyError(error)}`, images: [], _meta: { error: true } });
+  } finally {
+    clearTimeout(overrun);
+  }
 });
+
+// ── Turn budget ────────────────────────────────────────────────────────────
+// The edge platform ends a request at ~150 s. Stop starting new models at
+// MESH_DEADLINE_MS, and give up with a readable error at TURN_BUDGET_MS.
+const MESH_DEADLINE_MS = 90_000;
+const TURN_BUDGET_MS = 115_000;
+const SSE_KEEPALIVE_MS = 10_000;
 
 // Maps a thrown error onto something a player can act on.
 function friendlyError(error: any): string {
   const raw = (error?.message || '').toLowerCase();
+  if (raw.includes('turn_timeout')) return 'That one took too long on our side, so I stopped it. Send it again. If it had an image, a smaller screenshot helps.';
   if (raw.includes('mesh_exhausted')) return 'Every model in the mesh is busy or rate-limited right now. Give it 30 seconds and try again.';
   if (raw.includes('not found') || raw.includes('404') || raw.includes('not supported')) return 'That model is unavailable and the fallbacks did not catch it. Try again in a moment.';
   if (raw.includes('503') || raw.includes('demand') || raw.includes('unavailable')) return 'The AI is under heavy load right now — this is temporary, try again shortly.';
@@ -3042,10 +3213,20 @@ async function runChatPipeline(
     // For vision queries with no text-identified game, run a fast Pass-1
     // call to identify the game from the image. This unlocks omni-scraping
     // for cases like "which card is this?" where the user provides no name.
+    // The resolver and the OCR/crop pre-process (stage 1.4) are independent,
+    // so they run side by side. Run one after the other they cost ~2.5-5 s of
+    // the image turn before retrieval could even start.
     let resolvedGame: string | null = profile.game;
-    if (profile.hasVision && !resolvedGame) {
-      stage('identifying-game');
-      resolvedGame = await resolveGameFromImage(geminiAi, cleanAttachments, meshState);
+    const needsResolver = profile.hasVision && !resolvedGame;
+    if (needsResolver) stage('identifying-game');
+    const resolverPromise: Promise<string | null> = needsResolver
+      ? resolveGameFromImage(geminiAi, cleanAttachments, meshState)
+      : Promise.resolve(null);
+    const enrichPromise: Promise<VisionEnrichment | null> = profile.hasVision && cleanAttachments?.length
+      ? enrichVisionAttachments(cleanAttachments, geminiAi)
+      : Promise.resolve(null);
+    if (needsResolver) {
+      resolvedGame = await resolverPromise;
       if (resolvedGame) {
         console.log(`[CORTEX] Game resolved from image: ${resolvedGame}`);
         // Update profile so downstream HUD knowledge picks the right game
@@ -3063,19 +3244,12 @@ async function runChatPipeline(
     //     appended as a SECOND attachment. VLMs internally tile to ~768px,
     //     so a 4K screenshot's hotbar collapses to ~50px of perceived height.
     //     The crop restores those pixels for accurate slot/tool detection.
+    // Started above, next to the game resolver. It is awaited only after live
+    // retrieval below (which needs the game, not the OCR), so its few seconds
+    // overlap the search instead of being added to it.
     let visionEnrichment: VisionEnrichment | null = null;
     let effectiveAttachments = cleanAttachments;
-    if (profile.hasVision && cleanAttachments?.length) {
-      stage('reading-image');
-      visionEnrichment = await enrichVisionAttachments(cleanAttachments, geminiAi);
-      effectiveAttachments = visionEnrichment.attachments;
-      const d = visionEnrichment.diagnostics;
-      console.log(
-        `[VISION-PIPE] ocr=${d.ocrApplied ? d.ocrLines + ' lines · ' + d.ocrLatencyMs + 'ms' : 'skip'} `
-        + `crop=${d.cropApplied ? d.cropWidth + 'x' + d.cropHeight : 'skip'} `
-        + `cached=${!!d.cached}`,
-      );
-    }
+    if (profile.hasVision && cleanAttachments?.length) stage('reading-image');
 
     // ── STAGE 1.5: PROJECT PULSE (live web fusion on EVERY real query) ──
     // Fires on every non-chitchat prompt regardless of whether the user used
@@ -3083,12 +3257,27 @@ async function runChatPipeline(
     // adapts based on temporal signal but the search ALWAYS runs so the model
     // gets fresh facts to fuse with its training-side reasoning.
     const todayISO = new Date().toISOString().slice(0, 10);
-    stage('searching', resolvedGame || undefined);
+    // "What can you do?", "hi", "thanks": nothing to look up. These used to
+    // run a full web search ("what can you do 2026"), inherit the last game
+    // from history, and wait several seconds for retrieval to answer a
+    // question about ourselves.
+    const smallTalk = !profile.hasVision && isSmallTalk(prompt);
+    if (smallTalk) console.log('[CORTEX] small talk — skipping live retrieval');
+    // A pronoun follow-up ("when is it coming out?") names no game, and the
+    // omni-scraper below already inherits it from the conversation. PULSE ran
+    // before that and searched the bare question ("when is it coming out?
+    // 2026"), so the date the player asked for never reached the model. Give
+    // it the same carried title.
+    const pulseGame = resolvedGame
+      || (!smallTalk && !detectGames(prompt, 1).length ? gamesFromHistory(boundedHistory, 1)[0] ?? null : null);
+    if (!smallTalk) stage('searching', pulseGame || undefined);
     // PULSE and the omni-scraper used to run one after the other (~2.5 s, then
     // up to 8 s). They are independent, so they now run side by side, each
     // under a deadline: whatever has landed by then is used, the rest dropped.
-    const pulsePromise = withDeadline(
-      runPulse(prompt, resolvedGame, todayISO),
+    const pulsePromise = smallTalk
+      ? Promise.resolve({ fired: false, contextBlock: '', sourcesUsed: [], diagnostics: { reason: 'small-talk' } } as unknown as Awaited<ReturnType<typeof runPulse>>)
+      : withDeadline(
+      runPulse(prompt, pulseGame, todayISO),
       PULSE_BUDGET_MS,
       { fired: false, contextBlock: '', sourcesUsed: [], diagnostics: { reason: 'deadline' } } as unknown as Awaited<ReturnType<typeof runPulse>>,
     );
@@ -3119,7 +3308,7 @@ async function runChatPipeline(
     // got answered from stale memory instead of the web. Scrape whenever the
     // prompt is a real question; runPulse already skips pure chitchat.
     const emotionalTurn = EMOTIONAL_RX.test(prompt);
-    const shouldScrape = (!!resolvedGame || prompt.trim().length >= 12) && !emotionalTurn;
+    const shouldScrape = (!!resolvedGame || prompt.trim().length >= 12) && !emotionalTurn && !smallTalk;
     if (shouldScrape) stage('scanning-sources', resolvedGame || undefined);
     // Research EVERY title the prompt names, not just the first one matched.
     // The subjects are scraped concurrently under one shared budget, so two
@@ -3128,7 +3317,7 @@ async function runChatPipeline(
       let found = detectGames(prompt, 3);
       // Pronoun follow-up: inherit whatever the conversation was about, so
       // "when were they released?" still researches both games.
-      if (!found.length) {
+      if (!found.length && !smallTalk) {
         found = gamesFromHistory(boundedHistory, 3);
         if (found.length) console.log(`[OMNI] carried from history: ${found.join(' | ')}`);
       }
@@ -3173,7 +3362,17 @@ async function runChatPipeline(
           ? Promise.all(subjects.map(s => omniScrape(s, prompt, omniBudget))).then(r => r.flat())
           : omniScrape(null, prompt, omniBudget))
       : Promise.resolve([]);
-    const [pulse, omniBlocks] = await Promise.all([pulsePromise, omniPromise]);
+    const [pulse, omniBlocks, enriched] = await Promise.all([pulsePromise, omniPromise, enrichPromise]);
+    if (enriched) {
+      visionEnrichment = enriched;
+      effectiveAttachments = enriched.attachments;
+      const d = enriched.diagnostics;
+      console.log(
+        `[VISION-PIPE] ocr=${d.ocrApplied ? d.ocrLines + ' lines · ' + d.ocrLatencyMs + 'ms' : 'skip'} `
+        + `crop=${d.cropApplied ? d.cropWidth + 'x' + d.cropHeight : 'skip'} `
+        + `cached=${!!d.cached}`,
+      );
+    }
     if (pulse.fired) {
       console.log(`[PULSE] fired (${pulse.diagnostics.mode}) — sources=${pulse.sourcesUsed.join(',')} blocks=${pulse.diagnostics.blocksUsed}/${pulse.diagnostics.blocksFound}`);
     }
@@ -3290,7 +3489,7 @@ async function runChatPipeline(
       profile.temporal = true;   // routes through the agentic path below
     }
     console.log(`[CORROBORATION] ${corro.confidence} — ${corro.independentDomains} domains, ${corro.officialCount} official, ${corro.conflicts.length} conflicts`);
-    if (!emotionalTurn) {
+    if (!emotionalTurn && !smallTalk) {
       contextBlocks.push(corro.block);
     }
 
@@ -3300,7 +3499,7 @@ async function runChatPipeline(
     // where a confident wrong answer does the most harm. One short rule, read
     // last, instead of the old ACCURACY LOCK (which was appended after the
     // prompt had already been built and so never reached any model).
-    if (!emotionalTurn) {
+    if (!emotionalTurn && !smallTalk) {
       contextBlocks.push(`=== ACCURACY ===
 Answer from the INTEL above wherever it covers the question. For any specific name, number, location, reward or step that neither the INTEL nor well-established knowledge confirms, say you are not sure instead of guessing. Never invent one.
 === END ACCURACY ===`);
@@ -3308,6 +3507,14 @@ Answer from the INTEL above wherever it covers the question. For any specific na
     const shieldReminder = buildShieldReminder(shield, prompt);
     if (shieldReminder) contextBlocks.push(shieldReminder);
 
+    // Small talk carries no INTEL, so the identity in BASE_SYSTEM is far from
+    // the user turn, and a model would sometimes introduce itself under its
+    // vendor name instead ("I'm Qwen, developed by Alibaba"). One line, read last.
+    if (smallTalk) {
+      contextBlocks.push(`=== ABOUT YOU ===
+You are GameGuide-AI, a gaming assistant. Introduce yourself only as GameGuide-AI. Never name the model, company or lab behind you. Keep it short and friendly, list what you can do for a player (game help, builds, bosses, missables, lore without spoilers, tech fixes, screenshots, recommendations, prices), and invite them to ask about a game.
+=== END ABOUT YOU ===`);
+    }
     const augmentedPrompt = contextBlocks.length > 0
       ? `${prompt}\n\n${contextBlocks.join('\n\n')}`
       : prompt;
@@ -3405,6 +3612,7 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
           onDelta: (t) => sse.send({ type: 'delta', text: t }),
           onReset: () => sse.send({ type: 'reset' }),
           onDeep: () => stage('deep'),
+          deadlineAt: startTime + MESH_DEADLINE_MS,
           onCommit: (provider, model) => {
             // Tells the client generation actually started, so it can drop the
             // retrieval spinner and begin rendering.
@@ -3425,7 +3633,11 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
     if (profile.hasVision) {
       const isIdentificationQuery = /\b(what|which|who|name|identify) (is|game|card|character|class|item|hero|champion|operator|weapon|location|boss|mob)\b/i.test(prompt);
       const expressedUncertainty = /\b(unclear|cannot determine|not legible|appears to be|i'?m not sure|hard to tell)\b/i.test(result.text);
-      if (isIdentificationQuery && expressedUncertainty) {
+      // Streaming: the reader has already watched the first answer arrive, so
+      // a blocking second call only adds 10-30 s before the turn closes, and
+      // the merged text then replaces what they were reading. Non-streaming
+      // callers (Discord) still get the cross-check, on a short leash.
+      if (isIdentificationQuery && expressedUncertainty && !sse) {
         try {
           console.log('[VISION-2OP] First answer was uncertain on an ID query — fetching second opinion');
           const route = planRoute(
@@ -3434,11 +3646,11 @@ Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before toda
           );
           console.log('[VISION-2OP] route candidates:', route.map(r => r.model.id));
           // Any vision model other than the one that just answered.
-          const second = route.find(r => r.model.id !== result.model);
+          const second = route.find(r => r.model.id !== result.model && !keyRejected(r.provider.name));
           if (second && Deno.env.get(second.provider.keyEnv)) {
             const messages = buildOpenAIMessages(systemInstruction, boundedHistory, augmentedPrompt, effectiveAttachments, true);
-            const altText = await callOpenAICompat(second.provider, second.model.id, messages, {
-              maxTokens: 2000, temperature: 0.15,
+            const altText = await callOpenAICompat({ ...second.provider, timeoutMs: SECOND_OPINION_TIMEOUT_MS }, second.model.id, messages, {
+              maxTokens: VISION_MAX_TOKENS, temperature: 0.15,
             });
             // Merge — show original + second opinion as a labeled compare
             finalText = `${result.text}\n\n---\n\n## 🔁 Second Opinion (cross-check)\n\n${altText}\n\n*If the two answers agree on the key facts, treat them as confirmed. If they disagree, the disagreeing parts are uncertain — verify in-game.*`;
