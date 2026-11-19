@@ -44,8 +44,23 @@ export function normalizeGameKey(name) {
   return String(name || '').replace(/[™®©]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+// Roman numerals of two or more letters, as whole words: "vi" in "grand theft
+// auto vi", "xiv" in "final fantasy xiv". Single letters (I, V, X) already
+// come out right from capitalising the first letter.
+const ROMAN_RX = /\b(?:ii|iii|iv|vi|vii|viii|ix|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)\b/gi;
+
+/** "Final Fantasy Xiv" → "Final Fantasy XIV". Leaves every other letter alone. */
+export function upperRomans(s) {
+  return String(s || '').replace(ROMAN_RX, (m) => m.toUpperCase());
+}
+
+/**
+ * "grand theft auto vi" → "Grand Theft Auto VI". A word starts after a space
+ * or a hyphen, colon, slash or bracket, never after an apostrophe: it used to
+ * be any word boundary, which made "baldur's" "Baldur'S".
+ */
 export function titleCase(s) {
-  return String(s || '').replace(/\b([a-z])/g, (m) => m.toUpperCase());
+  return upperRomans(String(s || '').replace(/(^|[\s\-:/(])([a-z])/g, (_, pre, c) => pre + c.toUpperCase()));
 }
 
 /** The game named by the newest answer (slash-command replies don't count). */

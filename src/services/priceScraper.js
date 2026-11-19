@@ -622,6 +622,9 @@ async function fetchGamePrice(gameTitle) {
       price: d.price,
       retailPrice: d.retailPrice,
       savings: Math.round(parseFloat(d.savings || 0)),
+      // CheapShark asks that deal links go through its redirect; it lands on
+      // the store's own page for this deal.
+      ...(d.dealID ? { url: `https://www.cheapshark.com/redirect?dealID=${encodeURIComponent(d.dealID)}` } : {}),
     })),
     thumb: topGame.thumb,
   };
@@ -668,6 +671,67 @@ export async function fetchPriceSummaryDirect(gameTitle) {
   } catch {
     return [];
   }
+}
+
+/**
+ * One lookup for callers that need both the price card and the context or
+ * reply text. /price used to run fetchPriceDirect and fetchPriceSummaryDirect
+ * side by side, which searched CheapShark twice for the same game.
+ *
+ * @returns {Promise<{ game: object|null, unreachable: boolean }>}
+ *   game null + unreachable false: searched cleanly, nothing matched.
+ *   unreachable true: CheapShark (and our proxy) could not be reached.
+ */
+export async function lookupPrice(gameTitle) {
+  if (!gameTitle || !gameTitle.trim()) return { game: null, unreachable: false };
+  try {
+    return { game: await fetchGamePrice(gameTitle.trim()), unreachable: false };
+  } catch (err) {
+    return { game: null, unreachable: err instanceof PriceLookupError };
+  }
+}
+
+const isAtLow = (game) => !!game?.cheapestEver
+  && parseFloat(game.cheapest) <= parseFloat(game.cheapestEver.price);
+
+// Markdown table cells: a store name with a "|" would split the row.
+const cell = (s) => String(s ?? '').replace(/\|/g, '/').replace(/[\r\n]+/g, ' ').trim();
+
+/**
+ * The /price reply in the transcript: a heading with the best price, every
+ * store as a table row, and one line on whether now is a good time to buy.
+ * The AI-context text (formatPriceContext) used to be shown here as-is, and
+ * its single line breaks collapsed into one run-on paragraph of emoji.
+ */
+export function formatPriceMarkdown(game, { understoodFrom = '' } = {}) {
+  if (!game) return '';
+  const best = game.deals?.[0] || null;
+  const atLow = isAtLow(game);
+  const lines = [`## ${cell(game.title)}: $${game.cheapest}${best?.store ? ` at ${cell(best.store)}` : ''}`];
+  if (understoodFrom) lines.push('', `*Read "${cell(understoodFrom)}" as **${cell(game.title)}**.*`);
+
+  if (game.deals?.length) {
+    lines.push('', '| Store | Price | Discount |', '|---|---|---|');
+    for (const d of game.deals) {
+      const store = d.url ? `[${cell(d.store)}](${d.url})` : cell(d.store);
+      lines.push(`| ${store} | $${d.price} | ${d.savings > 0 ? `${d.savings}% off $${d.retailPrice}` : 'Full price'} |`);
+    }
+  }
+
+  const low = game.cheapestEver?.price;
+  const savings = best?.savings || 0;
+  const verdict = atLow
+    ? 'This is its all-time low. A good time to buy.'
+    : savings >= 50
+      ? `More than half off.${low ? ` The all-time low is $${low}.` : ''}`
+      : savings >= 25
+        ? `A fair discount.${low ? ` It has been as low as $${low}.` : ''}`
+        : low
+          ? `It has been as low as $${low}, so a sale is worth waiting for.`
+          : '';
+  if (verdict) lines.push('', verdict);
+  lines.push('', '*Prices from CheapShark, refreshed every 15 minutes. PC stores only.*');
+  return lines.join('\n');
 }
 
 /**
