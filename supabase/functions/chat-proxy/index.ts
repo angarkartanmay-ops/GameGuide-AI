@@ -673,17 +673,19 @@ function guessUnknownTitle(rawText: string): string | null {
     const t = cleanTitle(quoted[1] ?? quoted[2] ?? '');
     if (t) return t;
   }
+  // Both runs below end where their match ends, which is where a lowercase
+  // title's remaining words start (see extendDigitLead).
   const framed = GAME_FRAME_RX.exec(rawText);
   if (framed) {
     const t = cleanTitle(framed[1]);
-    if (t) return t;
+    if (t) return extendDigitLead(rawText, framed[1], framed.index + framed[0].length, t);
   }
   // Bare run: only trust it when it is multi-word or digit-led, since a single
   // capitalised word mid-sentence is usually not a title.
   const bare = BARE_TITLE_RX.exec(rawText);
   if (bare) {
     const t = cleanTitle(bare[1]);
-    if (t && (t.includes(' ') || /^\d/.test(t))) return t;
+    if (t && (t.includes(' ') || /^\d/.test(t))) return extendDigitLead(rawText, bare[1], bare.index + bare[0].length, t);
   }
   return null;
 }
@@ -723,6 +725,39 @@ function promptSubject(prompt: string): string | null {
   // dictionary page and the model then reports that it found nothing.
   if (!/[a-z0-9]{3}/i.test(cleaned)) return null;
   return cleaned;
+}
+
+// What ends a lowercase title: the question scaffolding promptSubject strips,
+// the words STOP_FIRST knows are never a title (And, Or, Best, Tips, PC,
+// DLC...), and the things a question asks about a game.
+const SUBJECT_STOPWORD_RX = new RegExp(String.raw`^(?:${SUBJECT_STOPWORDS_RX.source})$`, 'i');
+const TITLE_TAIL_STOP_RX = /^(?:against|compared|than|not|still|anymore|already|even|really|actually|guide|walkthrough|ending|endings|story|lore|boss|bosses|map|price|update|patch|news|trailer|requirements|specs|performance|settings|mods|cheats|trophies|achievements|multiplayer|co-?op|controls|length|size)$/i;
+
+/**
+ * A lone digit-led title guess, carried on through the words after it.
+ *
+ * Digits have no case, so in a lowercase prompt the Title-Case run starts at
+ * "007" and stops at "first": "is 007 first light worth it" guessed "007", and
+ * the Bond franchise was researched instead of the game, in single-game
+ * questions and on each side of a comparison alike. The words after the token
+ * are taken up to the first one that ends a title, at most three of them
+ * ("13 sentinels aegis rim"). A bare "007" with nothing after it stays "007".
+ */
+function extendDigitLead(rawText: string, run: string, runEnd: number, guess: string): string {
+  // Only a single digit-led token that the run ended on. "007." ended a
+  // sentence, and a multi-word guess already has its words.
+  if (!/^\d[\w'’\-]*$/.test(guess) || !run.toLowerCase().endsWith(guess)) return guess;
+  const tail = rawText.slice(runEnd).split(/[.,!?;:()"“”]/)[0];
+  const words: string[] = [];
+  for (const w of tail.trim().split(/\s+/)) {
+    if (words.length >= 3 || !/^[a-z0-9][\w'’\-]*$/i.test(w)) break;
+    const bare = w.replace(/['’]s$/i, '');
+    if (SUBJECT_STOPWORD_RX.test(bare) || STOP_FIRST.test(bare) || TITLE_TAIL_STOP_RX.test(bare)) break;
+    words.push(w);
+    // "007 first light's story": the possessive ends the name.
+    if (bare !== w) break;
+  }
+  return (words.length && cleanTitle(`${guess} ${words.join(' ')}`)) || guess;
 }
 
 function detectGame(text: string): string | null {
