@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { parseStreamStage, latestGameFromMessages, normalizeGameKey, titleCase } from '../utils/gameContext';
+import { parseStreamStage, latestGameFromMessages, normalizeGameKey, titleCase, looksLikeGameTitle } from '../utils/gameContext';
 import { resolveGameArt, firstLoadable, backdropCandidates, sampleAccent, rememberAccent } from '../utils/gameArt';
 import { rememberGame } from '../utils/recentGames';
 
@@ -55,9 +55,11 @@ export default function useGameAmbience({ messages, streamStage, isLoading, stea
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, stealthMode]);
 
-  // Feed the empty state's shelf from finished answers only.
+  // Feed the empty state's shelf from finished answers only, and only with
+  // something that reads as a title: a stray question fragment from the
+  // server would otherwise sit on the shelf until it aged out.
   useEffect(() => {
-    if (!metaGame || stealthMode) return;
+    if (!metaGame || stealthMode || !looksLikeGameTitle(metaGame)) return;
     rememberGame({ name: titleCase(metaGame) });
   }, [metaGame, stealthMode]);
 

@@ -2,7 +2,7 @@
 // (localStorage, guarded): nothing breaks when storage is blocked, and stealth
 // never writes here.
 
-import { titleCase, upperRomans } from './gameContext.js';
+import { looksLikeGameTitle, titleCase, upperRomans } from './gameContext.js';
 
 const KEY = 'gg.recentGames.v1';
 const MAX = 8;
@@ -56,7 +56,11 @@ export function buildShelf(recent, progress = {}, curated = CURATED, max = 6) {
 export function loadRecentGames() {
   try {
     const v = JSON.parse(window.localStorage.getItem(KEY) || '[]');
-    return Array.isArray(v) ? v.filter(e => e && typeof e.key === 'string' && typeof e.name === 'string') : [];
+    // Also drops question fragments saved before the server stopped sending
+    // them ("Have Drs Option Still"); the next rememberGame writes the list back clean.
+    return Array.isArray(v)
+      ? v.filter(e => e && typeof e.key === 'string' && typeof e.name === 'string' && looksLikeGameTitle(e.name))
+      : [];
   } catch {
     return [];
   }

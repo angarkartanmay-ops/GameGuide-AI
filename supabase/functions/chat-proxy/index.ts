@@ -643,7 +643,52 @@ const BARE_TITLE_RX = new RegExp(String.raw`\b(${TITLE_RUN})`);
 
 // Words that are capitalised in normal prose but are never a game title on
 // their own. Without this, "Is The Game Good" yields "The Game".
-const STOP_FIRST = /^(I|I'?m|In|On|At|For|From|About|With|To|And|Or|But|So|If|Also|Any|Best|Top|Tips|Help|Please|The|My|A|An|It|Its|This|That|These|Those|You|Your|We|They|He|She|What|When|Where|Why|How|Who|Which|Is|Are|Was|Were|Do|Does|Did|Can|Could|Should|Would|Will|Yeah|Yes|No|Ok|Okay|Thanks|Hey|Hi|Hello|PC|PS4|PS5|PS6|Xbox|Steam|Windows|Linux|Mac|Reddit|Discord|YouTube|Google|Twitch|Nvidia|AMD|Intel|GPU|CPU|RAM|FPS|DLC|AI)$/i;
+const STOP_FIRST = /^(I|I'?m|In|On|At|For|From|About|With|To|And|Or|But|So|If|Also|Any|Best|Top|Tips|Help|Please|The|My|A|An|It|Its|This|That|These|Those|You|Your|We|They|He|She|What|When|Where|Why|How|Who|Which|Is|Are|Was|Were|Do|Does|Did|Have|Has|Had|Can|Could|Should|Would|Will|Yeah|Yes|No|Ok|Okay|Thanks|Hey|Hi|Hello|PC|PS4|PS5|PS6|Xbox|Steam|Windows|Linux|Mac|Reddit|Discord|YouTube|Google|Twitch|Nvidia|AMD|Intel|GPU|CPU|RAM|FPS|DLC|AI)$/i;
+
+// Auxiliaries, plus the adverbs and nouns a yes/no question hangs on. One of
+// these sits inside plenty of real titles ("Life is Strange", "We Were Here",
+// "Still Wakes the Deep", "Do Not Feed the Monkeys"); two or more is a clause
+// of the question, not a name. "ok and do they have the drs option still?"
+// was split as a comparison, stripped to "have drs option still", sent back as
+// meta.game and saved to the recent-games shelf as "Have Drs Option Still".
+const CLAUSE_WORDS = new Set([
+  'do', 'does', 'did', "don't", "doesn't", "didn't", 'dont', 'doesnt', 'didnt',
+  'have', 'has', 'had', "haven't", "hasn't", 'havent', 'hasnt',
+  'is', 'are', 'was', 'were', "isn't", "aren't", "wasn't", "weren't", 'isnt', 'arent', 'wasnt', 'werent',
+  'can', 'could', 'should', 'would', 'will', "can't", "won't", 'cant', 'wont',
+  'still', 'anymore', 'already', 'even', 'really', 'actually', 'currently',
+  'option', 'options',
+]);
+// A question can trail off on these ("…drs option still?"); a title doesn't.
+const DANGLING_END = new Set(['still', 'anymore', 'already']);
+
+function titleWords(s: string): string[] {
+  return String(s ?? '').toLowerCase().replace(/’/g, "'").split(/\s+/)
+    .map(w => w.replace(/^[^\w']+|[^\w']+$/g, ''))
+    .filter(Boolean);
+}
+
+function clauseWordCount(s: string): number {
+  return new Set(titleWords(s).filter(w => CLAUSE_WORDS.has(w))).size;
+}
+
+/**
+ * Whether a candidate reads as a game's name rather than a piece of the
+ * question it was cut from. Allowlist entries always pass; this exists for the
+ * heuristic paths (Title-Case runs, stopword-stripped comparison subjects, the
+ * bolded lead of our own reply), which is where sentence fragments come from.
+ * Purely lexical: a title with no Steam page (War Thunder, GTA VI) still passes.
+ */
+function looksLikeGameTitle(name: string | null | undefined): boolean {
+  const words = titleWords(name ?? '');
+  // Room for the longest allowlist entry, "ori and the will of the wisps".
+  if (!words.length || words.length > 8) return false;
+  // "what changed in 2026" names a year, not the game "2026".
+  if (words.length === 1 && /^(?:19|20)\d\d$/.test(words[0])) return false;
+  if (clauseWordCount(words.join(' ')) >= 2) return false;
+  if (DANGLING_END.has(words[words.length - 1])) return false;
+  return true;
+}
 
 function cleanTitle(raw: string): string | null {
   let cand = raw.trim()
@@ -664,6 +709,8 @@ function cleanTitle(raw: string): string | null {
   }
   // A single very short token is more likely a stray acronym than a title.
   if (!cand.includes(' ') && cand.length < 3) return null;
+  // "Do F1 Cars Still Have DRS Option?" is all Title Case but is a question.
+  if (!looksLikeGameTitle(cand)) return null;
   return cand.toLowerCase();
 }
 
@@ -839,6 +886,9 @@ function plausibleTitle(t: string | null): string | null {
   const v = t.toLowerCase().trim();
   if (v.length < 3 || v.length > 50) return null;
   if (v.split(/\s+/).length > 6) return null;
+  // Every subject can become meta.game (and the shelf), so a stripped-down
+  // clause such as "still have drs option" stops here.
+  if (!looksLikeGameTitle(v)) return null;
   return v;
 }
 
@@ -884,7 +934,15 @@ function detectGames(text: string, max = 3): string[] {
   if (COMPARE_SPLIT_RX.test(text)) {
     for (const part of text.split(COMPARE_SPLIT_RX)) {
       if (out.length >= max) break;
-      push(guessUnknownTitle(part) ?? promptSubject(part));
+      const guessed = guessUnknownTitle(part);
+      if (guessed) { push(guessed); continue; }
+      // "and"/"or" join clauses as often as titles. Stripping "or is it
+      // gone?" leaves the lone word "gone": one word left over from a part
+      // that was a question is not a title. A multi-word remainder still is
+      // ("is 007 first light worth it" → "007 first light").
+      const subj = promptSubject(part);
+      if (subj && !/\s/.test(subj) && clauseWordCount(part) > 0) continue;
+      push(subj);
     }
   }
 

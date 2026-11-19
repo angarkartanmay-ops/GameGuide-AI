@@ -6,9 +6,10 @@ import {
 } from '../src/utils/slashPalette.js';
 import {
   parseStreamStage, stageLabel, normalizeGameKey, latestGameFromMessages, latestSpoilerMeta, titleCase, upperRomans,
+  looksLikeGameTitle,
 } from '../src/utils/gameContext.js';
 import { pickAccent, ensureContrast, contrastRatio, rgbToHsl, toHex } from '../src/utils/accent.js';
-import { addRecent, buildShelf, CURATED } from '../src/utils/recentGames.js';
+import { addRecent, buildShelf, CURATED, loadRecentGames } from '../src/utils/recentGames.js';
 import { backdropCandidates } from '../src/utils/gameArt.js';
 
 let passed = 0;
@@ -102,6 +103,36 @@ check('contrast of white on black is 21', Math.round(contrastRatio({ r: 255, g: 
   check('shelf: progress-only games next, title-cased', shelf[1].name === 'Stardew Valley' && shelf[1].progress === 'Year 2', JSON.stringify(shelf[1]));
   check('shelf: curated fills to 6 without repeats', shelf.length === 6 && new Set(shelf.map(s => s.key)).size === 6);
   check('shelf: empty history → curated', buildShelf([], {}).map(s => s.key).join() === CURATED.map(c => c.key).join());
+}
+
+// ── only titles reach the shelf ────────────────────────────────────────────
+// The server once answered meta.game = "have drs option still" for an F1
+// question, and the shelf kept "Have Drs Option Still" as a recent game.
+{
+  for (const t of ['Have Drs Option Still', 'have drs option still', 'Still Have Drs', 'F1 Cars Still Have Drs Option', '2026']) {
+    check(`fragment rejected: ${t}`, !looksLikeGameTitle(t));
+  }
+  // Lexical, not a Steam lookup: games without Steam art are legitimate.
+  for (const t of ['Grand Theft Auto VI', 'War Thunder', 'F1', 'Elden Ring', "Baldur's Gate 3", 'Life Is Strange',
+    'Still Wakes the Deep', 'Clair Obscur: Expedition 33', 'Ori And The Will Of The Wisps', 'Hades II']) {
+    check(`title kept: ${t}`, looksLikeGameTitle(t));
+  }
+  check('empty is not a title', !looksLikeGameTitle('') && !looksLikeGameTitle(null));
+
+  // A shelf saved before the fix sheds the fragment on load.
+  const saved = [
+    { key: 'have drs option still', name: 'Have Drs Option Still' },
+    { key: 'war thunder', name: 'War Thunder' },
+    { key: 'grand theft auto vi', name: 'Grand Theft Auto VI' },
+  ];
+  const prevWindow = globalThis.window;
+  globalThis.window = { localStorage: { getItem: () => JSON.stringify(saved), setItem() {} } };
+  try {
+    const loaded = loadRecentGames().map(e => e.key).join('|');
+    check('stored fragment dropped on load, real games kept', loaded === 'war thunder|grand theft auto vi', loaded);
+  } finally {
+    if (prevWindow === undefined) delete globalThis.window; else globalThis.window = prevWindow;
+  }
 }
 
 // ── backdrop art ───────────────────────────────────────────────────────────
