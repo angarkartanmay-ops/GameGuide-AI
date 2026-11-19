@@ -44,6 +44,36 @@ export function normalizeGameKey(name) {
   return String(name || '').replace(/[™®©]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
+// Mirror of looksLikeGameTitle in supabase/functions/chat-proxy/index.ts (the
+// edge function is Deno and can't share a module with the app). The server is
+// the real fix; this keeps one bad answer from living on in the shelf.
+// One of these words sits inside plenty of real titles ("Life is Strange",
+// "Still Wakes the Deep"); two or more is a clause of a question.
+const CLAUSE_WORDS = new Set([
+  'do', 'does', 'did', "don't", "doesn't", "didn't", 'dont', 'doesnt', 'didnt',
+  'have', 'has', 'had', "haven't", "hasn't", 'havent', 'hasnt',
+  'is', 'are', 'was', 'were', "isn't", "aren't", "wasn't", "weren't", 'isnt', 'arent', 'wasnt', 'werent',
+  'can', 'could', 'should', 'would', 'will', "can't", "won't", 'cant', 'wont',
+  'still', 'anymore', 'already', 'even', 'really', 'actually', 'currently',
+  'option', 'options',
+]);
+const DANGLING_END = new Set(['still', 'anymore', 'already']);
+
+/**
+ * "Have Drs Option Still" → false; "War Thunder", "Grand Theft Auto VI" → true.
+ * Lexical only, so a game with no Steam art is never mistaken for junk.
+ */
+export function looksLikeGameTitle(name) {
+  const words = String(name || '').toLowerCase().replace(/’/g, "'").split(/\s+/)
+    .map(w => w.replace(/^[^\w']+|[^\w']+$/g, ''))
+    .filter(Boolean);
+  if (!words.length || words.length > 8) return false;
+  if (words.length === 1 && /^(?:19|20)\d\d$/.test(words[0])) return false;
+  if (new Set(words.filter(w => CLAUSE_WORDS.has(w))).size >= 2) return false;
+  if (DANGLING_END.has(words[words.length - 1])) return false;
+  return true;
+}
+
 export function titleCase(s) {
   return String(s || '').replace(/\b([a-z])/g, (m) => m.toUpperCase());
 }

@@ -1,4 +1,4 @@
-import { detectGame, isSmallTalk } from './.generated/detection.ts';
+import { detectGame, detectGames, gamesFromHistory, looksLikeGameTitle, isSmallTalk, KNOWN_GAMES } from './.generated/detection.ts';
 
 const cases: Array<[string, string | null]> = [
   // The actual reported bug: installment number must survive.
@@ -42,6 +42,82 @@ for (const [input, expected] of cases) {
   if (ok) { pass++; }
   else { fail++; console.log(`FAIL  ${JSON.stringify(input)}\n      expected=${JSON.stringify(expected)}  got=${JSON.stringify(got)}`); }
 }
+// ── Sentence fragments are never a game ────────────────────────────────────
+// "Have Drs Option Still" reached the recent-games shelf: a follow-up was split
+// on "and" as if it were a comparison, stopword-stripped to "have drs option
+// still", and sent back as meta.game. Whatever the phrasing or casing, an F1
+// question yields the allowlist hit "f1" or nothing, and never a clause.
+const OK_F1 = new Set(['f1', null]);
+const fragments: string[] = [
+  'do f1 cars still have the drs option',
+  'do f1 cars still have the drs option?',
+  'Do F1 cars still have the DRS option?',
+  'Do F1 Cars Still Have DRS Option?',
+  'ok and do they have the drs option still?',
+  'thanks! and do they have the drs option still?',
+  'do they Have DRS Option Still?',
+  'Have DRS option still?',
+  'does it still have drs or not',
+  'Do F1 cars still have DRS option or is it removed?',
+  'what changed in 2026',
+];
+for (const input of fragments) {
+  const one = detectGame(input);
+  if (OK_F1.has(one)) pass++;
+  else { fail++; console.log(`FAIL  detectGame(${JSON.stringify(input)}) expected "f1" or null, got ${JSON.stringify(one)}`); }
+  // detectGames feeds the scrape subjects, and its first entry becomes
+  // profile.game when detectGame found nothing.
+  const all = detectGames(input, 3);
+  if (all.every(g => g === 'f1')) pass++;
+  else { fail++; console.log(`FAIL  detectGames(${JSON.stringify(input)}) expected no fragment, got ${JSON.stringify(all)}`); }
+}
+
+// Nor can a fragment be carried into the next turn, from the player's words or
+// from the bold lead of our own reply ("**No — DRS is gone in 2026.**").
+{
+  const carried = gamesFromHistory([
+    { sender: 'user', text: 'ok and do they have the drs option still?' },
+    { sender: 'ai', text: '**No — DRS is gone in 2026.** It was replaced by an overtake mode.' },
+  ], 3);
+  if (carried.length === 0) pass++;
+  else { fail++; console.log(`FAIL  gamesFromHistory carried a fragment: ${JSON.stringify(carried)}`); }
+}
+
+// The guard is lexical, not a lookup: real titles whose words overlap with
+// question words, and titles with no Steam art, are untouched.
+const keepers: Array<[string, string]> = [
+  ['any tips for Still Wakes the Deep', 'still wakes the deep'],
+  ['Is Life Is Strange worth it', 'life is strange'],
+  ['is grand theft auto vi out yet', 'grand theft auto vi'],
+  ['best tanks in war thunder', 'war thunder'],
+  ['reviews about 007 First Light', '007 first light'],
+  ['Is Hollow Knight Silksong hard', 'hollow knight silksong'],
+];
+for (const [input, expected] of keepers) {
+  const got = detectGame(input);
+  if (got === expected) pass++;
+  else { fail++; console.log(`FAIL  ${JSON.stringify(input)}\n      expected=${JSON.stringify(expected)}  got=${JSON.stringify(got)}`); }
+}
+// A comparison's stripped-down sides still count, even from a question-shaped
+// side: it is how a lowercase title absent from the allowlist gets researched.
+// Only a lone leftover word from a question ("…or is it removed?") is dropped.
+for (const [input, title] of [
+  ['is blue prince worth it or should i get hades', 'blue prince'],
+  ['compare balatro and hades', 'balatro'],
+] as const) {
+  const g = detectGames(input, 3);
+  if (g.includes(title)) pass++;
+  else { fail++; console.log(`FAIL  detectGames(${JSON.stringify(input)}) lost ${JSON.stringify(title)}: ${JSON.stringify(g)}`); }
+}
+
+const rejectedAllowlist = KNOWN_GAMES.filter((g: string) => !looksLikeGameTitle(g));
+if (rejectedAllowlist.length === 0) pass++;
+else { fail++; console.log(`FAIL  looksLikeGameTitle rejects allowlist entries: ${JSON.stringify(rejectedAllowlist)}`); }
+for (const t of ['have drs option still', 'still have drs', 'f1 cars still have drs option', 'Have Drs Option Still', '2026']) {
+  if (!looksLikeGameTitle(t)) pass++;
+  else { fail++; console.log(`FAIL  looksLikeGameTitle(${JSON.stringify(t)}) should be false`); }
+}
+
 // ── Small talk skips live retrieval ────────────────────────────────────────
 // "what can you do" used to run a web search for "what can you do 2026",
 // inherit GTA VI from history, and sit under "Thinking in depth".
