@@ -808,6 +808,23 @@ function plausibleTitle(t: string | null): string | null {
 }
 
 /**
+ * The title guess for one side of a comparison.
+ *
+ * Digits have no case, so in a lowercase prompt the Title-Case run starts at
+ * "007" and stops at "first": "compare 007 first light and forza horizon 6"
+ * guessed "007", and the Bond franchise was researched instead of the game.
+ * When the guess is one digit-led token and the stripped-down subject carries
+ * on from it ("007 first light"), the subject is the fuller title. A bare
+ * "007" with nothing after it stays "007".
+ */
+function comparisonGuess(part: string): string | null {
+  const guessed = guessUnknownTitle(part);
+  if (!guessed || !/^\d\S*$/.test(guessed)) return guessed;
+  const fuller = plausibleTitle(promptSubject(part));
+  return fuller && fuller.startsWith(`${guessed} `) ? fuller : guessed;
+}
+
+/**
  * Every game the prompt is asking about, not just the first one matched.
  *
  * `detectGame` returns on its first allowlist hit, so "compare 007 first light
@@ -849,7 +866,7 @@ function detectGames(text: string, max = 3): string[] {
   if (COMPARE_SPLIT_RX.test(text)) {
     for (const part of text.split(COMPARE_SPLIT_RX)) {
       if (out.length >= max) break;
-      push(guessUnknownTitle(part) ?? promptSubject(part));
+      push(comparisonGuess(part) ?? promptSubject(part));
     }
   }
 
