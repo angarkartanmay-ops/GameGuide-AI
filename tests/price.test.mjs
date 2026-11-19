@@ -140,5 +140,34 @@ function checkAliasIntegrity(name, mod) {
 checkAliasIntegrity('web', web);
 checkAliasIntegrity('discord', bot);
 
+// ── The /price reply (web only): a real table, never the context blob ────
+{
+  const game = {
+    title: 'Cyberpunk 2077', cheapest: '29.99', cheapestEver: { price: '17.99' },
+    deals: [
+      { store: 'GOG', price: '29.99', retailPrice: '59.99', savings: 50, url: 'https://www.cheapshark.com/redirect?dealID=a' },
+      { store: 'Steam', price: '59.99', retailPrice: '59.99', savings: 0 },
+    ],
+  };
+  const md = web.formatPriceMarkdown(game);
+  check('reply: heading names the game, best price and store', md.startsWith('## Cyberpunk 2077: $29.99 at GOG'), md.split('\n')[0]);
+  check('reply: one table row per store', md.includes('| Store | Price | Discount |') && md.includes('| Steam | $59.99 | Full price |'));
+  check('reply: a store with a deal link is a link', md.includes('[GOG](https://www.cheapshark.com/redirect?dealID=a)'));
+  check('reply: discount shown against the retail price', md.includes('50% off $59.99'));
+  check('reply: half off says so, with the all-time low', /More than half off\. The all-time low is \$17\.99/.test(md));
+  check('reply: no emoji', !/\p{Extended_Pictographic}/u.test(md));
+  check('reply: says how a request was read', web.formatPriceMarkdown(game, { understoodFrom: 'cp2077' }).includes('Read "cp2077" as **Cyberpunk 2077**'));
+  const low = web.formatPriceMarkdown({ ...game, cheapest: '17.99' });
+  check('reply: at the all-time low says buy', low.includes('all-time low. A good time to buy'));
+  const full = web.formatPriceMarkdown({ ...game, deals: [{ store: 'Steam', price: '59.99', retailPrice: '59.99', savings: 0 }], cheapest: '59.99' });
+  check('reply: full price everywhere says wait', full.includes('a sale is worth waiting for'));
+  check('reply: a "|" in a store name cannot break the table', !web.formatPriceMarkdown({ ...game, deals: [{ store: 'A|B', price: '1', retailPrice: '1', savings: 0 }] }).includes('A|B'));
+  check('reply: nothing for no game', web.formatPriceMarkdown(null) === '');
+}
+{
+  const empty = await web.lookupPrice('   ');
+  check('lookupPrice: a blank title is a clean miss, not an outage', empty.game === null && empty.unreachable === false);
+}
+
 console.log(`price: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

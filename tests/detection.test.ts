@@ -33,6 +33,16 @@ const cases: Array<[string, string | null]> = [
   ['In Hollow Knight, which charm makes you heal faster?', 'hollow knight'],
   // Nor is a possessive.
   ["What changed in Valorant's latest patch?", 'valorant'],
+
+  // Digits have no case, so in a lowercase prompt the Title-Case guess was
+  // just "007", and the Bond franchise was researched instead of the game.
+  ['is 007 first light worth it', '007 first light'],
+  ['Is 007 first light worth it?', '007 first light'],
+  ['reviews of 007 first light', '007 first light'],
+  ["what's the best weapon in 007 first light?", '007 first light'],
+  ['007 first light walkthrough', '007 first light'],
+  // ...but a bare "007" is not stretched into the words around it.
+  ['tips for 007', '007'],
 ];
 
 let pass = 0, fail = 0;

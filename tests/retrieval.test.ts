@@ -77,9 +77,19 @@ for (const q of [
 {
   const g = detectGames('Compare gameplay of 007 first light and forza horizon 6. What would you rate them?');
   check('comparison finds forza horizon 6', g.some(x => x.includes('forza horizon 6')));
-  check('comparison also finds 007 first light', g.some(x => x.includes('007')));
+  check('comparison also finds 007 first light', g.includes('007 first light'));
   check('comparison yields at least two subjects', g.length >= 2);
 }
+// Digits have no case, so in a lowercase prompt the Title-Case guess stopped
+// at "007" and the Bond franchise was researched instead of the game.
+eq('lowercase comparison keeps the whole 007 title',
+  JSON.stringify(detectGames('compare 007 first light and forza horizon 6')),
+  JSON.stringify(['forza horizon 6', '007 first light']));
+eq('lowercase "or" comparison keeps the whole 007 title',
+  JSON.stringify(detectGames('is 007 first light worth it or should i get forza horizon 6')),
+  JSON.stringify(['forza horizon 6', '007 first light']));
+// ...but a bare "007" is not stretched into the words around it.
+check('a bare 007 stays 007', detectGames('compare 007 and goldeneye').includes('007'));
 {
   const g = detectGames('elden ring vs dark souls 3');
   check('vs-form finds elden ring', g.some(x => x.includes('elden ring')));

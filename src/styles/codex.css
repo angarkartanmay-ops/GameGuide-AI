@@ -30,7 +30,11 @@
   --cx-hair-2: color-mix(in srgb, var(--cx-ink) 16%, transparent);
   --cx-glass: color-mix(in srgb, #0e1016 80%, transparent);
   --cx-warn: #f0a36b;
-  --cx-display: 'Fraunces', Georgia, serif;
+  /* The landing's display face, set slightly wide like a game's title
+     cards. Archivo ships 500-800 only (fonts.css), so display weights stay
+     in that range. Geist and Geist Mono have no width axis. */
+  --cx-display: 'Archivo', 'Geist', system-ui, sans-serif;
+  --cx-wdth: 'wdth' 108;
   --cx-body: 'Geist', system-ui, sans-serif;
   --cx-mono: 'Geist Mono', ui-monospace, SFMono-Regular, monospace;
   --cx-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -323,11 +327,11 @@ html[data-vt^="stealth"] .codex { transition: none; }
 .cx-prose > :last-child { margin-bottom: 0; }
 .cx-prose p { margin: 0 0 1em; }
 .cx-prose h1, .cx-prose h2 {
-  margin: 1.1em 0 0.45em; font-family: var(--cx-display); font-weight: 400;
-  font-size: clamp(25px, 3.2vw, 33px); line-height: 1.14; letter-spacing: -0.015em;
+  margin: 1.1em 0 0.5em; font-family: var(--cx-display); font-variation-settings: var(--cx-wdth); font-weight: 620;
+  font-size: clamp(22px, 2.6vw, 28px); line-height: 1.16; letter-spacing: -0.022em;
   color: var(--cx-ink); text-wrap: balance;
 }
-.cx-prose h3 { margin: 1.4em 0 0.5em; font-family: var(--cx-display); font-weight: 500; font-size: 21px; line-height: 1.25; letter-spacing: -0.01em; color: var(--cx-ink); }
+.cx-prose h3 { margin: 1.4em 0 0.5em; font-family: var(--cx-display); font-variation-settings: var(--cx-wdth); font-weight: 600; font-size: 18px; line-height: 1.28; letter-spacing: -0.012em; color: var(--cx-ink); }
 .cx-prose h4, .cx-prose h5, .cx-prose h6 { margin: 1.3em 0 0.4em; font-size: 15px; font-weight: 600; color: var(--cx-ink); }
 .cx-prose strong { font-weight: 600; color: var(--cx-ink); }
 .cx-prose em { font-style: italic; }
@@ -337,8 +341,8 @@ html[data-vt^="stealth"] .codex { transition: none; }
 .cx-prose ul { list-style: none; }
 .cx-prose ul > li { position: relative; padding-left: 20px; }
 .cx-prose ul > li::before {
-  content: ''; position: absolute; left: 2px; top: 0.72em;
-  width: 6px; height: 6px; background: var(--cx-accent);
+  content: ''; position: absolute; left: 2px; top: 0.66em;
+  width: 6px; height: 6px; background: var(--cx-accent); transform: rotate(45deg);
 }
 .cx-prose ol { list-style: decimal; padding-left: 1.5em; }
 .cx-prose ol > li::marker { color: var(--cx-accent); font-family: var(--cx-mono); font-size: 0.85em; }
@@ -348,7 +352,7 @@ html[data-vt^="stealth"] .codex { transition: none; }
 .cx-prose blockquote {
   margin: 1.1em 0; padding: 0.1em 0 0.1em 1em;
   border-left: 2px solid color-mix(in srgb, var(--cx-accent) 55%, transparent);
-  font-family: var(--cx-display); font-style: italic; color: var(--cx-ink);
+  font-style: italic; color: var(--cx-ink);
 }
 .cx-prose code { font-family: var(--cx-mono); font-size: 0.86em; padding: 0.12em 0.4em; border-radius: 6px; background: color-mix(in srgb, var(--cx-ink) 8%, transparent); }
 .cx-prose pre {
@@ -387,7 +391,7 @@ html[data-vt^="stealth"] .codex { transition: none; }
   .cx-prose td:first-child[data-label]::before { display: none; }
 }
 .cx-prose img { max-width: 100%; border-radius: 10px; }
-.is-command .cx-prose h2 { font-size: 24px; }
+.is-command .cx-prose h2 { font-size: clamp(20px, 2.3vw, 24px); }
 
 /* ── Spoilers ─────────────────────────────────────────────────────────── */
 /* Hidden with transparent text on a hatched bar — never with filter: blur on
@@ -448,8 +452,8 @@ html[data-vt^="stealth"] .codex { transition: none; }
 .cx-shared__end { padding-top: 26px; border-top: 1px solid var(--cx-hair); }
 .cx-shared__end p { max-width: 58ch; margin: 10px 0 0; font-size: 15.5px; line-height: 1.6; color: var(--cx-ink-2); }
 .cx-shared__title {
-  margin: 0; font-family: var(--cx-display); font-weight: 420; font-size: clamp(26px, 3.6vw, 34px);
-  line-height: 1.1; letter-spacing: -0.02em; color: var(--cx-ink);
+  margin: 0; font-family: var(--cx-display); font-variation-settings: var(--cx-wdth); font-weight: 620;
+  font-size: clamp(24px, 3vw, 30px); line-height: 1.12; letter-spacing: -0.024em; color: var(--cx-ink);
 }
 .cx-shared__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
 .cx-shared__btn {
@@ -512,8 +516,8 @@ html[data-vt^="stealth"] .codex { transition: none; }
 
 /* ── Research ─────────────────────────────────────────────────────────── */
 .cx-research__stage {
-  margin: 18px 0 0; font-family: var(--cx-display); font-weight: 400;
-  font-size: clamp(21px, 2.6vw, 26px); line-height: 1.25; letter-spacing: -0.01em; color: var(--cx-ink);
+  margin: 18px 0 0; font-family: var(--cx-display); font-variation-settings: var(--cx-wdth); font-weight: 560;
+  font-size: clamp(19px, 2.2vw, 23px); line-height: 1.25; letter-spacing: -0.018em; color: var(--cx-ink);
 }
 .cx-research__clock {
   font-family: var(--cx-mono, 'Geist Mono', ui-monospace, monospace); font-size: 11px;
@@ -537,15 +541,12 @@ html[data-vt^="stealth"] .codex { transition: none; }
 
 /* ── Empty state ──────────────────────────────────────────────────────── */
 .cx-empty { padding-top: clamp(8px, 5vh, 56px); animation: cx-rise 600ms var(--cx-ease) both; }
-.cx-empty__kicker {
-  font-family: var(--cx-mono); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--cx-accent);
-}
 .cx-empty__title {
-  margin: 14px 0 0; font-family: var(--cx-display); font-weight: 350;
-  font-size: clamp(44px, 6.4vw, 78px); line-height: 1.02; letter-spacing: -0.03em; color: var(--cx-ink);
+  margin: 0; max-width: 16ch; font-family: var(--cx-display); font-variation-settings: var(--cx-wdth); font-weight: 640;
+  font-size: clamp(34px, 4.6vw, 54px); line-height: 1.02; letter-spacing: -0.034em; color: var(--cx-ink); text-wrap: balance;
 }
-.cx-empty__title em { font-style: italic; font-weight: 300; }
-.cx-empty__lede { margin: 18px 0 0; max-width: 34em; font-size: 18px; line-height: 1.6; color: var(--cx-muted-2); }
+.cx-empty__title em { font-style: normal; color: var(--cx-accent); }
+.cx-empty__lede { margin: 16px 0 0; max-width: 34em; font-size: 17px; line-height: 1.6; color: var(--cx-muted-2); }
 .cx-shelf-head {
   margin-top: 40px; display: flex; align-items: center; gap: 14px;
   font-family: var(--cx-mono); font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--cx-muted);
@@ -557,99 +558,195 @@ html[data-vt^="stealth"] .codex { transition: none; }
 }
 .cx-cover:focus-visible { outline: none; }
 .cx-cover__art {
-  position: relative; display: block; aspect-ratio: 2 / 3; border-radius: 12px; overflow: hidden;
-  background: linear-gradient(160deg, color-mix(in srgb, var(--cx-accent) 24%, transparent), color-mix(in srgb, var(--cx-ink) 6%, transparent));
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+  position: relative; display: block; aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden;
+  background: color-mix(in srgb, var(--cx-ink) 5%, var(--cx-bg));
+  box-shadow: inset 0 0 0 1px var(--cx-hair), 0 14px 30px rgba(0, 0, 0, 0.35);
   transition: transform 250ms var(--cx-ease), box-shadow 250ms ease;
+  container-type: inline-size;
 }
 .cx-cover__art img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; }
+/* No box art (not on Steam, or not out yet): a blank cartridge label. The
+   game's name set like a title card on a fine hatch, the brand diamond in
+   the corner. */
 .cx-cover__fallback {
-  position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 12px;
-  font-family: var(--cx-display); font-size: 17px; line-height: 1.1; color: var(--cx-ink);
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 12px;
+  background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--cx-ink) 5%, transparent) 0 1px, transparent 1px 8px);
 }
-.cx-cover:hover .cx-cover__art { transform: translateY(-3px); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45); }
+.cx-cover__fallback .cx-mark { width: 7px; height: 7px; }
+.cx-cover__fallback-name {
+  /* Sized to the tile, so a nine-letter word still fits on one line of a
+     narrow cover rather than breaking mid-word. */
+  font-family: var(--cx-display); font-variation-settings: 'wdth' 112; font-weight: 680; font-size: clamp(10px, 11cqi, 15px);
+  line-height: 1.1; letter-spacing: 0.01em; text-transform: uppercase; color: var(--cx-ink); text-wrap: balance;
+}
+.cx-cover:hover .cx-cover__art { transform: translateY(-3px); box-shadow: inset 0 0 0 1px var(--cx-hair-2), 0 20px 40px rgba(0, 0, 0, 0.45); }
 .cx-cover:focus-visible .cx-cover__art { outline: 2px solid var(--cx-accent); outline-offset: 3px; }
 .cx-cover__name { font-size: 13.5px; font-weight: 500; line-height: 1.3; }
-.cx-cover__meta { margin-top: -6px; font-family: var(--cx-mono); font-size: 10.5px; color: var(--cx-muted); }
-.cx-starters { margin-top: 34px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.cx-starter {
-  display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 0 18px 0 10px;
-  border-radius: 14px; border: 1px solid var(--cx-hair); background: color-mix(in srgb, var(--cx-ink) 4%, transparent);
-  color: var(--cx-ink); text-align: left; cursor: pointer; transition: border-color 200ms ease, background-color 200ms ease;
+.cx-cover__meta { margin-top: -6px; font-family: var(--cx-mono); font-size: 10.5px; color: var(--cx-accent); }
+
+/* Commands, as an index: the trigger in mono, what it does beside it. */
+.cx-cmds { margin: 14px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+.cx-cmd {
+  width: 100%; display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  min-height: 52px; padding: 8px 2px; border: 0; border-top: 1px solid var(--cx-hair);
+  background: none; color: var(--cx-ink-2); text-align: left; cursor: pointer;
+  transition: color 180ms ease, border-color 180ms ease;
 }
-.cx-starter:hover { border-color: color-mix(in srgb, var(--cx-accent) 45%, transparent); background: color-mix(in srgb, var(--cx-accent) 6%, transparent); }
-.cx-starter__icon {
-  display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
-  background: color-mix(in srgb, var(--cx-accent) 14%, transparent); color: var(--cx-accent);
+.cx-cmds li:nth-last-child(-n+2) .cx-cmd { border-bottom: 1px solid var(--cx-hair); }
+.cx-cmd__trigger {
+  display: inline-flex; align-items: center;
+  font-family: var(--cx-mono); font-size: 13px; font-weight: 500; color: var(--cx-ink);
 }
-.cx-starter__text { display: flex; flex-direction: column; gap: 2px; font-size: 14.5px; font-weight: 500; }
-.cx-starter__text code { font-family: var(--cx-mono); font-size: 10.5px; font-weight: 400; color: var(--cx-muted); }
+.cx-cmd__trigger svg { margin-right: 7px; color: var(--cx-accent); }
+.cx-cmd__slash { color: var(--cx-accent); }
+.cx-cmd__desc { font-size: 14px; line-height: 1.4; }
+.cx-cmd svg.cx-cmd__go { color: var(--cx-muted); opacity: 0; transform: translateX(-4px); transition: opacity 180ms ease, transform 220ms var(--cx-ease); }
+.cx-cmd:hover { color: var(--cx-ink); border-top-color: color-mix(in srgb, var(--cx-accent) 55%, transparent); }
+.cx-cmd:hover svg.cx-cmd__go, .cx-cmd:focus-visible svg.cx-cmd__go { opacity: 1; transform: none; color: var(--cx-accent); }
 
 /* ── Dock: price card, command bar, footer ───────────────────────────── */
 .cx-dock {
   position: relative; z-index: 4; flex-shrink: 0; box-sizing: border-box;
   width: min(760px, calc(100% - 24px)); margin: 0 auto;
   padding-bottom: max(10px, env(safe-area-inset-bottom));
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-direction: column; gap: 14px;
 }
 .cx-dock::before {
   content: ''; position: absolute; left: 50%; bottom: 100%; width: 100vw; height: 48px;
   transform: translateX(-50%); pointer-events: none;
   background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--cx-bg) 90%, transparent));
 }
-.cx-compose { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.cx-compose { position: relative; display: flex; flex-direction: column; gap: 14px; }
+
+/* The command bar — a console, in the landing's "Press Start" language:
+   HUD corner brackets that lock on when it has focus, a chamfered key to
+   send, mono labels. What you type sits on top; tools run along the bottom. */
 .cx-bar {
-  display: flex; align-items: flex-end; gap: 10px; padding: 10px 10px 10px 12px;
-  border-radius: 22px; border: 1px solid var(--cx-hair-2); background: var(--cx-glass);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  --bar-line: var(--cx-hair-2);
+  --bar-hud: color-mix(in srgb, var(--cx-ink) 26%, transparent);
+  --bar-off: 4px;
+  position: relative;
+  display: grid; grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "files" "field" "tools";
+  border-radius: 14px; border: 1px solid var(--bar-line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--cx-ink) 5%, transparent), transparent 48%),
+    var(--cx-glass);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--cx-ink) 7%, transparent),
+    0 26px 60px -22px rgba(0, 0, 0, 0.7);
   -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
-  transition: border-color 200ms ease, box-shadow 200ms ease;
+  transition: border-color 220ms ease;
 }
 .cx-bar:focus-within {
-  border-color: color-mix(in srgb, var(--cx-accent) 50%, transparent);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 0 3px color-mix(in srgb, var(--cx-accent) 14%, transparent);
+  --bar-line: color-mix(in srgb, var(--cx-accent) 46%, transparent);
+  --bar-hud: var(--cx-accent);
+  --bar-off: 0px;
 }
-.is-stealth .cx-bar { border-style: dashed; border-color: color-mix(in srgb, var(--cx-ink) 30%, transparent); }
-.cx-bar__icon {
-  display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0;
-  border: 0; border-radius: 13px; background: color-mix(in srgb, var(--cx-ink) 6%, transparent);
-  color: var(--cx-ink-2); cursor: pointer; transition: background-color 200ms ease, color 200ms ease;
+.is-stealth .cx-bar { border-style: dashed; --bar-line: color-mix(in srgb, var(--cx-ink) 30%, transparent); }
+
+.cx-bar__hud { position: absolute; inset: -6px; pointer-events: none; }
+.cx-bar__hud i {
+  position: absolute; width: 14px; height: 14px;
+  border: 0 solid var(--bar-hud);
+  transition: transform 340ms var(--cx-ease), border-color 220ms ease;
 }
-.cx-bar__icon:hover:not(:disabled) { background: color-mix(in srgb, var(--cx-ink) 11%, transparent); color: var(--cx-ink); }
-.cx-bar__icon:disabled { opacity: 0.4; cursor: default; }
+.cx-bar__hud i:nth-child(1) { top: 0; left: 0; border-top-width: 1.5px; border-left-width: 1.5px; transform: translate(calc(var(--bar-off) * -1), calc(var(--bar-off) * -1)); }
+.cx-bar__hud i:nth-child(2) { top: 0; right: 0; border-top-width: 1.5px; border-right-width: 1.5px; transform: translate(var(--bar-off), calc(var(--bar-off) * -1)); }
+.cx-bar__hud i:nth-child(3) { bottom: 0; left: 0; border-bottom-width: 1.5px; border-left-width: 1.5px; transform: translate(calc(var(--bar-off) * -1), var(--bar-off)); }
+.cx-bar__hud i:nth-child(4) { bottom: 0; right: 0; border-bottom-width: 1.5px; border-right-width: 1.5px; transform: translate(var(--bar-off), var(--bar-off)); }
+
+/* Busy: a short segment of the accent runs along the top edge, the way a
+   game's loading bar does, for as long as an answer or a command is out. */
+.cx-bar__scan {
+  position: absolute; top: -1px; left: 18px; right: 18px; height: 2px;
+  overflow: hidden; pointer-events: none; opacity: 0; transition: opacity 240ms ease;
+}
+.cx-bar__scan::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 30%;
+  background: linear-gradient(90deg, transparent, var(--cx-accent) 50%, transparent);
+  transform: translateX(-100%);
+}
+.is-working .cx-bar__scan { opacity: 1; }
+.is-working .cx-bar__scan::after { animation: cx-scan 1.3s cubic-bezier(0.45, 0, 0.25, 1) infinite; }
+@keyframes cx-scan { to { transform: translateX(340%); } }
+@keyframes cx-blink { 50% { opacity: 0.25; } }
+
+.cx-bar__field { grid-area: field; display: flex; align-items: flex-start; gap: 14px; min-width: 0; padding: 14px 18px 2px 20px; }
+/* The prompt: the brand's diamond, lit while the bar is yours. */
+.cx-bar__prompt {
+  flex: none; width: 7px; height: 7px; margin-top: 14px;
+  background: color-mix(in srgb, var(--cx-ink) 30%, transparent); transform: rotate(45deg);
+  transition: background-color 220ms ease;
+}
+.cx-bar:focus-within .cx-bar__prompt, .is-working .cx-bar__prompt { background: var(--cx-accent); }
+.is-working .cx-bar__prompt { animation: cx-blink 1s steps(2, jump-none) infinite; }
 .cx-bar__input {
-  flex: 1; min-width: 0; min-height: 44px; max-height: 200px; box-sizing: border-box; padding: 11px 4px; overflow-y: hidden;
+  flex: 1; min-width: 0; min-height: 36px; max-height: 200px; box-sizing: border-box; padding: 6px 0; overflow-y: hidden;
   border: 0; outline: none; resize: none; background: transparent; color: var(--cx-ink);
-  font-family: var(--cx-body); font-size: 16px; line-height: 1.4;
+  font-family: var(--cx-body); font-size: 16.5px; line-height: 1.45;
 }
 .codex .cx-bar__input:focus-visible { outline: none; }
 .cx-bar__input::placeholder { color: var(--cx-muted); }
 .cx-bar__input:disabled { opacity: 0.75; }
 .cx-bar__input.is-over { color: var(--cx-warn); }
+
+.cx-bar__tools { grid-area: tools; display: flex; align-items: center; gap: 4px; min-width: 0; padding: 4px 8px 8px 10px; }
+.cx-bar__spacer { flex: 1; }
+.cx-tool, .cx-quick__cmd {
+  display: inline-flex; align-items: center; gap: 8px; flex: none;
+  height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: none; cursor: pointer;
+  color: var(--cx-muted-2); white-space: nowrap;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+.cx-tool { font: 500 10.5px/1 var(--cx-mono); letter-spacing: 0.14em; text-transform: uppercase; }
+.cx-tool:hover:not(:disabled), .cx-quick__cmd:hover { background: color-mix(in srgb, var(--cx-ink) 7%, transparent); color: var(--cx-ink); }
+.cx-tool:disabled { opacity: 0.4; cursor: default; }
+.cx-tool:active:not(:disabled), .cx-quick__cmd:active { transform: translateY(1px); }
+.cx-quick {
+  display: flex; align-items: center; gap: 2px; min-width: 0; margin-left: 4px; padding-left: 8px;
+  border-left: 1px solid var(--cx-hair-2);
+  overflow-x: auto; scrollbar-width: none; animation: cx-fade-in 260ms ease both;
+}
+.cx-quick::-webkit-scrollbar { display: none; }
+.cx-quick__cmd { gap: 1px; padding: 0 9px; font: 500 12px/1 var(--cx-mono); }
+.cx-quick__slash { color: var(--cx-accent); }
 .cx-bar__hint, .cx-bar__count {
-  align-self: center; flex-shrink: 0; display: flex; align-items: center; gap: 6px;
-  font-family: var(--cx-mono); font-size: 11px; color: var(--cx-muted);
+  flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding-right: 8px;
+  font: 11px var(--cx-mono); color: var(--cx-muted);
 }
 .cx-bar__count.is-over { color: var(--cx-warn); }
 .cx-bar__hint kbd {
-  display: grid; place-items: center; width: 20px; height: 20px; border-radius: 6px;
-  border: 1px solid var(--cx-hair-2); font: inherit;
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 4px;
+  border-radius: 5px; border: 1px solid var(--cx-hair-2); font: inherit; color: var(--cx-ink-2);
 }
-.cx-bar__send, .cx-bar__stop {
-  display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 14px; cursor: pointer;
-  transition: transform 150ms ease, background-color 200ms ease, color 200ms ease;
+.cx-bar__hint kbd.is-gap { margin-left: 8px; }
+
+/* The send key: chamfered like the landing's PRESS START. The cut lives on
+   the face, so the button's own focus ring is never clipped. */
+.cx-key {
+  --cut: 9px;
+  flex: none; display: grid; width: 54px; height: 40px; padding: 0;
+  border: 0; border-radius: 3px; background: none; cursor: pointer;
 }
-.cx-bar__send { border: 0; background: var(--cx-accent); color: #0b0c0f; }
-.cx-bar__send:disabled { background: color-mix(in srgb, var(--cx-ink) 10%, transparent); color: var(--cx-muted); cursor: default; }
-.cx-bar__send:not(:disabled):active, .cx-bar__stop:active { transform: translateY(1px) scale(0.97); }
-.cx-bar__stop {
-  border: 1px solid color-mix(in srgb, var(--cx-accent) 60%, transparent);
-  background: color-mix(in srgb, var(--cx-accent) 12%, transparent); color: var(--cx-accent);
+.cx-key__face {
+  display: grid; place-items: center; width: 100%; height: 100%;
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  transition: background-color 200ms ease, color 200ms ease, transform 150ms ease;
 }
+.cx-key__face svg { transition: transform 220ms var(--cx-ease); }
+.cx-key--send .cx-key__face { background: var(--cx-accent); color: #0b0c0f; }
+.cx-key--send:hover:not(:disabled) .cx-key__face { background: color-mix(in srgb, var(--cx-accent) 82%, #fff); }
+.cx-key--send:hover:not(:disabled) svg { transform: translateY(-2px); }
+.cx-key--send:disabled { cursor: default; }
+.cx-key--send:disabled .cx-key__face { background: color-mix(in srgb, var(--cx-ink) 9%, transparent); color: var(--cx-muted); }
+.cx-key:active:not(:disabled) .cx-key__face { transform: translateY(1px); }
+.cx-key--stop .cx-key__face { background: color-mix(in srgb, var(--cx-accent) 18%, transparent); color: var(--cx-accent); }
+.cx-key--stop:hover .cx-key__face { background: color-mix(in srgb, var(--cx-accent) 28%, transparent); }
 
 .cx-palette {
-  position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 6;
-  padding: 6px; border-radius: 16px; border: 1px solid var(--cx-hair-2);
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 10px); z-index: 6;
+  padding: 6px; border-radius: 14px; border: 1px solid var(--cx-hair-2);
   background: rgba(14, 16, 22, 0.97); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
   animation: cx-rise 180ms var(--cx-ease) both;
 }
@@ -657,7 +754,7 @@ html[data-vt^="stealth"] .codex { transition: none; }
    with a phone keyboard open the viewport is barely 400px tall, and a fixed
    300px list pushed the top of the palette up behind the header. */
 .cx-palette__list { margin: 0; padding: 0; list-style: none; max-height: min(300px, 45dvh); overflow-y: auto; overscroll-behavior: contain; }
-.cx-palette__item { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; cursor: pointer; }
+.cx-palette__item { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 9px; cursor: pointer; }
 .cx-palette__item.is-active { background: color-mix(in srgb, var(--cx-accent) 14%, transparent); }
 .cx-palette__trigger { font-family: var(--cx-mono); font-size: 13.5px; font-weight: 500; color: var(--cx-ink); }
 .cx-palette__item.is-active .cx-palette__trigger, .cx-palette--hint .cx-palette__trigger { color: var(--cx-accent); }
@@ -682,32 +779,43 @@ html[data-vt^="stealth"] .codex { transition: none; }
 }
 .cx-notice__action.is-quiet { background: none; border-color: var(--cx-hair-2); color: var(--cx-ink-2); }
 
-.cx-attachments { margin: 0; padding: 0; list-style: none; display: flex; gap: 10px; }
-.cx-attachment { position: relative; width: 64px; height: 64px; border-radius: 12px; overflow: hidden; border: 1px solid var(--cx-hair-2); }
+/* Screenshots ride inside the bar, above what you type about them. */
+.cx-attachments { grid-area: files; margin: 0; padding: 14px 16px 0 20px; list-style: none; display: flex; gap: 10px; }
+.cx-attachment { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid var(--cx-hair-2); }
 .cx-attachment img { width: 100%; height: 100%; object-fit: cover; }
 .cx-attachment__remove {
   position: absolute; top: 4px; right: 4px; display: grid; place-items: center; width: 26px; height: 26px;
   border: 0; border-radius: 8px; background: rgba(7, 9, 13, 0.78); color: var(--cx-ink); cursor: pointer;
 }
 
-.cx-deal { overflow: hidden; border-radius: 16px; border: 1px solid var(--cx-hair); background: rgba(14, 16, 22, 0.88); animation: cx-rise 300ms var(--cx-ease) both; }
-.cx-deal__row { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 12px; }
-.cx-deal__thumb { height: 34px; width: auto; max-width: 92px; border-radius: 6px; object-fit: cover; }
-.cx-deal__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.cx-deal__title { font-size: 13px; color: var(--cx-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cx-deal__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
-.cx-deal__price strong { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--cx-ink); }
+/* The price card: temporary, so it can always be put away (× or Esc). */
+.cx-deal {
+  overflow: hidden; border-radius: 14px; border: 1px solid var(--cx-hair-2);
+  background: color-mix(in srgb, #0e1016 92%, transparent);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  animation: cx-rise 300ms var(--cx-ease) both;
+}
+.cx-deal__row { display: flex; align-items: center; gap: 14px; padding: 8px 6px 8px 8px; }
+.cx-deal__thumb { flex: none; width: 86px; height: 40px; border-radius: 7px; object-fit: cover; }
+.cx-deal__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cx-deal__title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.cx-deal__kicker { flex: none; font: 500 10px/1 var(--cx-mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--cx-accent); }
+.cx-deal__name { min-width: 0; font-size: 13px; color: var(--cx-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cx-deal__price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.cx-deal__price strong { font-family: var(--cx-display); font-size: 20px; font-weight: 640; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: var(--cx-ink); }
 .cx-deal__store, .cx-deal__hist { font-family: var(--cx-mono); font-size: 10.5px; color: var(--cx-muted); }
 .cx-deal__off {
   padding: 2px 6px; border-radius: 5px; font-family: var(--cx-mono); font-size: 10.5px;
   background: color-mix(in srgb, var(--cx-accent) 16%, transparent); color: var(--cx-accent);
 }
 .cx-deal__low { font-family: var(--cx-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cx-accent); }
-.cx-deal__toggle {
-  display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 10px; border: 0; border-radius: 10px;
-  background: none; color: var(--cx-ink-2); cursor: pointer;
-  font-family: var(--cx-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+.cx-deal__toggle, .cx-deal__close {
+  flex: none; display: flex; align-items: center; justify-content: center; gap: 5px; min-height: 40px; border: 0; border-radius: 9px;
+  background: none; color: var(--cx-ink-2); cursor: pointer; transition: background-color 180ms ease, color 180ms ease;
 }
+.cx-deal__toggle { padding: 0 10px; font: 500 10.5px var(--cx-mono); letter-spacing: 0.12em; text-transform: uppercase; }
+.cx-deal__close { width: 40px; color: var(--cx-muted-2); }
+.cx-deal__toggle:hover, .cx-deal__close:hover { background: color-mix(in srgb, var(--cx-ink) 7%, transparent); color: var(--cx-ink); }
 .cx-deal__panel { max-height: 45vh; overflow-y: auto; padding: 4px 14px 12px; border-top: 1px solid var(--cx-hair); }
 .cx-deal__game-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0 6px; font-size: 14px; font-weight: 500; }
 .cx-deal__table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
@@ -717,7 +825,9 @@ html[data-vt^="stealth"] .codex { transition: none; }
 }
 .cx-deal__table td { padding: 7px 8px 7px 0; border-bottom: 1px solid var(--cx-hair); color: var(--cx-ink-2); }
 .cx-deal__table tr.is-best td { color: var(--cx-ink); }
-.cx-deal__table a { color: var(--cx-accent); }
+.cx-deal__table a { display: inline-flex; align-items: center; gap: 5px; color: var(--cx-ink); text-decoration: underline; text-decoration-color: var(--cx-hair-2); text-underline-offset: 3px; }
+.cx-deal__table a:hover { text-decoration-color: var(--cx-accent); }
+.cx-deal__table a svg { color: var(--cx-muted); }
 .cx-num { font-variant-numeric: tabular-nums; }
 .cx-deal__foot { padding-top: 10px; font-family: var(--cx-mono); font-size: 10.5px; color: var(--cx-muted); }
 .cx-deal__foot a { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; color: var(--cx-ink-2); }
@@ -765,13 +875,40 @@ html[data-vt^="stealth"] .codex { transition: none; }
   .cx-column { gap: 26px; }
   .cx-prose { font-size: 16px; }
   .cx-shelf { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-  .cx-empty__lede { font-size: 16.5px; }
-  .cx-starters { grid-template-columns: minmax(0, 1fr); }
+  .cx-empty__lede { font-size: 16px; }
+  .cx-cmds { grid-template-columns: minmax(0, 1fr); }
+  .cx-cmds li:nth-last-child(2) .cx-cmd { border-bottom: 0; }
+  .cx-cmd { grid-template-columns: 6.75rem minmax(0, 1fr) auto; min-height: 50px; }
   .cx-dock { width: calc(100% - 16px); }
-  .cx-bar { padding: 8px; gap: 8px; border-radius: 20px; }
-  .cx-bar__hint { display: none; }
   .cx-palette__desc { display: none; }
 }
+/* A phone gets one row (attach, what you type, the send key), so the bar
+   costs no more height than it did. The quick commands and key hints go:
+   the placeholder carries "Try /help" and the palette does the rest. */
+@media (max-width: 560px) {
+  .cx-bar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "files files files" "attach field send";
+    align-items: end; border-radius: 16px;
+  }
+  .cx-bar__hud { inset: -4px; }
+  .cx-bar__hud i { width: 12px; height: 12px; }
+  .cx-bar__tools { display: contents; }
+  .cx-tool__label, .cx-quick, .cx-bar__hint, .cx-bar__spacer, .cx-bar__prompt { display: none; }
+  .cx-tool--attach {
+    grid-area: attach; width: 44px; height: 44px; margin: 7px 0 7px 7px; padding: 0; justify-content: center;
+    border-radius: 11px; background: color-mix(in srgb, var(--cx-ink) 6%, transparent); color: var(--cx-ink-2);
+  }
+  .cx-bar__field { padding: 10px 8px 10px 12px; }
+  .cx-bar__input { min-height: 38px; padding: 7px 0; font-size: 16px; line-height: 1.5; }
+  .cx-key { grid-area: send; width: 50px; height: 44px; margin: 7px 7px 7px 0; }
+  .cx-bar__count { position: absolute; top: -24px; right: 12px; padding: 0; }
+  .cx-attachments { padding: 12px 12px 0; }
+  .cx-deal__thumb { width: 64px; height: 34px; }
+  .cx-deal__kicker { display: none; }
+}
+/* No keyboard shortcuts to advertise on a touch screen. */
+@media (pointer: coarse) { .cx-bar__hint { display: none; } }
 @media (max-width: 420px) {
   .cx-context__shield { display: none; }
   .cx-context__shield + .cx-context__sep, .cx-context__sep:first-of-type { display: none; }
@@ -787,7 +924,8 @@ html[data-low-power] .cx-backdrop__layer { animation-duration: 1ms !important; }
 html[data-low-power] .cx-backdrop__layer img { visibility: hidden; }
 html[data-low-power] .cx-backdrop__scrim { opacity: 0; }
 html[data-low-power] .cx-context,
-html[data-low-power] .cx-bar { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(14, 16, 22, 0.96); }
+html[data-low-power] .cx-bar,
+html[data-low-power] .cx-deal { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(14, 16, 22, 0.96); }
 html[data-low-power] .cx-entry--user,
 html[data-low-power] .cx-entry--ai,
 html[data-low-power] .cx-empty,
@@ -803,5 +941,11 @@ html[data-low-power] .cx-stealth { animation: none; -webkit-backdrop-filter: non
   .cx-sweep { display: none; }
   .is-stealth .cx-backdrop::after, .cx-stealth { animation: none; }
   .cx-backdrop__layer { animation-duration: 1ms !important; }
-  .codex, .cx-cover__art, .cx-next__link svg { transition: none; }
+  .codex, .cx-cover__art, .cx-next__link svg, .cx-cmd svg { transition: none; }
+  /* The brackets still light up on focus; they just don't travel. */
+  .cx-bar__hud i { transition: border-color 220ms ease; }
+  .cx-quick { animation: none; }
+  .is-working .cx-bar__prompt { animation: none; }
+  /* Busy without motion: the whole top edge holds the accent instead. */
+  .is-working .cx-bar__scan::after { animation: none; transform: none; width: 100%; opacity: 0.7; }
 }

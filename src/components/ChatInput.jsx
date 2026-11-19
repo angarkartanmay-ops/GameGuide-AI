@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useImperativeHandle, useId } from 'react';
 import { ArrowUp, Paperclip, X, Square, AlertTriangle } from 'lucide-react';
 import { preprocessImage } from '../utils/imagePreprocess';
-import { paletteState, nextIndex, selectionAction, wantsSlashFocus } from '../utils/slashPalette';
+import {
+  paletteState, nextIndex, selectionAction, wantsSlashFocus, QUICK_COMMANDS, quickDraft,
+} from '../utils/slashPalette';
 import CommandPalette from './codex/CommandPalette';
 
 const MAX_CHARS = 1500; // warn above this threshold
@@ -10,9 +12,13 @@ const MAX_HEIGHT = 200;
 /**
  * The command bar. `ref` exposes { setDraft, focus, openFilePicker } so the
  * empty state's starters can fill it (React 19: ref is a plain prop).
+ * `busy` names a slash command still running (e.g. /price searching), and
+ * `quickCommands` turns on the one-tap command shortcuts (off on the empty
+ * state, which lists the same commands with more room to explain them).
  */
 export default function ChatInput({
-  ref, onSendMessage, onCancel, isLoading, SLASH_COMMANDS = [], stealthMode = false, gameName = null,
+  ref, onSendMessage, onCancel, isLoading, busy = null, quickCommands = false,
+  SLASH_COMMANDS = [], stealthMode = false, gameName = null,
 }) {
   const [inputText, setInputText] = useState('');
   const [attachments, setAttachments] = useState([]);
@@ -192,22 +198,39 @@ export default function ChatInput({
   const charCount = inputText.length;
   const isOverLimit = charCount > MAX_CHARS;
   const canSend = !!(inputText.trim() || attachments.length);
+  const working = isLoading || !!busy;
   // Short enough to sit on one line in the composer on a phone.
   const placeholder = isLoading
     ? 'Researching. Stop to cancel'
-    : attachments.length > 0
-      ? 'Add a note, or just send it'
-      : stealthMode
-        // Reinforce the incognito cue where the typing happens: the banner
-        // can scroll out of view, this never does.
-        ? 'Stealth: nothing is saved'
-        : gameName
-          ? `Ask about ${gameName}…`
-          // On a phone the "/ commands" hint is hidden, so this carries it.
-          : 'Ask about any game. Try /help';
+    : busy
+      ? `Running ${busy}…`
+      : attachments.length > 0
+        ? 'Add a note, or just send it'
+        : stealthMode
+          // Reinforce the incognito cue where the typing happens: the banner
+          // can scroll out of view, this never does.
+          ? 'Stealth: nothing is saved'
+          : gameName
+            ? `Ask about ${gameName}…`
+            // On a phone the "/ commands" hint is hidden, so this carries it.
+            : 'Ask about any game. Try /help';
+
+  const draftQuick = (trigger) => {
+    const text = quickDraft(trigger, gameName);
+    setInputText(text);
+    setDismissed(false);
+    setActive(0);
+    requestAnimationFrame(() => {
+      const el = textAreaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(text.length, text.length);
+    });
+  };
+  const showQuick = quickCommands && !inputText && !working && attachments.length === 0;
 
   return (
-    <div className={`cx-compose${stealthMode ? ' is-stealth' : ''}`}>
+    <div className={`cx-compose${stealthMode ? ' is-stealth' : ''}${working ? ' is-working' : ''}`}>
       {palette.mode !== 'closed' && (
         <CommandPalette
           id={paletteId}
@@ -238,80 +261,110 @@ export default function ChatInput({
         </div>
       )}
 
-      {attachments.length > 0 && (
-        <ul className="cx-attachments" aria-label="Attached screenshots">
-          {attachments.map((attachment, index) => (
-            <li key={attachment.previewUrl} className="cx-attachment">
-              <img src={attachment.previewUrl} alt={`Screenshot ${index + 1}`} />
-              <button
-                type="button"
-                className="cx-attachment__remove"
-                onClick={() => removeAttachment(index)}
-                aria-label={`Remove screenshot ${index + 1}`}
-              >
-                <X size={13} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
+      {/* The bar is a console: what you type on top, tools along the bottom.
+          Corner brackets lock on when it has focus; a scan line runs along
+          the top edge while an answer or a command is on its way. */}
       <div className="cx-bar">
-        <button
-          type="button"
-          className="cx-bar__icon"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isLoading || attachments.length >= 3}
-          aria-label={attachments.length >= 3 ? 'Three screenshots attached (the maximum)' : 'Attach screenshots'}
-          title="Attach screenshots"
-        >
-          <Paperclip size={18} />
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleFileSelect}
-          hidden
-          tabIndex={-1}
-        />
+        <span className="cx-bar__hud" aria-hidden="true"><i /><i /><i /><i /></span>
+        <span className="cx-bar__scan" aria-hidden="true" />
 
-        <label className="sr-only" htmlFor={`${paletteId}-input`}>Message GameGuide</label>
-        <textarea
-          id={`${paletteId}-input`}
-          ref={textAreaRef}
-          className={`cx-bar__input${isOverLimit ? ' is-over' : ''}`}
-          rows={1}
-          placeholder={placeholder}
-          value={inputText}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          disabled={isLoading}
-          aria-keyshortcuts="/"
-          aria-autocomplete="list"
-          aria-controls={palette.mode === 'browse' ? paletteId : undefined}
-          aria-activedescendant={palette.mode === 'browse' ? `${paletteId}-${activeIndex}` : undefined}
-        />
-
-        {charCount > MAX_CHARS * 0.7 && !isLoading && (
-          <span className={`cx-bar__count${isOverLimit ? ' is-over' : ''}`} aria-live="polite">
-            {charCount}/{MAX_CHARS}
-          </span>
-        )}
-        {!isLoading && !inputText && (
-          <span className="cx-bar__hint" aria-hidden="true"><kbd>/</kbd>commands</span>
+        {attachments.length > 0 && (
+          <ul className="cx-attachments" aria-label="Attached screenshots">
+            {attachments.map((attachment, index) => (
+              <li key={attachment.previewUrl} className="cx-attachment">
+                <img src={attachment.previewUrl} alt={`Screenshot ${index + 1}`} />
+                <button
+                  type="button"
+                  className="cx-attachment__remove"
+                  onClick={() => removeAttachment(index)}
+                  aria-label={`Remove screenshot ${index + 1}`}
+                >
+                  <X size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
 
-        {isLoading ? (
-          <button type="button" className="cx-bar__stop" onClick={onCancel} aria-label="Stop generating" title="Stop generating">
-            <Square size={15} fill="currentColor" />
+        <div className="cx-bar__field">
+          <span className="cx-bar__prompt" aria-hidden="true" />
+          <label className="sr-only" htmlFor={`${paletteId}-input`}>Message GameGuide</label>
+          <textarea
+            id={`${paletteId}-input`}
+            ref={textAreaRef}
+            className={`cx-bar__input${isOverLimit ? ' is-over' : ''}`}
+            rows={1}
+            placeholder={placeholder}
+            value={inputText}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            disabled={isLoading}
+            aria-keyshortcuts="/"
+            aria-autocomplete="list"
+            aria-controls={palette.mode === 'browse' ? paletteId : undefined}
+            aria-activedescendant={palette.mode === 'browse' ? `${paletteId}-${activeIndex}` : undefined}
+          />
+        </div>
+
+        <div className="cx-bar__tools">
+          <button
+            type="button"
+            className="cx-tool cx-tool--attach"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading || attachments.length >= 3}
+            aria-label={attachments.length >= 3 ? 'Three screenshots attached (the maximum)' : 'Attach screenshots'}
+            title="Attach screenshots (PNG or JPG, up to 3)"
+          >
+            <Paperclip size={16} aria-hidden="true" />
+            <span className="cx-tool__label">Screenshot</span>
           </button>
-        ) : (
-          <button type="button" className="cx-bar__send" onClick={handleSend} disabled={!canSend} aria-label="Send message" title="Send">
-            <ArrowUp size={18} strokeWidth={2.4} />
-          </button>
-        )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handleFileSelect}
+            hidden
+            tabIndex={-1}
+          />
+
+          {showQuick && (
+            <div className="cx-quick" role="group" aria-label={gameName ? `Commands for ${gameName}` : 'Commands'}>
+              {QUICK_COMMANDS.map(({ trigger, label }) => (
+                <button
+                  key={trigger}
+                  type="button"
+                  className="cx-quick__cmd"
+                  onClick={() => draftQuick(trigger)}
+                  title={`Type ${quickDraft(trigger, gameName).trim()}`}
+                >
+                  <span className="cx-quick__slash" aria-hidden="true">/</span>{label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <span className="cx-bar__spacer" />
+
+          {charCount > MAX_CHARS * 0.7 && !isLoading && (
+            <span className={`cx-bar__count${isOverLimit ? ' is-over' : ''}`} aria-live="polite">
+              {charCount}/{MAX_CHARS}
+            </span>
+          )}
+          {!working && (inputText
+            ? <span className="cx-bar__hint is-typing" aria-hidden="true"><kbd>Enter</kbd>send<kbd className="is-gap">Shift</kbd>+<kbd>Enter</kbd>new line</span>
+            : <span className="cx-bar__hint" aria-hidden="true"><kbd>/</kbd>commands</span>)}
+
+          {isLoading ? (
+            <button type="button" className="cx-key cx-key--stop" onClick={onCancel} aria-label="Stop generating" title="Stop generating">
+              <span className="cx-key__face"><Square size={13} fill="currentColor" aria-hidden="true" /></span>
+            </button>
+          ) : (
+            <button type="button" className="cx-key cx-key--send" onClick={handleSend} disabled={!canSend} aria-label="Send message" title="Send (Enter)">
+              <span className="cx-key__face"><ArrowUp size={18} strokeWidth={2.4} aria-hidden="true" /></span>
+            </button>
+          )}
+        </div>
       </div>
       <span className="sr-only" role="status" aria-live="polite">
         {palette.mode === 'browse' ? `${palette.items.length} command${palette.items.length === 1 ? '' : 's'}` : ''}
