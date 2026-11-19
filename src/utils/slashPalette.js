@@ -53,6 +53,26 @@ export function usageFor(cmd) {
   return PALETTE_META[cmd?.trigger]?.usage || '';
 }
 
+// The commands the command bar offers as one-tap shortcuts once a
+// conversation is going: the three that need a game, so the game in context
+// can be filled in for the player.
+export const QUICK_COMMANDS = [
+  { trigger: '/price', label: 'price' },
+  { trigger: '/missables', label: 'missables' },
+  { trigger: '/progress', label: 'progress' },
+];
+
+/**
+ * What a quick command types into the bar. With a game in context it is
+ * named, so Enter is all that's left (for /progress, after saying where).
+ * It is only ever a draft: nothing runs until the player sends it.
+ */
+export function quickDraft(trigger, game) {
+  const g = String(game || '').replace(/\s+/g, ' ').trim();
+  if (trigger === '/progress') return g ? `/progress ${g} : ` : '/progress ';
+  return g ? `${trigger} ${g}` : `${trigger} `;
+}
+
 /**
  * Should this keydown carry the player into the command bar? A bare "/"
  * pressed anywhere that isn't already a text field, with no shortcut

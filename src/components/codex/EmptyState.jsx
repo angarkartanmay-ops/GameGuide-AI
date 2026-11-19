@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Tag, MapPin, Compass, Image as ImageIcon } from 'lucide-react';
+import { ArrowRight, Paperclip } from 'lucide-react';
 import { buildShelf, loadRecentGames, coverUrl } from '../../utils/recentGames';
 import { loadSpoilerPrefs } from '../../utils/spoilerPrefs';
 import { resolveGameArt } from '../../utils/gameArt';
@@ -43,7 +43,6 @@ export default function EmptyState({ onAsk, onDraft, onAttach, stealthMode }) {
 
   return (
     <section className="cx-empty" aria-labelledby="cx-empty-title">
-      <span className="cx-empty__kicker">Live intel · Spoiler-safe</span>
       <h2 id="cx-empty-title" className="cx-empty__title">What are you <em>playing</em>?</h2>
       <p className="cx-empty__lede">
         Ask about builds, bosses, patches or prices. Tell me where you are and I&apos;ll keep everything past it hidden.
@@ -63,43 +62,62 @@ export default function EmptyState({ onAsk, onDraft, onAttach, stealthMode }) {
                 {covers[g.key]
                   ? <img src={covers[g.key]} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                   : null}
-                <span className="cx-cover__fallback" aria-hidden="true">{g.name}</span>
+                {/* Under the art, and all there is when a game has none. */}
+                <span className="cx-cover__fallback" aria-hidden="true">
+                  <span className="cx-mark" />
+                  <span className="cx-cover__fallback-name">{g.name}</span>
+                </span>
               </span>
               <span className="cx-cover__name">{g.name}</span>
-              <span className="cx-cover__meta">{g.progress || 'Ask anything'}</span>
+              {g.progress && <span className="cx-cover__meta">{g.progress}</span>}
             </button>
           </li>
         ))}
       </ul>
 
-      <div className="cx-starters">
+      <div className="cx-shelf-head">
+        <span>Commands</span>
+        <span className="cx-overline__rule" aria-hidden="true" />
+      </div>
+      <ul className="cx-cmds">
         {/* The question only a progress-aware guide can answer safely. With a
             saved position it runs straight away for that game; otherwise it
             waits for the player to name one. */}
-        <button
-          type="button"
-          className="cx-starter"
-          onClick={() => (lastProgress ? onAsk(`/missables ${lastProgress.name}`) : onDraft('/missables '))}
-        >
-          <span className="cx-starter__icon" aria-hidden="true"><Compass size={17} /></span>
-          <span className="cx-starter__text">
-            <span>What can I still miss?</span>
-            <code>{lastProgress ? `/missables · ${lastProgress.name}` : '/missables elden ring'}</code>
-          </span>
-        </button>
-        <button type="button" className="cx-starter" onClick={() => onDraft('/price ')}>
-          <span className="cx-starter__icon" aria-hidden="true"><Tag size={17} /></span>
-          <span className="cx-starter__text"><span>Check a price</span><code>/price elden ring</code></span>
-        </button>
-        <button type="button" className="cx-starter" onClick={() => onDraft('/progress ')}>
-          <span className="cx-starter__icon" aria-hidden="true"><MapPin size={17} /></span>
-          <span className="cx-starter__text"><span>Set where you are</span><code>/progress game : where</code></span>
-        </button>
-        <button type="button" className="cx-starter" onClick={onAttach}>
-          <span className="cx-starter__icon" aria-hidden="true"><ImageIcon size={17} /></span>
-          <span className="cx-starter__text"><span>Read my screenshot</span><code>PNG or JPG, up to 3</code></span>
-        </button>
-      </div>
+        <li>
+          <button
+            type="button"
+            className="cx-cmd"
+            onClick={() => (lastProgress ? onAsk(`/missables ${lastProgress.name}`) : onDraft('/missables '))}
+          >
+            <code className="cx-cmd__trigger"><span className="cx-cmd__slash">/</span>missables</code>
+            <span className="cx-cmd__desc">
+              {lastProgress ? `What you can still miss in ${lastProgress.name}` : 'What you can still miss, spoiler-free'}
+            </span>
+            <ArrowRight size={15} aria-hidden="true" className="cx-cmd__go" />
+          </button>
+        </li>
+        <li>
+          <button type="button" className="cx-cmd" onClick={() => onDraft('/price ')}>
+            <code className="cx-cmd__trigger"><span className="cx-cmd__slash">/</span>price</code>
+            <span className="cx-cmd__desc">The best price across PC stores</span>
+            <ArrowRight size={15} aria-hidden="true" className="cx-cmd__go" />
+          </button>
+        </li>
+        <li>
+          <button type="button" className="cx-cmd" onClick={() => onDraft('/progress ')}>
+            <code className="cx-cmd__trigger"><span className="cx-cmd__slash">/</span>progress</code>
+            <span className="cx-cmd__desc">Say where you are. Nothing past it is shown</span>
+            <ArrowRight size={15} aria-hidden="true" className="cx-cmd__go" />
+          </button>
+        </li>
+        <li>
+          <button type="button" className="cx-cmd" onClick={onAttach}>
+            <span className="cx-cmd__trigger"><Paperclip size={14} aria-hidden="true" />image</span>
+            <span className="cx-cmd__desc">Read a screenshot, up to 3 at once</span>
+            <ArrowRight size={15} aria-hidden="true" className="cx-cmd__go" />
+          </button>
+        </li>
+      </ul>
     </section>
   );
 }

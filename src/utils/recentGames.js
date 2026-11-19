@@ -2,6 +2,8 @@
 // (localStorage, guarded): nothing breaks when storage is blocked, and stealth
 // never writes here.
 
+import { titleCase, upperRomans } from './gameContext.js';
+
 const KEY = 'gg.recentGames.v1';
 const MAX = 8;
 
@@ -39,12 +41,13 @@ export function buildShelf(recent, progress = {}, curated = CURATED, max = 6) {
   const push = (e) => {
     if (!e?.key || seen.has(e.key) || out.length >= max) return;
     seen.add(e.key);
-    out.push({ ...e, progress: progress[e.key] || e.progress || null });
+    // Names saved before titleCase knew roman numerals read "Auto Vi".
+    out.push({ ...e, name: upperRomans(e.name), progress: progress[e.key] || e.progress || null });
   };
   for (const e of recent || []) push(e);
   for (const k of Object.keys(progress || {})) {
     const known = curated.find(c => c.key === k);
-    push(known || { key: k, name: k.replace(/\b([a-z])/g, (m) => m.toUpperCase()) });
+    push(known || { key: k, name: titleCase(k) });
   }
   for (const c of curated) push(c);
   return out;

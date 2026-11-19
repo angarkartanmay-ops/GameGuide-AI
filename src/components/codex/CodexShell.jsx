@@ -28,7 +28,8 @@ export default function CodexShell({
 }) {
   const {
     messages, isLoading, sendMessage, cancelRequest, redditActive, wikiActive, webActive,
-    priceActive, priceData, SLASH_COMMANDS, stealthMode, stealthFx, streamStage,
+    priceActive, priceData, dismissPrice, SLASH_COMMANDS, stealthMode, stealthFx, streamStage,
+    commandPending,
   } = chat;
   const inputRef = useRef(null);
   usePageMeta('chat');
@@ -123,12 +124,17 @@ export default function CodexShell({
       </main>
 
       <div className="cx-dock">
-        {priceActive && <PriceBadge priceData={priceData} />}
+        {/* Keyed by the game, so a new lookup opens collapsed. */}
+        {priceActive && (
+          <PriceBadge key={priceData[0]?.title || 'price'} priceData={priceData} onDismiss={dismissPrice} />
+        )}
         <ChatInput
           ref={inputRef}
           onSendMessage={sendMessage}
           onCancel={cancelRequest}
           isLoading={isLoading}
+          busy={commandPending}
+          quickCommands={messages.length > 0}
           SLASH_COMMANDS={SLASH_COMMANDS}
           stealthMode={stealthMode}
           gameName={ambience.name}

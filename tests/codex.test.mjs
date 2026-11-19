@@ -1,9 +1,11 @@
 // Living Codex chat UI — the pure logic behind it: slash palette, game
 // context, accent colour, recent-games shelf. No DOM needed.
 
-import { paletteState, nextIndex, selectionAction, usageFor, wantsSlashFocus } from '../src/utils/slashPalette.js';
 import {
-  parseStreamStage, stageLabel, normalizeGameKey, latestGameFromMessages, latestSpoilerMeta,
+  paletteState, nextIndex, selectionAction, usageFor, wantsSlashFocus, QUICK_COMMANDS, quickDraft,
+} from '../src/utils/slashPalette.js';
+import {
+  parseStreamStage, stageLabel, normalizeGameKey, latestGameFromMessages, latestSpoilerMeta, titleCase, upperRomans,
 } from '../src/utils/gameContext.js';
 import { pickAccent, ensureContrast, contrastRatio, rgbToHsl, toHex } from '../src/utils/accent.js';
 import { addRecent, buildShelf, CURATED } from '../src/utils/recentGames.js';
@@ -128,6 +130,28 @@ check('an open modal keeps its keys', !wantsSlashFocus(key(), true));
 check('IME composition is never interrupted', !wantsSlashFocus(key({ isComposing: true })));
 check('an already-handled key is left alone', !wantsSlashFocus(key({ defaultPrevented: true })));
 check('nothing is a no', !wantsSlashFocus(null) && !wantsSlashFocus(undefined));
+
+// ── Quick commands in the bar ──────────────────────────────────────────────
+// Each is a draft the player still sends, with the game in context named.
+check('quick commands all take arguments (so a draft, never a send)', QUICK_COMMANDS.every(q => selectionAction(q, '').type === 'insert' && usageFor(q)));
+check('quick labels are the command names', QUICK_COMMANDS.every(q => `/${q.label}` === q.trigger));
+check('/price names the game in context', quickDraft('/price', 'Cyberpunk 2077') === '/price Cyberpunk 2077');
+check('/missables names the game in context', quickDraft('/missables', 'Elden Ring') === '/missables Elden Ring');
+check('/progress leaves "where" for the player', quickDraft('/progress', 'Elden Ring') === '/progress Elden Ring : ');
+check('no game: just the command and a space', quickDraft('/price', null) === '/price ' && quickDraft('/progress', '  ') === '/progress ');
+check('a quick draft keeps the palette in its usage hint', paletteState(quickDraft('/price', 'Hades II'), CMDS).mode === 'hint');
+
+// ── Game names ─────────────────────────────────────────────────────────────
+check('roman numerals are capitals', titleCase('grand theft auto vi') === 'Grand Theft Auto VI', titleCase('grand theft auto vi'));
+check('…of any length', titleCase('final fantasy xiv') === 'Final Fantasy XIV' && titleCase('hades ii') === 'Hades II');
+check('no capital after an apostrophe', titleCase("baldur's gate 3") === "Baldur's Gate 3", titleCase("baldur's gate 3"));
+check('a colon starts a word', titleCase('clair obscur: expedition 33') === 'Clair Obscur: Expedition 33');
+check('words that merely contain numerals are left alone', titleCase('civilization vi') === 'Civilization VI' && titleCase('vivid mix') === 'Vivid Mix');
+check('a saved name is only fixed, never re-cased', upperRomans('Grand Theft Auto Vi') === 'Grand Theft Auto VI' && upperRomans('iRacing') === 'iRacing');
+{
+  const shelf = buildShelf([{ key: 'grand theft auto vi', name: 'Grand Theft Auto Vi' }], {});
+  check('shelf: names saved as "Auto Vi" show as "Auto VI"', shelf[0].name === 'Grand Theft Auto VI', shelf[0].name);
+}
 
 console.log(`codex: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -4,7 +4,7 @@ import { streamChatResponse } from '../services/aiProvider';
 import { searchReddit, REDDIT_ENABLED } from '../services/redditScraper';
 import { searchWikis } from '../services/wikiScraper';
 import {
-  fetchPriceDirect, fetchPriceSummaryDirect, resolvePriceQuery, looksLikePriceQuestion, extractPriceSubject,
+  lookupPrice, formatPriceContext, formatPriceMarkdown, resolvePriceQuery, looksLikePriceQuestion, extractPriceSubject,
 } from '../services/priceScraper';
 import {
   loadSpoilerPrefs, setSpoilerMode, setGameProgress, clearGameProgress, parseProgressArgs,
@@ -46,6 +46,12 @@ export default function useChat(user) {
     return () => setTrackingPaused(false);
   }, [stealthMode]);
   const [priceData, setPriceData] = useState([]);
+  // Bumped by every dismissal. A lookup that started before the card was put
+  // away (a /clear while /price was still searching) must not reopen it.
+  const priceSeq = useRef(0);
+  // The slash command whose action is still running (/price searching
+  // CheapShark), so the command bar can show that something is happening.
+  const [commandPending, setCommandPending] = useState(null);
 
   // ─── Credit-saving refs ────────────────────────────────────────────────────
   const abortControllerRef = useRef(null);   // for Stop Response
@@ -85,6 +91,19 @@ export default function useChat(user) {
     }
   }, [userId]);
 
+  /**
+   * Put away the docked price card. It belongs to the price lookup that
+   * opened it, so it goes when the player closes it, sends anything else
+   * (a question or another command), clears the chat, or enters or leaves
+   * stealth. It used to outlive all of those but a normal question, and sat
+   * over the empty state after /clear.
+   */
+  const dismissPrice = useCallback(() => {
+    priceSeq.current += 1;
+    setPriceActive(false);
+    setPriceData([]);
+  }, []);
+
   /** Stop the in-flight AI request immediately. */
   const cancelRequest = useCallback(() => {
     if (abortControllerRef.current) {
@@ -95,14 +114,18 @@ export default function useChat(user) {
     setRedditActive(false);
     setWikiActive(false);
     setWebActive(false);
-    setPriceActive(false);
     setStreamStage(null);
-  }, []);
+    // Also stops a price lookup still running for this turn from opening
+    // the card after the player has stopped it.
+    dismissPrice();
+  }, [dismissPrice]);
 
   const clearChat = useCallback(async () => {
     setMessages([]);
     setRedditActive(false);
     setWikiActive(false);
+    setWebActive(false);
+    dismissPrice();
     if (user) {
       // Use Supabase JS client directly — user is authenticated so their JWT
       // is valid. If RLS still blocks, fall back to raw REST with anon key.
@@ -125,7 +148,7 @@ export default function useChat(user) {
         });
       }
     }
-  }, [user]);
+  }, [user, dismissPrice]);
 
   // /discover folds together what used to be three separate commands
   // (/tip, /redpill, /lore) — each was "fetch a random nugget from Reddit,
@@ -172,7 +195,7 @@ export default function useChat(user) {
               .replace(/\n{3,}/g, '\n\n')
               .slice(0, 700);
             return {
-              text: `## 🔴 Truth Unlocked — fresh from the gaming detective community\n\n**${title}**\n\n${body || '*(thread is mostly visual — check the source for the full detail)*'}${body.length === 700 ? '…' : ''}\n\n*— uncovered by r/${pick.subreddit} (${pick.score.toLocaleString()} ↑)*`,
+              text: `## Truth Unlocked — fresh from the gaming detective community\n\n**${title}**\n\n${body || '*(thread is mostly visual — check the source for the full detail)*'}${body.length === 700 ? '…' : ''}\n\n*— uncovered by r/${pick.subreddit} (${pick.score.toLocaleString()} ↑)*`,
               images: [],
               isCommand: true,
             };
@@ -267,7 +290,7 @@ export default function useChat(user) {
     ];
 
     return {
-      text: `## 🔴 Truth Unlocked\n\n${REDPILLS[Math.floor(Math.random() * REDPILLS.length)]}`,
+      text: `## Truth Unlocked\n\n${REDPILLS[Math.floor(Math.random() * REDPILLS.length)]}`,
       images: [],
       isCommand: true,
     };
@@ -321,7 +344,7 @@ export default function useChat(user) {
               .replace(/\n{3,}/g, '\n\n')
               .slice(0, 900);
             return {
-              text: `## 📜 Lore Drop — fresh community theory\n\n**${title}**\n\n${body}${body.length === 900 ? '…' : ''}\n\n*— theorized in r/${pick.subreddit} (${pick.score.toLocaleString()} ↑)*\n\n*⚠️ Community theory — treat as "fan canon" unless confirmed by the developer.*`,
+              text: `## Lore Drop — fresh community theory\n\n**${title}**\n\n${body}${body.length === 900 ? '…' : ''}\n\n*— theorized in r/${pick.subreddit} (${pick.score.toLocaleString()} ↑)*\n\n*Community theory — treat as "fan canon" unless confirmed by the developer.*`,
               images: [],
               isCommand: true,
             };
@@ -380,7 +403,7 @@ export default function useChat(user) {
     ];
 
     return {
-      text: `## 📜 Lore Drop Incoming...\n\n${LORE[Math.floor(Math.random() * LORE.length)]}`,
+      text: `## Lore Drop Incoming...\n\n${LORE[Math.floor(Math.random() * LORE.length)]}`,
       images: [],
       isCommand: true,
     };
@@ -439,7 +462,7 @@ export default function useChat(user) {
       description: 'List all available commands',
       emoji: '📖',
       action: async () => ({
-        text: `## 📖 GameGuide-AI Command Reference\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | 🗑️ Wipe your entire chat history |\n| \`/stealth\` | 🥷 Incognito mode — nothing saved, nothing learned |\n| \`/help\` | 📖 Show this command list |\n| \`/discover\` | 🎲 Random gaming tip, secret, or lore drop (live + curated) |\n| \`/spoilers on\` · \`/spoilers off\` | 🛡️ Spoiler Shield — hides story reveals past where you are |\n| \`/progress <game> : <where>\` | 📍 Tell me where you are in a game |\n| \`/missables [game]\` | 🧭 What you can still permanently miss from where you are — spoiler-safe |\n| \`/price <game>\` | 💰 Live prices across PC stores — understands \`gta 5\`, \`bg3\`, \`ff7 remake\` |\n| \`/konami\` | 🎮 Unlock the legendary Konami Easter Egg |`,
+        text: `## Commands\n\n| Command | Description |\n|---------|-------------|\n| \`/clear\` | Wipe your entire chat history |\n| \`/stealth\` | Incognito mode — nothing saved, nothing learned |\n| \`/help\` | Show this command list |\n| \`/discover\` | Random gaming tip, secret, or lore drop (live + curated) |\n| \`/spoilers on\` · \`/spoilers off\` | Spoiler Shield — hides story reveals past where you are |\n| \`/progress <game> : <where>\` | Tell me where you are in a game |\n| \`/missables [game]\` | What you can still permanently miss from where you are — spoiler-safe |\n| \`/price <game>\` | Live prices across PC stores — understands \`gta 5\`, \`bg3\`, \`ff7 remake\` |\n| \`/konami\` | Unlock the legendary Konami Easter Egg |`,
         images: [],
         isCommand: true,
       }),
@@ -454,17 +477,17 @@ export default function useChat(user) {
           const saved = setSpoilerMode(arg === 'on' ? 'shield' : 'off');
           return {
             text: !saved
-              ? '## 🛡️ Spoiler Shield\n\nI couldn\'t save that setting in this browser (storage is blocked). The shield stays **on**.'
+              ? '## Spoiler Shield\n\nI couldn\'t save that setting in this browser (storage is blocked). The shield stays **on**.'
               : arg === 'on'
-                ? '## 🛡️ Spoiler Shield: ON\n\nI\'ll keep story reveals hidden. Tell me where you are in a game (*"I just beat Margit"*) and nothing past that point will show unless you click to reveal it.'
-                : '## 🛡️ Spoiler Shield: OFF\n\nFull answers from now on, reveals included. Say *"no spoilers"* in any message to shield just that one, or `/spoilers on` to turn it back on.',
+                ? '## Spoiler Shield: ON\n\nI\'ll keep story reveals hidden. Tell me where you are in a game (*"I just beat Margit"*) and nothing past that point will show unless you click to reveal it.'
+                : '## Spoiler Shield: OFF\n\nFull answers from now on, reveals included. Say *"no spoilers"* in any message to shield just that one, or `/spoilers on` to turn it back on.',
             images: [],
             isCommand: true,
           };
         }
         const prefs = loadSpoilerPrefs();
         return {
-          text: `## 🛡️ Spoiler Shield: ${prefs.mode === 'off' ? 'OFF' : 'ON'}\n\n` +
+          text: `## Spoiler Shield: ${prefs.mode === 'off' ? 'OFF' : 'ON'}\n\n` +
             'The shield answers everything up to where you are and hides anything past it behind click-to-reveal bars.\n\n' +
             '- `/spoilers on` · `/spoilers off`\n' +
             '- `/progress` — see or set where you are in each game\n' +
@@ -482,19 +505,19 @@ export default function useChat(user) {
         const raw = (args || '').trim();
         if (raw.toLowerCase() === 'clear') {
           clearGameProgress();
-          return { text: '## 📍 Progress cleared\n\nI\'ve forgotten where you were in every game.', images: [], isCommand: true };
+          return { text: '## Progress cleared\n\nI\'ve forgotten where you were in every game.', images: [], isCommand: true };
         }
         const parsed = parseProgressArgs(raw);
         if (parsed && parsed.where.toLowerCase() === 'clear') {
           clearGameProgress(parsed.game);
-          return { text: `## 📍 Progress cleared\n\nI've forgotten where you were in **${parsed.game}**.`, images: [], isCommand: true };
+          return { text: `## Progress cleared\n\nI've forgotten where you were in **${parsed.game}**.`, images: [], isCommand: true };
         }
         if (parsed) {
           const saved = setGameProgress(parsed.game, parsed.where);
           return {
             text: saved
-              ? `## 📍 Got it\n\n**${parsed.game}** — up to: **${parsed.where}**. I'll keep everything past that hidden.`
-              : '## 📍 Couldn\'t save that\n\nThis browser is blocking storage, so I can\'t remember it between messages. Mention where you are in your question instead.',
+              ? `## Got it\n\n**${parsed.game}** — up to: **${parsed.where}**. I'll keep everything past that hidden.`
+              : '## Couldn\'t save that\n\nThis browser is blocking storage, so I can\'t remember it between messages. Mention where you are in your question instead.',
             images: [],
             isCommand: true,
           };
@@ -502,7 +525,7 @@ export default function useChat(user) {
         const { progress } = loadSpoilerPrefs();
         const rows = Object.entries(progress);
         return {
-          text: '## 📍 Where you are\n\n' +
+          text: '## Where you are\n\n' +
             (rows.length
               ? rows.map(([g, w]) => `- **${g.replace(/\b[a-z]/g, c => c.toUpperCase())}** — ${w}`).join('\n') + '\n\n'
               : 'Nothing saved yet.\n\n') +
@@ -522,7 +545,7 @@ export default function useChat(user) {
         const { game, where } = pickMissablesGame(args, loadSpoilerPrefs().progress);
         if (!game) {
           return {
-            text: '## 🧭 Missables\n\nTell me which game: `/missables elden ring`.\n\n'
+            text: '## Missables\n\nTell me which game: `/missables elden ring`.\n\n'
               + 'It works best once I know where you are — set it with `/progress elden ring : just beat Margit` '
               + 'and the list starts from there, with nothing past that point spoiled.',
             images: [],
@@ -543,7 +566,7 @@ export default function useChat(user) {
         const typed = (args || '').trim();
         if (!typed) {
           return {
-            text: `## 💰 Live Price Check\n\n**Usage:** \`/price <game name>\`\n\n**Examples:**\n- \`/price gta 5\` → understood as **Grand Theft Auto V**\n- \`/price elden ring nightreign\` (a specific edition, not the base game)\n- \`/price bg3\` → **Baldur's Gate 3**\n- \`/price ff7 remake\`\n\nAbbreviations, roman numerals and common nicknames are recognised. Pulls live prices from **20+ stores** (Steam, GOG, Humble, Fanatical, Epic, etc.) via CheapShark.`,
+            text: `## Price check\n\n**Usage:** \`/price <game name>\`\n\n**Examples:**\n- \`/price gta 5\` → understood as **Grand Theft Auto V**\n- \`/price elden ring nightreign\` (a specific edition, not the base game)\n- \`/price bg3\` → **Baldur's Gate 3**\n- \`/price ff7 remake\`\n\nAbbreviations, roman numerals and common nicknames are recognised. Pulls live prices from **20+ stores** (Steam, GOG, Humble, Fanatical, Epic, etc.) via CheapShark.`,
             images: [],
             isCommand: true,
           };
@@ -558,60 +581,47 @@ export default function useChat(user) {
         const { query, alias } = resolvePriceQuery(typed);
         if (!query) {
           return {
-            text: `## 💰 Live Price Check\n\nCouldn't find a game title in "${typed}" — try \`/price <game name>\`.`,
+            text: `## Price check\n\nCouldn't find a game title in "${typed}" — try \`/price <game name>\`.`,
             images: [],
             isCommand: true,
           };
         }
 
-        setPriceActive(false);
-        setPriceData([]);
+        // One lookup feeds both the docked card and the reply. Inside it,
+        // exact=1 goes first and fuzzy fallbacks are scored, so "minecraft"
+        // doesn't land on Minecraft Legends. `unreachable` keeps a dropped
+        // connection from reading as "that game isn't tracked here".
+        const seq = priceSeq.current;
+        const { game, unreachable } = await lookupPrice(query);
+        const shownAs = alias || typed;
 
-        // Inside fetchGamePrice we also try exact=1 first and score fuzzy
-        // fallbacks to avoid "Minecraft → Minecraft Legends" misfires.
-        const [textResult, summaryResult] = await Promise.allSettled([
-          fetchPriceDirect(query),
-          fetchPriceSummaryDirect(query),
-        ]);
+        if (unreachable) {
+          return {
+            text: `## Couldn't reach the price service\n\nNo prices for **${shownAs}** right now. This is usually a dropped connection, so try \`/price ${typed}\` again in a few seconds.`,
+            images: [],
+            isCommand: true,
+          };
+        }
 
-        const summary = summaryResult.status === 'fulfilled' ? summaryResult.value : [];
-        // fetchPriceDirect returns '' for "searched, found nothing" and null
-        // for "couldn't reach CheapShark" — these need different messages,
-        // or a network hiccup reads as "that game isn't tracked here".
-        const priceBlock = textResult.status === 'fulfilled' ? textResult.value : null;
-        // The title CheapShark itself confirmed the match against, when we
-        // have one — more trustworthy than our own alias guess.
-        const matchedTitle = summary[0]?.title || alias;
+        if (!game) {
+          return {
+            text: `## No prices for ${shownAs}\n\nCheapShark has no current deals for "${shownAs}"${alias && alias !== typed ? ` (read from "${typed}")` : ''}. Usually that means one of these:\n\n- The name doesn't match the store listing. Try the exact title.\n- It's free to play (Valorant, Fortnite, League), so there's no price to track.\n- It's mobile or console only. CheapShark covers PC stores.\n- It was delisted.\n\nYou can also search [cheapshark.com](https://www.cheapshark.com/) directly.`,
+            images: [],
+            isCommand: true,
+          };
+        }
 
-        if (summary && summary.length > 0) {
-          setPriceData(summary);
+        if (seq === priceSeq.current) {
+          setPriceData([game]);
           setPriceActive(true);
         }
 
-        if (priceBlock === null) {
-          return {
-            text: `## 💰 Live Price Check — **${matchedTitle || typed}**\n\n**Couldn't reach CheapShark right now.** This is usually a dropped connection — try the same command again in a few seconds.`,
-            images: [],
-            isCommand: true,
-          };
-        }
-
-        if (!priceBlock) {
-          return {
-            text: `## 💰 Live Price Check — **${matchedTitle || typed}**\n\nNo current price data found on **CheapShark** for "${matchedTitle || typed}"${alias && alias !== typed ? ` (understood from "${typed}")` : ''}.\n\nPossible reasons:\n- The title still doesn't match CheapShark's listing — try the exact storefront name\n- Free-to-play game (Valorant, Fortnite, League — no price to track)\n- Mobile-only or console-exclusive (CheapShark covers PC stores only)\n- Recently delisted\n\nYou can also browse manually at https://www.cheapshark.com/`,
-            images: [],
-            isCommand: true,
-          };
-        }
-
-        const cleaned = priceBlock.trim();
-
-        const understood = alias && alias.toLowerCase() !== typed.toLowerCase()
-          ? `\n*Understood "${typed}" as **${alias}**.*\n`
-          : '';
-
+        // Say how the request was read only when it was really rewritten
+        // ("gta 5" → Grand Theft Auto V), not for a change of case.
+        const rewritten = game.title.toLowerCase() !== typed.toLowerCase()
+          && !!alias && alias.toLowerCase() !== typed.toLowerCase();
         return {
-          text: `## 💰 Live Price Check — **${matchedTitle || typed}**\n${understood}\n${cleaned}\n\n*— prices via CheapShark, refreshed every 15 min*`,
+          text: formatPriceMarkdown(game, { understoodFrom: rewritten ? typed : '' }),
           images: [],
           isCommand: true,
         };
@@ -667,7 +677,7 @@ export default function useChat(user) {
                   .slice(0, 700);
                 if (body.length > 80 || title.length > 40) {
                   return {
-                    text: `## 💡 Live Pro Tip — fresh from the gaming community\n\n**${title}**\n\n${body}${body.length === 700 ? '…' : ''}\n\n*— shared by r/${pick.subreddit} this week (${pick.score.toLocaleString()} upvotes)*`,
+                    text: `## Live Pro Tip — fresh from the gaming community\n\n**${title}**\n\n${body}${body.length === 700 ? '…' : ''}\n\n*— shared by r/${pick.subreddit} this week (${pick.score.toLocaleString()} upvotes)*`,
                     images: [],
                     isCommand: true,
                   };
@@ -796,7 +806,7 @@ export default function useChat(user) {
         ];
 
         return {
-          text: `## 💡 Pro Tip Unlocked\n\n${TIPS[Math.floor(Math.random() * TIPS.length)]}`,
+          text: `## Pro Tip Unlocked\n\n${TIPS[Math.floor(Math.random() * TIPS.length)]}`,
           images: [],
           isCommand: true,
         };
@@ -807,7 +817,7 @@ export default function useChat(user) {
       description: 'Unlock the legendary Konami cheat code Easter Egg',
       emoji: '🎮',
       action: async () => ({
-        text: `## 🎮 ↑ ↑ ↓ ↓ ← → ← → B A\n\n**KONAMI CODE ACCEPTED. 30 LIVES GRANTED.**\n\n> *The Konami Code was created by developer Kazuhisa Hashimoto in 1986 while testing Gradius. He found the game too hard, so he added a cheat. He forgot to remove it before shipping. Players discovered it, and a legend was born.*\n\n| Code Origin | Game | Effect |\n|-------------|------|--------|\n| 1986 | Gradius | Full power-up |\n| 1988 | Contra | 30 lives |\n| 2007 | ESPN.com | Unicorn confetti |\n| 2013 | Google | Searches in Wingdings |\n\n**One of the most recognized button combinations in human history.** 🎖️`,
+        text: `## ↑ ↑ ↓ ↓ ← → ← → B A\n\n**KONAMI CODE ACCEPTED. 30 LIVES GRANTED.**\n\n> *The Konami Code was created by developer Kazuhisa Hashimoto in 1986 while testing Gradius. He found the game too hard, so he added a cheat. He forgot to remove it before shipping. Players discovered it, and a legend was born.*\n\n| Code Origin | Game | Effect |\n|-------------|------|--------|\n| 1986 | Gradius | Full power-up |\n| 1988 | Contra | 30 lives |\n| 2007 | ESPN.com | Unicorn confetti |\n| 2013 | Google | Searches in Wingdings |\n\n**One of the most recognized button combinations in human history.**`,
         images: [],
         isCommand: true,
       }),
@@ -824,9 +834,18 @@ export default function useChat(user) {
     const trimmed = text.trim().toLowerCase();
     const cmd = SLASH_COMMANDS.find(c => trimmed === c.trigger || trimmed.startsWith(c.trigger + ' '));
     if (!cmd) return false;
+    // Any command moves the conversation on from the last price card,
+    // /price included: it opens a fresh one only if it finds the game.
+    dismissPrice();
     // Pass any text after the trigger as args (e.g. "/price elden ring" → "elden ring")
     const args = text.trim().slice(cmd.trigger.length).trim();
-    const result = await cmd.action(args);
+    setCommandPending(cmd.trigger);
+    let result;
+    try {
+      result = await cmd.action(args);
+    } finally {
+      setCommandPending(null);
+    }
     if (result === null) return true; // e.g. /clear — no message
     // A command that is really a well-phrased question (/missables): the
     // caller sends `prompt` to the model and shows what the player typed.
@@ -913,9 +932,9 @@ export default function useChat(user) {
     setRedditActive(false);
     setWikiActive(false);
     setWebActive(false);
-    setPriceActive(false);
     setStreamStage(null);
-    setPriceData([]);
+    dismissPrice();
+    const priceTurn = priceSeq.current;
 
     // Create a new AbortController for this request
     const controller = new AbortController();
@@ -941,11 +960,10 @@ export default function useChat(user) {
       // Always run client-side scraping. Scope is handled conversationally by
       // the model itself now — there is no pre-filter here and no refusal gate
       // on the server, so every message gets full context gathering.
-      const [redditResult, wikiResult, priceResult, priceSummaryResult] = await Promise.allSettled([
+      const [redditResult, wikiResult, priceResult] = await Promise.allSettled([
         searchReddit(prompt),
         searchWikis(prompt),
-        priceSubject ? fetchPriceDirect(priceSubject) : Promise.resolve(''),
-        priceSubject ? fetchPriceSummaryDirect(priceSubject) : Promise.resolve([]),
+        priceSubject ? lookupPrice(priceSubject) : Promise.resolve({ game: null }),
       ]);
 
       if (redditResult.status === 'fulfilled' && redditResult.value) {
@@ -956,15 +974,15 @@ export default function useChat(user) {
         wikiContext = wikiResult.value;
         setWikiActive(true);
       }
-      // fetchPriceDirect returns null on a network failure (vs '' for
-      // "searched, found nothing") — either way there's no context to add,
-      // but only a real hit should light up the badge.
-      if (priceResult.status === 'fulfilled' && priceResult.value) {
-        priceContext = priceResult.value;
-      }
-      if (priceSummaryResult.status === 'fulfilled' && priceSummaryResult.value?.length) {
-        setPriceData(priceSummaryResult.value);
-        setPriceActive(true);
+      // A miss and an unreachable CheapShark both add nothing; only a real
+      // hit becomes context for the model and lights up the price card.
+      const pricedGame = priceResult.status === 'fulfilled' ? priceResult.value?.game : null;
+      if (pricedGame) {
+        priceContext = formatPriceContext([pricedGame]);
+        if (priceTurn === priceSeq.current) {
+          setPriceData([pricedGame]);
+          setPriceActive(true);
+        }
       }
 
       // Step 2: Call AI with all gathered context + attachments.
@@ -1113,6 +1131,7 @@ export default function useChat(user) {
     stealthMode,
     stealthFx,
     isLoading,
+    commandPending,
     streamStage,
     sendMessage,
     cancelRequest,
@@ -1122,6 +1141,7 @@ export default function useChat(user) {
     webActive,
     priceActive,
     priceData,
+    dismissPrice,
     SLASH_COMMANDS,
   };
 }
