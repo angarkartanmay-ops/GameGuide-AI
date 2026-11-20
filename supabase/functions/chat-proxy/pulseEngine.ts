@@ -12,13 +12,20 @@
 import { detectTemporal } from './temporalDetector.ts';
 import { findOfficial, OfficialSource } from './officialSources.ts';
 import { multiWebSearch } from './webSearch.ts';
-import { rankBlocks, topNCompact, RankableBlock } from './recencyRanker.ts';
+import { rankBlocks, topNCompact, RankableBlock, RankedBlock } from './recencyRanker.ts';
 
 interface PulseResult {
   fired: boolean;
   contextBlock: string;
   sourcesUsed: string[];
   diagnostics: Record<string, any>;
+  /**
+   * The blocks that made it into contextBlock. Exposed so source corroboration
+   * counts them: it used to see only the omni-scraper, and when that came back
+   * empty it told the model it had NO live sources while this block sat in
+   * the same prompt with the answer.
+   */
+  topBlocks?: RankedBlock[];
 }
 
 const PULSE_CACHE = new Map<string, { ts: number; result: PulseResult }>();
@@ -39,6 +46,8 @@ export async function runPulse(
   prompt: string,
   game: string | null,
   todayISO: string,
+  /** Full title to search for ("Grand Theft Auto VI" for "gta 6"). */
+  searchTitle?: string | null,
 ): Promise<PulseResult> {
   // Skip ONLY pure chitchat ("hi", "thanks", "lol"). Every real question
   // — temporal or not — gets a live search. The model then fuses live data
@@ -59,9 +68,11 @@ export async function runPulse(
   const blocks: RankableBlock[] = [];
   const sourcesUsed: string[] = [];
 
-  // Get current year/month for query formulation
-  const currentYear = new Date().getFullYear();
-  const currentMonth = new Date().toLocaleString('en-US', { month: 'long' });
+  // Year and month come from todayISO, the same date the model is told, so
+  // the queries and the prompt can never disagree about what "now" is.
+  const todayDate = new Date(`${todayISO}T12:00:00Z`);
+  const currentYear = todayDate.getUTCFullYear();
+  const currentMonth = todayDate.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
   const yyyy_mm = todayISO.slice(0, 7);
 
   // ── Stage 1: Official source (highest authority) ─────────────────────
@@ -77,6 +88,9 @@ export async function runPulse(
   // chances of finding current information. Queries differ depending on
   // whether the user used temporal language — but PULSE always fires.
   const searchQueries: string[] = [];
+  // Official-source lookup keeps the name as typed (its alias table is keyed
+  // that way); search queries use the full title.
+  game = searchTitle || game;
   const promptForSearch = prompt.length > 200 ? prompt.slice(0, 200) : prompt;
 
   if (isTemporal) {
@@ -163,6 +177,7 @@ ANSWERING CONTRACT (NON-NEGOTIABLE):
 4. Cite which block confirmed each non-obvious fact ("*per Steam News*", "*per Wikipedia*", "*per official API*").
 5. Combine: live data for facts/numbers/dates, your reasoning for analysis/explanation/recommendation.
 6. Never tell the user you "can't browse the internet" — these blocks ARE the internet, fetched seconds ago.
+7. Today is ${todayISO}. Each block shows its age; prefer the newest. A block written before a release date may say "set to launch on X" — if X is on or before today, it HAS launched. Never repeat a passed date in the future tense.
 
 Search queries used: ${uniqueQueries.slice(0, 3).map(q => `"${q}"`).join(', ')}
 
@@ -175,6 +190,7 @@ ${top}
     fired: true,
     contextBlock,
     sourcesUsed,
+    topBlocks: top ? ranked.slice(0, 4) : [],
     diagnostics: {
       mode: isTemporal ? 'temporal' : 'evergreen',
       temporalReasons: sig.reasons,

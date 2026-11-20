@@ -1,4 +1,8 @@
 import { runPulse } from './pulseEngine.ts';
+import { detectTemporal } from './temporalDetector.ts';
+import {
+  buildDateGrounding, buildElapsedDatesBlock, isReleaseStatusQuestion, normalizeHitDate, ageLabel,
+} from './freshness.ts';
 import { enrichVisionAttachments, VisionEnrichment } from './visionPipeline.ts';
 import {
   PROVIDERS, ProviderConfig, MeshModel, planRoute, geminiFirst, buildRegistry,
@@ -515,7 +519,7 @@ interface QueryProfile {
 // Recency signal available at classification time, before PULSE has run.
 // Deliberately broad: a false positive costs one agentic call, a false
 // negative costs a stale answer — which is the failure this project keeps hitting.
-const TEMPORAL_HINT_RX = /\b(latest|newest|new|current|currently|right now|today|this (?:week|month|season|patch|year)|recent|recently|just (?:released|launched|dropped)|upcoming|coming soon|release date|releasing|patch notes|meta|nerf|buff|202[5-9]|20[3-9]d)\b/i;
+const TEMPORAL_HINT_RX = /\b(latest|newest|new|current|currently|right now|today|this (?:week|month|season|patch|year)|recent|recently|just (?:released|launched|dropped)|upcoming|coming soon|release date|releasing|patch notes|meta|nerf|buff|out yet|released yet|come out|came out|202[5-9]|20[3-9]\d)\b/i;
 
 const INTENT_PATTERNS: Array<{ intent: Intent; persona: keyof typeof PERSONAS; rx: RegExp }> = [
   { intent: 'troubleshoot', persona: 'techwizard', rx: /\b(error|crash|won.?t (start|load|launch)|black screen|stuck|bug|glitch|fix|fps drop|lag|freezing|stuttering|disconnect|install|update fail|won.?t connect|driver|gpu|directx|launcher|won.?t download)\b/i },
@@ -1080,7 +1084,9 @@ function classifyQuery(prompt: string, attachments: any[], history: any[]): Quer
     isMetaQuery: intent === 'meta',
     // Cheap lexical check; PULSE runs the authoritative detector later, but
     // routing has to decide before that result exists.
-    temporal: TEMPORAL_HINT_RX.test(prompt),
+    // isReleaseStatusQuestion: "is GTA 6 out?" has no recency keyword at all,
+    // and its answer flips on a single day.
+    temporal: TEMPORAL_HINT_RX.test(prompt) || isReleaseStatusQuestion(prompt),
     priority: false,
   };
 }
@@ -1505,6 +1511,73 @@ const STEAM_APPIDS: Record<string, number> = {
   'splitgate': 677620, 'splitgate 2': 0,
 };
 
+// ─── Canonical titles for shorthand names ─────────────────────────────────
+// Players type "gta 6"; Wikipedia, news headlines and stores say "Grand
+// Theft Auto VI". Looking up the shorthand title-cased ("Gta 6") missed the
+// article, and the opensearch fallback then returned "GTFO (video game)" as
+// the research for GTA 6. Searches and source matching use the full name;
+// every user-facing label keeps what the player typed.
+const CANONICAL_TITLES: Record<string, string> = {
+  'gta 6': 'Grand Theft Auto VI', 'gta vi': 'Grand Theft Auto VI', 'grand theft auto 6': 'Grand Theft Auto VI',
+  'gta 5': 'Grand Theft Auto V', 'gta v': 'Grand Theft Auto V', 'grand theft auto 5': 'Grand Theft Auto V',
+  'gta online': 'GTA Online', 'gta': 'Grand Theft Auto',
+  'rdr2': 'Red Dead Redemption 2', 'red dead': 'Red Dead Redemption 2',
+  'bg3': "Baldur's Gate 3", 'baldurs gate 3': "Baldur's Gate 3", 'baldurs gate': "Baldur's Gate 3",
+  'totk': 'The Legend of Zelda: Tears of the Kingdom', 'tears of the kingdom': 'The Legend of Zelda: Tears of the Kingdom',
+  'botw': 'The Legend of Zelda: Breath of the Wild', 'breath of the wild': 'The Legend of Zelda: Breath of the Wild',
+  'ff7 rebirth': 'Final Fantasy VII Rebirth', 'ff7 remake': 'Final Fantasy VII Remake',
+  'ff16': 'Final Fantasy XVI', 'final fantasy 16': 'Final Fantasy XVI',
+  'ffxiv': 'Final Fantasy XIV', 'ff14': 'Final Fantasy XIV',
+  'poe': 'Path of Exile', 'poe 2': 'Path of Exile 2',
+  'mh wilds': 'Monster Hunter Wilds', 'mh rise': 'Monster Hunter Rise', 'mh world': 'Monster Hunter: World',
+  'hsr': 'Honkai: Star Rail', 'star rail': 'Honkai: Star Rail', 'honkai star rail': 'Honkai: Star Rail',
+  'zzz': 'Zenless Zone Zero', 'wuwa': 'Wuthering Waves', 'genshin': 'Genshin Impact',
+  'cs2': 'Counter-Strike 2', 'csgo': 'Counter-Strike: Global Offensive', 'cs:go': 'Counter-Strike: Global Offensive',
+  'bo6': 'Call of Duty: Black Ops 6', 'black ops 6': 'Call of Duty: Black Ops 6',
+  'mw3': 'Call of Duty: Modern Warfare III', 'mw2': 'Call of Duty: Modern Warfare II',
+  'codm': 'Call of Duty: Mobile', 'cod': 'Call of Duty',
+  'bgmi': 'Battlegrounds Mobile India', 'mlbb': 'Mobile Legends: Bang Bang',
+  'osrs': 'Old School RuneScape', 'wow': 'World of Warcraft', 'lol': 'League of Legends',
+  'dmc5': 'Devil May Cry 5', 'sf6': 'Street Fighter 6', 'mk1': 'Mortal Kombat 1', 'dbfz': 'Dragon Ball FighterZ',
+  'tf2': 'Team Fortress 2', 'gmod': "Garry's Mod", 'l4d2': 'Left 4 Dead 2',
+  'ck3': 'Crusader Kings III', 'eu4': 'Europa Universalis IV', 'civ 6': 'Civilization VI',
+  'aoe4': 'Age of Empires IV', 'twwh3': 'Total War: Warhammer III', 'gt7': 'Gran Turismo 7',
+  'r6': 'Tom Clancy\'s Rainbow Six Siege', 'siege': 'Tom Clancy\'s Rainbow Six Siege', 'rainbow six siege': 'Tom Clancy\'s Rainbow Six Siege',
+  'coc': 'Clash of Clans', 'fgo': 'Fate/Grand Order', 'pgr': 'Punishing: Gray Raven',
+  'wukong': 'Black Myth: Wukong', 'black myth': 'Black Myth: Wukong', 'black myth wukong': 'Black Myth: Wukong',
+  'expedition 33': 'Clair Obscur: Expedition 33', 'clair obscur': 'Clair Obscur: Expedition 33',
+  'silksong': 'Hollow Knight: Silksong', 'hollow knight silksong': 'Hollow Knight: Silksong',
+  'helldivers': 'Helldivers 2', 'tarkov': 'Escape from Tarkov', 'rivals': 'Marvel Rivals',
+};
+
+/** The full title for a shorthand ("gta 6" → "Grand Theft Auto VI"), else the input. */
+function canonicalTitle(game: string): string {
+  return CANONICAL_TITLES[(game || '').toLowerCase().trim()] || game;
+}
+
+/** Every name a source might use for this game: what was typed, plus the full title. */
+function titleAliases(game: string): string[] {
+  const key = (game || '').toLowerCase().trim();
+  const canon = canonicalTitle(game).toLowerCase();
+  const out = new Set([key, canon]);
+  // Other shorthands of the same game ("gta 6" also appears as "gta vi").
+  // Multi-word or numbered ones only: a bare "siege" or "rivals" would match
+  // unrelated headlines.
+  for (const [k, v] of Object.entries(CANONICAL_TITLES)) {
+    if (v.toLowerCase() === canon && (k.includes(' ') || /\d/.test(k))) out.add(k);
+  }
+  return [...out].filter(Boolean);
+}
+
+/** One whole-word regex matching any alias. */
+function aliasRegex(game: string): RegExp {
+  const alt = titleAliases(game)
+    .sort((a, b) => b.length - a.length)
+    .map(a => a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|');
+  return new RegExp(`(^|[^a-z0-9])(?:${alt})($|[^a-z0-9])`, 'i');
+}
+
 function gameToSteamAppId(game: string): number | null {
   const lower = game.toLowerCase();
   // Exact match first
@@ -1535,7 +1608,9 @@ async function fetchWikipedia(game: string, timeoutMs = 2600): Promise<ScrapeBlo
   if (cached) return cached;
 
   const titleCase = game.split(' ').map(w => w.length > 0 ? (w[0].toUpperCase() + w.slice(1)) : w).join(' ');
+  const canonical = canonicalTitle(game);
   const variants = [
+    ...(canonical !== game ? [canonical] : []),
     titleCase,
     `${titleCase} (video game)`,
     `${titleCase} (game)`,
@@ -1555,7 +1630,7 @@ async function fetchWikipedia(game: string, timeoutMs = 2600): Promise<ScrapeBlo
 
       // Sanity check — extract must mention the game name OR be tagged as a game article
       const extractLower = (data.extract || '').toLowerCase();
-      const gameLower = game.toLowerCase();
+      const gameLower = canonical.toLowerCase();
       const titleLower = (data.title || '').toLowerCase();
       const looksLikeGame = extractLower.includes('video game') || extractLower.includes('multiplayer') ||
         extractLower.includes('developed by') || extractLower.includes('released') ||
@@ -1573,14 +1648,22 @@ async function fetchWikipedia(game: string, timeoutMs = 2600): Promise<ScrapeBlo
 
   // Last-resort: search API to find the most-likely article title, then try summary
   try {
-    const searchUrl = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(game + ' video game')}&limit=3&format=json&origin=*`;
+    const searchUrl = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(canonical + ' video game')}&limit=3&format=json&origin=*`;
     const sres = await fetchWithTimeout(searchUrl, {
       headers: { 'User-Agent': OMNI_USER_AGENT, 'Accept': 'application/json' },
     }, 1500);
     if (sres.ok) {
       const sdata = await sres.json();
       const candidates = Array.isArray(sdata) && Array.isArray(sdata[1]) ? sdata[1] : [];
-      for (const candidate of candidates.slice(0, 2)) {
+      // The fallback took the top hit on trust, so "gta 6" came back as
+      // "GTFO (video game)". A candidate must share a real word (or the
+      // installment number) with the title we asked for.
+      const wanted = new Set(
+        titleAliases(game).join(' ').toLowerCase().split(/[^a-z0-9]+/)
+          .filter(w => w.length >= 3 && !['the', 'and', 'video', 'game', 'games'].includes(w) || /^\d+$/.test(w)),
+      );
+      const relevant = (c: string) => c.toLowerCase().split(/[^a-z0-9]+/).some(w => wanted.has(w));
+      for (const candidate of candidates.filter((c: string) => relevant(c)).slice(0, 2)) {
         try {
           const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(candidate)}`;
           const res = await fetchWithTimeout(url, {
@@ -1655,7 +1738,7 @@ async function fetchInvidious(game: string, timeoutMs = 2600): Promise<ScrapeBlo
   if (cached) return cached;
 
   const currentYear = new Date().getFullYear();
-  const q = encodeURIComponent(`${game} update guide ${currentYear}`);
+  const q = encodeURIComponent(`${canonicalTitle(game)} ${currentYear}`);
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
       const url = `${instance}/api/v1/search?q=${q}&type=video&sort_by=upload_date`;
@@ -1667,8 +1750,7 @@ async function fetchInvidious(game: string, timeoutMs = 2600): Promise<ScrapeBlo
       if (!Array.isArray(data) || data.length === 0) continue;
 
       // Filter: video title MUST mention the game (word-boundary match) — kills off-topic results
-      const escaped = game.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const matchRx = new RegExp(`\\b${escaped}\\b`, 'i');
+      const matchRx = aliasRegex(game);
       const relevant = data.filter((v: any) => matchRx.test(v.title || '') || matchRx.test(v.description || ''));
       if (relevant.length === 0) continue;
 
@@ -1725,10 +1807,10 @@ async function fetchGamingRSS(game: string, timeoutMs = 2400): Promise<ScrapeBlo
   const cached = omniCacheGet('rss', game);
   if (cached) return cached;
 
-  const lower = game.toLowerCase();
-  // Build a word-boundary regex to avoid false positives like "dota" matching "idiot"
-  const escaped = lower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const matchRx = new RegExp(`\\b${escaped}\\b`, 'i');
+  // Whole-word match on every name the game goes by: headlines say "GTA VI"
+  // or "Grand Theft Auto 6" as often as "GTA 6", and matching only what the
+  // player typed dropped those articles. Whole words keep "dota" out of "idiot".
+  const matchRx = aliasRegex(game);
 
   try {
     const results = await Promise.allSettled(
@@ -1849,21 +1931,32 @@ async function fetchSupercellAPI(game: string, timeoutMs = 2600): Promise<Scrape
 }
 
 // ─── Web Search as Omni source ────────────────────────────────────────────
-async function fetchWebSearchForGame(game: string, prompt: string, timeoutMs = 3000): Promise<ScrapeBlock | null> {
-  const cached = omniCacheGet('web-search-omni', game);
+async function fetchWebSearchForGame(game: string, prompt: string, timeoutMs = 3000, recent = false): Promise<ScrapeBlock | null> {
+  // Keyed on the recency mode too: a "latest news" search filtered to recent
+  // months and an unfiltered one are different research.
+  const cacheKey = `${game}|${recent ? 'recent' : 'any'}`;
+  const cached = omniCacheGet('web-search-omni', cacheKey);
   if (cached) return cached;
 
   try {
     const { multiWebSearch } = await import('./webSearch.ts');
-    const currentYear = new Date().getFullYear();
-    const query = `${game} latest news update ${currentYear}`;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const month = now.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' });
+    // The full title (headlines say "Grand Theft Auto VI", not "gta 6"), and
+    // for a recency question the current month, so launch-week coverage
+    // outranks the year of previews before it.
+    const title = canonicalTitle(game);
+    const query = recent
+      ? `${title} news ${month} ${currentYear}`
+      : `${title} latest news update ${currentYear}`;
     // `timeoutMs` was accepted and then never used: multiWebSearch fans out to
     // five search backends under Promise.allSettled with no deadline of its
     // own, so this call ran unbounded and measured 8.6-9.5s in production —
     // single-handedly blowing omniScrape's whole budget and starving every
     // other source. Enforce the deadline here, where the parameter is declared.
     const hits = await Promise.race([
-      multiWebSearch(query, 6),
+      multiWebSearch(query, 6, recent),
       new Promise<null>(resolve => setTimeout(() => resolve(null), timeoutMs)),
     ]);
     if (!hits) {
@@ -1872,13 +1965,19 @@ async function fetchWebSearchForGame(game: string, prompt: string, timeoutMs = 3
     }
     if (hits.length === 0) return null;
 
-    const formatted = hits.slice(0, 5).map((h, i) =>
-      `[${i+1}] **${h.title}**\n  ${h.snippet}\n  🔗 ${h.url}`
-    ).join('\n\n');
+    // Newest first, each with its date. Without the dates the model could not
+    // tell a launch-day report from a preview written a year earlier, and it
+    // repeated whichever it read first.
+    const dated = hits.map((h, i) => ({ h, i, t: Date.parse(normalizeHitDate(h.publishedISO) || '') }));
+    dated.sort((a, b) => (isNaN(b.t) ? -Infinity : b.t) - (isNaN(a.t) ? -Infinity : a.t) || a.i - b.i);
+    const formatted = dated.slice(0, 5).map(({ h }, i) => {
+      const age = ageLabel(normalizeHitDate(h.publishedISO));
+      return `[${i+1}] ${age ? `(${age}) ` : '(undated) '}**${h.title}**\n  ${h.snippet}\n  🔗 ${h.url}`;
+    }).join('\n\n');
 
-    const text = `Web search results for **${game}** (live from Google/Serper/SearXNG — ${new Date().toISOString().slice(0, 10)}):\n\n${formatted}`;
+    const text = `Web search results for **${game}** (live from Google/Serper/SearXNG — ${now.toISOString().slice(0, 10)}; newest first, undated last):\n\n${formatted}`;
     const block: ScrapeBlock = { text, score: 7, source: 'web-search' };
-    omniCacheSet('web-search-omni', game, block);
+    omniCacheSet('web-search-omni', cacheKey, block);
     return block;
   } catch (e: any) {
     console.warn(`[OMNI] web-search-omni failed for "${game}": ${e.message}`);
@@ -1925,6 +2024,9 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
   // Web search is given the smaller of its own default and what is actually
   // left of the budget, so one slow source can no longer eat the whole window.
   const webSearchMs = Math.max(2000, Math.min(5000, totalBudgetMs - 1500));
+  // Recency questions ("is it out?", "latest patch") get the recency-filtered
+  // search; evergreen ones keep the full index, where the best guides live.
+  const recent = detectTemporal(_prompt).isTemporal;
   const allFetches = Promise.all(
     named
       ? [
@@ -1933,11 +2035,11 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
           collect(fetchSteamNews(subject)),
           collect(fetchInvidious(subject)),
           collect(fetchGamingRSS(subject)),
-          collect(fetchWebSearchForGame(subject, _prompt, webSearchMs)),
+          collect(fetchWebSearchForGame(subject, _prompt, webSearchMs, recent)),
         ]
       : [
           collect(fetchWikipedia(subject)),
-          collect(fetchWebSearchForGame(subject, _prompt, webSearchMs)),
+          collect(fetchWebSearchForGame(subject, _prompt, webSearchMs, recent)),
         ]
   );
 
@@ -3274,6 +3376,9 @@ async function runChatPipeline(
     // If hit, return immediately — skip omni-scrape AND the mesh.
     // Everything that makes this answer specific to this player — see cacheKey.
     const personalization = JSON.stringify({
+      // The day is part of the answer: "is it out?" can flip at midnight, and
+      // an answer cached on launch eve must not be served on launch day.
+      day: new Date().toISOString().slice(0, 10),
       profile: playerProfile ?? null,
       spoiler: clientSpoiler,
       // The whole conversation, not a fingerprint of "progress-looking" turns:
@@ -3370,7 +3475,7 @@ async function runChatPipeline(
     const pulsePromise = smallTalk
       ? Promise.resolve({ fired: false, contextBlock: '', sourcesUsed: [], diagnostics: { reason: 'small-talk' } } as unknown as Awaited<ReturnType<typeof runPulse>>)
       : withDeadline(
-      runPulse(prompt, pulseGame, todayISO),
+      runPulse(prompt, pulseGame, todayISO, pulseGame ? canonicalTitle(pulseGame) : null),
       PULSE_BUDGET_MS,
       { fired: false, contextBlock: '', sourcesUsed: [], diagnostics: { reason: 'deadline' } } as unknown as Awaited<ReturnType<typeof runPulse>>,
     );
@@ -3565,6 +3670,16 @@ async function runChatPipeline(
       })),
       ...(wikiContext ? [{ source: 'fandom-wiki', text: wikiContext, authority: 6 }] : []),
       ...(redditContext ? [{ source: 'reddit', text: redditContext, authority: 4 }] : []),
+      // PULSE's results are in the same prompt; leaving them out reported
+      // "SOURCE CONFIDENCE: NONE — answer from training data alone" over a
+      // block that held the launch-day news.
+      ...(pulse.topBlocks || []).map(b => ({
+        source: b.source,
+        text: b.text,
+        url: b.url,
+        publishedISO: b.publishedISO,
+        authority: b.baseAuthority ?? 5,
+      })),
     ];
     const corro = corroborate(corroborationInputs, pulse.diagnostics?.mode === 'temporal');
 
@@ -3592,6 +3707,22 @@ async function runChatPipeline(
     // where a confident wrong answer does the most harm. One short rule, read
     // last, instead of the old ACCURACY LOCK (which was appended after the
     // prompt had already been built and so never reached any model).
+    // Dates the sources still call "upcoming" that have already passed.
+    // Launch coverage is written in advance, so on launch week nearly every
+    // result says "set to launch November 19, 2026"; the models repeated that
+    // tense even when told today's date. The arithmetic is done here, and the
+    // model is handed the conclusion.
+    if (!emotionalTurn && !smallTalk) {
+      const elapsed = buildElapsedDatesBlock(
+        [pulse.contextBlock || '', ...omniContextStrings, wikiContext || '', redditContext || ''].join('\n'),
+        todayISO,
+      );
+      if (elapsed) {
+        contextBlocks.push(elapsed);
+        console.log('[FRESHNESS] past-dated "upcoming" claims flagged in sources');
+      }
+    }
+
     if (!emotionalTurn && !smallTalk) {
       contextBlocks.push(`=== ACCURACY ===
 Answer from the INTEL above wherever it covers the question. For any specific name, number, location, reward or step that neither the INTEL nor well-established knowledge confirms, say you are not sure instead of guessing. Never invent one.
@@ -3651,24 +3782,16 @@ You are GameGuide-AI, a gaming assistant. Introduce yourself only as GameGuide-A
     // game-specific HUD knowledge BEFORE the persona overlay. This forces the
     // model to ground its analysis in pixel-level facts instead of guessing.
     const visionBlock = profile.hasVision ? '\n\n' + buildVisionPrompt(profile) : '';
-    // ALWAYS include temporal grounding when a game is detected — not just
-    // when PULSE fires. This ensures the model knows today's date even for
-    // queries that didn't trigger PULSE but still benefit from temporal context.
-    const dateGroundingBlock = (!emotionalTurn && (pulse.fired || resolvedGame)) ? `
-
-=== 📅 TEMPORAL GROUNDING (MANDATORY — READ CAREFULLY) ===
-TODAY'S DATE IS: ${todayISO}
-Your training data has a cutoff date that is SEVERAL MONTHS to YEARS before today.
-
-🚨 ABSOLUTE RULES — VIOLATION IS UNACCEPTABLE:
-1. NEVER state that something is "the newest", "the latest", "the current", or "just released" using ONLY your training data. Such claims MUST be backed by the PULSE LIVE INTEL block below (if present) OR cited from one of the live INTEL blocks (OFFICIAL API, WEB SEARCH, REDDIT, WIKI, STEAM NEWS, YOUTUBE, GAMING NEWS).
-2. If any INTEL block is present, IT OVERRIDES YOUR TRAINING DATA on temporal facts. Cite it explicitly: "According to [source] from [date]…"
-3. If the user asks "what's new", "which is the newest", "what's releasing", "current season", etc. and you have NO live INTEL data on the topic, you MUST reply: "I don't have verified live data on this right now — my training cut off before today (${todayISO}). The most recent thing I know of from training is [X], but please double-check the official source for anything newer."
-4. NEVER invent release dates, season numbers, or hero/card names for current content. If unsure, say "I'm not sure — verify on the official source."
-5. If your training says "X is the newest" but live data says "Y is the newest", YOUR ANSWER MUST SAY Y. Your training is outdated. The live data was fetched SECONDS ago.
-6. Live-service games change EVERY MONTH. Heroes, cards, characters, maps, operators, patches — these are added constantly. NEVER assume your training-era knowledge is still accurate.
-=== END TEMPORAL GROUNDING ===
-` : '';
+    // Today's date goes into EVERY system prompt. It used to be added only
+    // when PULSE fired or a game was detected, so a turn whose retrieval ran
+    // out of time, or whose game wasn't recognised, reasoned from the model's
+    // training-era "now": the day after GTA VI launched it still called it
+    // "coming November 19, 2026". The full rule set rides along whenever
+    // there is live data or a game to be current about; emotional turns get
+    // only the date, never live-data disclaimers.
+    const dateGroundingBlock = buildDateGrounding(todayISO, {
+      full: !emotionalTurn && !smallTalk && (pulse.fired || !!resolvedGame || subjects.length > 0),
+    });
     // Correction directive goes LAST so it sits closest to the user turn and
     // outranks the persona overlay + accuracy lock in the model's attention.
     const correctionBlock = userIsCorrecting

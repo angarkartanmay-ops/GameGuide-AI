@@ -57,6 +57,13 @@ export function generateModules() {
     slice(src, 'const EMOTIONAL_RX', 'function ensureFollowUps') +
     '\nexport { isCorrection, shouldSkipAutoFollowUps, EMOTIONAL_RX };\n';
 
+  // Shorthand → full title ("gta 6" → "Grand Theft Auto VI"), used for every
+  // live lookup. Pure, so it slices out like the detection helpers.
+  const titles =
+    slice(src, '// ─── Canonical titles for shorthand names', 'function gameToSteamAppId') +
+    '\nexport { canonicalTitle, titleAliases, aliasRegex, CANONICAL_TITLES };\n';
+  writeFileSync(join(OUT_DIR, 'titles.ts'), titles);
+
   const detectionPath = join(OUT_DIR, 'detection.ts');
   const behaviourPath = join(OUT_DIR, 'behaviour.ts');
   writeFileSync(detectionPath, detection);

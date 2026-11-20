@@ -6,6 +6,8 @@
 // Google CSE and Serper are the most reliable for current gaming data.
 // SearXNG is a free fallback. DuckDuckGo Lite is last resort.
 
+import { normalizeHitDate } from './freshness.ts';
+
 /**
  * Reads an API key defensively.
  *
@@ -19,7 +21,10 @@ function envKey(...names: string[]): string {
     const raw = Deno.env.get(n);
     if (!raw) continue;
     const cleaned = raw
-      .replace(/s+#.*$/, '')        // trailing inline comment
+      // Was /s+#.*$/ (the LETTER s, a lost backslash): "KEY # note" kept its
+      // comment and authenticated as garbage, so the search backend 403'd and
+      // every answer quietly lost its live results.
+      .replace(/\s+#.*$/, '')       // trailing inline comment
       .replace(/^["']|["']$/g, '')   // wrapping quotes
       .trim();
     if (cleaned) return cleaned;
@@ -122,6 +127,19 @@ async function failDetail(res: Response): Promise<string> {
   }
 }
 
+// Google CSE has no date field; the page's own metadata is the best we get.
+// article:published_time alone missed most gaming sites, which set the
+// modified or OpenGraph variants, so their launch-day articles ranked as
+// undated next to year-old previews.
+function cseDate(r: any): string | undefined {
+  const tags = r?.pagemap?.metatags?.[0] || {};
+  for (const k of ['article:modified_time', 'article:published_time', 'og:updated_time', 'date', 'datepublished', 'datemodified', 'pubdate', 'dc.date']) {
+    const v = normalizeHitDate(tags[k]);
+    if (v) return v;
+  }
+  return normalizeHitDate(r?.pagemap?.newsarticle?.[0]?.datepublished);
+}
+
 export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000, recent = false): Promise<SearchHit[]> {
   const apiKey = envKey('GOOGLE_CSE_API_KEY', 'GOOGLE_API_KEY');
   const cseId = envKey('GOOGLE_CSE_ID');
@@ -143,7 +161,7 @@ export async function googleCSESearch(query: string, limit = 6, timeoutMs = 5000
       title: r.title || '',
       url: r.link || '',
       snippet: r.snippet || '',
-      publishedISO: r.pagemap?.metatags?.[0]?.['article:published_time'] || undefined,
+      publishedISO: cseDate(r),
       source: 'google-cse' as const,
     }));
   } catch {
@@ -192,7 +210,9 @@ export async function serperSearch(query: string, limit = 6, timeoutMs = 5000, r
         title: r.title || '',
         url: r.link || '',
         snippet: r.snippet || '',
-        publishedISO: r.date || undefined,
+        // Serper's newest results carry relative dates ("2 days ago"),
+        // which Date.parse cannot read — normalise before ranking.
+        publishedISO: normalizeHitDate(r.date),
         source: 'serper' as const,
       });
     }
@@ -254,7 +274,7 @@ export async function searxngSearch(query: string, limit = 6, timeoutMs = 2500, 
         title: r.title || '',
         url: r.url || '',
         snippet: r.content || '',
-        publishedISO: r.publishedDate || undefined,
+        publishedISO: normalizeHitDate(r.publishedDate),
         source: 'searxng' as const,
       }));
     } catch {
@@ -345,7 +365,8 @@ export async function braveSearch(query: string, limit = 6, timeoutMs = 4500, re
       title: r.title || '',
       url: r.url || '',
       snippet: r.description || '',
-      publishedISO: r.age || r.page_age || undefined,
+      // page_age is ISO; age is relative ("2 days ago"). Prefer the exact one.
+      publishedISO: normalizeHitDate(r.page_age) || normalizeHitDate(r.age),
       source: 'brave' as const,
     }));
   } catch {
@@ -399,7 +420,13 @@ export async function multiWebSearch(query: string, limit = 8, recent = false): 
     try {
       const u = new URL(h.url);
       const key = u.hostname + u.pathname;
-      if (seen.has(key)) continue;
+      if (seen.has(key)) {
+        // Same page from a second backend: keep the first copy, but take this
+        // one's date if the first had none, so it is not ranked as undated.
+        const first = dedup.find(d => { try { const v = new URL(d.url); return v.hostname + v.pathname === key; } catch { return false; } });
+        if (first && !first.publishedISO && h.publishedISO) first.publishedISO = h.publishedISO;
+        continue;
+      }
       seen.add(key);
       dedup.push(h);
     } catch {

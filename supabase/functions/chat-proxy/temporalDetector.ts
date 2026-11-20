@@ -5,6 +5,8 @@
 // "which hero is Clash Royale releasing" (no explicit "new" or "latest" keyword,
 // but clearly asking about current/upcoming content).
 
+import { RELEASE_STATUS_RX } from './freshness.ts';
+
 export interface TemporalSignal {
   isTemporal: boolean;
   reasons: string[];           // which patterns matched (for telemetry)
@@ -26,6 +28,10 @@ const TEMPORAL_PATTERNS: Array<{ rx: RegExp; reason: string }> = [
   { rx: /\b(today|right now|currently|at the moment|these days|nowadays)\b/i, reason: 'now-word' },
   // Release/date queries
   { rx: /\b(release date|when (?:did|does|will|is)|coming soon|announced)\b/i, reason: 'release-query' },
+  // "Is it out?", "has it come out", "did it release", "can I play it yet".
+  // Missing until 2026-11-20, so "is GTA 6 out?" the day after launch got the
+  // un-dated evergreen search and was answered from pre-release previews.
+  { rx: RELEASE_STATUS_RX, reason: 'release-status' },
   // "Which is the [X]" pattern — implies asking about current state
   { rx: /\bwhich (?:is|are|was) the\b/i, reason: 'which-is-the' },
   // Implicit temporal: "releasing", "added", "introduced"

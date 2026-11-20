@@ -28,7 +28,7 @@ const AUTHORITY_FLOOR: Record<string, number> = {
   'reddit': 4,
 };
 
-const OFFICIAL_DOMAIN_RX = /\b(supercell\.com|minecraft\.net|fortnite\.com|playvalorant\.com|leagueoflegends\.com|ea\.com|battle\.net|overwatch\.blizzard\.com|bungie\.net|callofduty\.com|hoyoverse\.com|riotgames\.com|krafton\.com|battlegroundsmobileindia\.com|pubgmobile\.com|epicgames\.com|clashroyale\.com|clashofclans\.com|brawlstars\.com|steampowered\.com|store\.steampowered\.com|xbox\.com|playstation\.com|nintendo\.com|ign\.com|polygon\.com|eurogamer\.net|pcgamer\.com|gamespot\.com|kotaku\.com|fandom\.com)\b/i;
+const OFFICIAL_DOMAIN_RX = /\b(supercell\.com|minecraft\.net|fortnite\.com|playvalorant\.com|leagueoflegends\.com|ea\.com|battle\.net|overwatch\.blizzard\.com|bungie\.net|callofduty\.com|hoyoverse\.com|riotgames\.com|krafton\.com|battlegroundsmobileindia\.com|pubgmobile\.com|epicgames\.com|clashroyale\.com|clashofclans\.com|brawlstars\.com|steampowered\.com|store\.steampowered\.com|xbox\.com|playstation\.com|nintendo\.com|ign\.com|polygon\.com|eurogamer\.net|pcgamer\.com|gamespot\.com|kotaku\.com|fandom\.com|wikipedia\.org|rockstargames\.com|take2games\.com|2k\.com|ubisoft\.com|bethesda\.net|blizzard\.com|activision\.com|capcom(?:-games)?\.com|square-enix\.com|bandainamcoent\.com|sega\.com|fromsoftware\.jp|cdprojekt\.com|cdprojektred\.com|larian\.com|valvesoftware\.com|news\.xbox\.com|blog\.playstation\.com)\b/i;
 
 export function rankBlocks(blocks: RankableBlock[], now = Date.now()): RankedBlock[] {
   return blocks.map(b => {
