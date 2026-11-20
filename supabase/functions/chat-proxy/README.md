@@ -45,7 +45,10 @@ SELECT public.gg_prune_usage_events();
 | `GROQ_DAILY_CAP` | optional | Default 1000. Raise when you upgrade. |
 | `CEREBRAS_DAILY_CAP` | optional | Default 800. |
 | `OPENROUTER_DAILY_CAP` | optional | Default 50; set ~1000 once the account holds credit. |
-| `SERPER_API_KEY` / `GOOGLE_CSE_ID` / `BRAVE_SEARCH_API_KEY` | optional | Better search recall. Free fallbacks run without them. |
+| `SERPER_API_KEY` | **strongly recommended** | Google results for live/current answers. Free: 2,500 searches/month. Without it, answers depend on flaky free scrapers and often have no live sources. |
+| `BRAVE_SEARCH_API_KEY` | optional | Second paid backend, for redundancy. |
+| `GOOGLE_CSE_ID` (+ `GOOGLE_API_KEY`) | optional | Third backend; 100 free/day. |
+| `SEARCH_PAID_DAILY_CAP` | optional | Default 75 paid searches/day per instance (fits Serper's free 2,500/month). When reached, paid backends are skipped until the next UTC day and the free ones carry on. `0` disables the cap; set it once you are on a paid plan. |
 
 ## Cost model
 

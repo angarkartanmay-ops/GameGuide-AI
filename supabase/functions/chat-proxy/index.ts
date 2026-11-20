@@ -1992,7 +1992,7 @@ async function fetchWebSearchForGame(game: string, prompt: string, timeoutMs = 3
 // anything too short to be a meaningful query.
 
 
-async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 3000): Promise<ScrapeBlock[]> {
+async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 3000, skipWebSearch = false): Promise<ScrapeBlock[]> {
   // Previously this returned [] whenever detection failed, which meant a title
   // the allowlist and extractor both missed got NO live context at all — the
   // exact case where training data is least trustworthy. Fall back to querying
@@ -2035,7 +2035,7 @@ async function omniScrape(game: string | null, _prompt: string, totalBudgetMs = 
           collect(fetchSteamNews(subject)),
           collect(fetchInvidious(subject)),
           collect(fetchGamingRSS(subject)),
-          collect(fetchWebSearchForGame(subject, _prompt, webSearchMs, recent)),
+          ...(skipWebSearch ? [] : [collect(fetchWebSearchForGame(subject, _prompt, webSearchMs, recent))]),
         ]
       : [
           collect(fetchWikipedia(subject)),
@@ -2979,8 +2979,8 @@ Deno.serve(async (req) => {
       getDiscoveredModels(registry),
       dbSchemaReady(),
       import('./webSearch.ts')
-        .then(m => m.getSearchBackendHealth())
-        .catch(() => ({} as Record<string, unknown>)),
+        .then(m => ({ backends: m.getSearchBackendHealth(), budget: m.getSearchBudget() }))
+        .catch(() => ({ backends: {}, budget: null } as Record<string, unknown>)),
     ]);
     // Report what will ACTUALLY route, not the deploy-time list. Discovery
     // supersedes the static registry per provider, so showing `registry` here
@@ -3016,10 +3016,14 @@ Deno.serve(async (req) => {
         configured: {
           'google-cse': !!(Deno.env.get('GOOGLE_CSE_API_KEY') || Deno.env.get('GOOGLE_API_KEY')) && !!Deno.env.get('GOOGLE_CSE_ID'),
           serper: !!Deno.env.get('SERPER_API_KEY'),
-          brave: !!Deno.env.get('BRAVE_API_KEY'),
-          searxng: !!Deno.env.get('SEARXNG_URL'),
+          // The name the adapter actually reads (this said BRAVE_API_KEY, so
+          // /health reported Brave as unconfigured with the key correctly set).
+          brave: !!Deno.env.get('BRAVE_SEARCH_API_KEY'),
+          searxng: true,   // public instances, no key needed
         },
-        lastSeen: searchHealth,
+        lastSeen: (searchHealth as any).backends ?? {},
+        // Paid-search usage on THIS instance today, against the daily cap.
+        budget: (searchHealth as any).budget ?? null,
       },
       // Which models are currently benched, and how much of today's free
       // allowance each one has already spent.
@@ -3557,7 +3561,9 @@ async function runChatPipeline(
     const omniBudget = profile.complexity === 'deep' ? OMNI_BUDGET_DEEP_MS : OMNI_BUDGET_MS;
     const omniPromise: Promise<ScrapeBlock[]> = shouldScrape
       ? (subjects.length
-          ? Promise.all(subjects.map(s => omniScrape(s, prompt, omniBudget))).then(r => r.flat())
+          // PULSE already runs the web search for the lead title; a second one
+          // here spent another paid search on near-identical results.
+          ? Promise.all(subjects.map((s, i) => omniScrape(s, prompt, omniBudget, i === 0 && !!pulseGame))).then(r => r.flat())
           : omniScrape(null, prompt, omniBudget))
       : Promise.resolve([]);
     const [pulse, omniBlocks, enriched] = await Promise.all([pulsePromise, omniPromise, enrichPromise]);

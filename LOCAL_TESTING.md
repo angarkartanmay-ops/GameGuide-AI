@@ -55,6 +55,11 @@ back empty. One free key, no card, fixes both the workhorse and recency.
 
 2500 free searches/month, no card: https://serper.dev
 
+One question costs about 2 searches (results are cached for 10 minutes and
+identical queries share one call), and `SEARCH_PAID_DAILY_CAP` (default 75)
+stops a busy day from spending the month's allowance. `GET /health` shows
+`search.configured`, `search.lastSeen` and `search.budget`.
+
 This repairs PULSE itself, which matters beyond recency — corroboration
 scoring needs multiple independent sources to judge confidence, and with zero
 sources every answer is marked low-confidence.

@@ -380,14 +380,76 @@ export async function braveSearch(query: string, limit = 6, timeoutMs = 4500, re
  *
  * Returns deduplicated results prioritizing paid/reliable sources.
  */
-export async function multiWebSearch(query: string, limit = 8, recent = false): Promise<SearchHit[]> {
+// ── Search budget ──────────────────────────────────────────────────────────
+// Serper's free tier is 2,500 searches a MONTH (~80/day) and Brave's and
+// Google CSE's are small too. Two protections keep a free key lasting:
+//
+//  * a result cache with in-flight de-duplication, so the same query asked
+//    twice (two users, a retry, PULSE and the game scraper) costs one search;
+//  * a daily cap on PAID backends. Past it, paid backends are skipped and
+//    the free ones (SearXNG, DuckDuckGo) carry on, so answers get worse
+//    rather than breaking, and the monthly allowance is never blown in a day.
+//
+// The counter is per edge isolate, so it is approximate (isolates are
+// recycled and may run in parallel); it is a guard rail, not an accountant.
+// Set SEARCH_PAID_DAILY_CAP=0 to disable the cap, e.g. on a paid plan.
+const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
+const searchCache = new Map<string, { ts: number; hits: Promise<SearchHit[]> }>();
+let paidDay = '';
+let paidCount = 0;
+
+function paidCap(): number {
+  const raw = Deno.env.get('SEARCH_PAID_DAILY_CAP');
+  const n = raw === undefined || raw === '' ? 75 : parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 75;
+}
+
+/** Reserve one paid-search slot for today. False once the cap is reached. */
+function takePaidSlot(): boolean {
+  const cap = paidCap();
+  if (cap === 0) return true;
+  const day = new Date().toISOString().slice(0, 10);
+  if (day !== paidDay) { paidDay = day; paidCount = 0; }
+  if (paidCount >= cap) return false;
+  paidCount++;
+  return true;
+}
+
+function paidConfigured(): boolean {
+  return !!(envKey('SERPER_API_KEY') || envKey('BRAVE_SEARCH_API_KEY') || (envKey('GOOGLE_CSE_API_KEY', 'GOOGLE_API_KEY') && envKey('GOOGLE_CSE_ID')));
+}
+
+export function getSearchBudget(): { paidUsedToday: number; paidDailyCap: number; paidConfigured: boolean } {
+  const day = new Date().toISOString().slice(0, 10);
+  return { paidUsedToday: day === paidDay ? paidCount : 0, paidDailyCap: paidCap(), paidConfigured: paidConfigured() };
+}
+
+export function multiWebSearch(query: string, limit = 8, recent = false): Promise<SearchHit[]> {
+  const key = `${recent ? 'r' : 'a'}|${limit}|${query.toLowerCase().replace(/\s+/g, ' ').trim()}`;
+  const hit = searchCache.get(key);
+  if (hit && Date.now() - hit.ts < SEARCH_CACHE_TTL_MS) return hit.hits;
+  const hits = runWebSearch(query, limit, recent);
+  searchCache.set(key, { ts: Date.now(), hits });
+  // An empty result is usually a transient failure; don't pin it for 10 min.
+  hits.then(h => { if (!h.length) searchCache.delete(key); }, () => searchCache.delete(key));
+  if (searchCache.size > 200) {
+    const oldest = [...searchCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
+    if (oldest) searchCache.delete(oldest[0]);
+  }
+  return hits;
+}
+
+async function runWebSearch(query: string, limit: number, recent: boolean): Promise<SearchHit[]> {
   // Fire ALL sources in parallel — take the best results from whichever responds.
   // `recent` narrows each backend to a recency window; leave it false for
   // evergreen queries so older-but-authoritative guides stay reachable.
+  const usePaid = !paidConfigured() || takePaidSlot();
+  if (!usePaid) console.warn(`[WEB-SEARCH] paid search daily cap (${paidCap()}) reached; using free backends only until tomorrow`);
+  const none = Promise.resolve([] as SearchHit[]);
   const [gcse, serp, brv, sx, ddg] = await Promise.allSettled([
-    googleCSESearch(query, limit, undefined, recent),
-    serperSearch(query, limit, undefined, recent),
-    braveSearch(query, limit, undefined, recent),
+    usePaid ? googleCSESearch(query, limit, undefined, recent) : none,
+    usePaid ? serperSearch(query, limit, undefined, recent) : none,
+    usePaid ? braveSearch(query, limit, undefined, recent) : none,
     searxngSearch(query, limit, undefined, recent),
     duckduckgoSearch(query, limit, undefined, recent),
   ]);

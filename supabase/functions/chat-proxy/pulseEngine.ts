@@ -28,6 +28,7 @@ interface PulseResult {
   topBlocks?: RankedBlock[];
 }
 
+const PULSE_MAX_QUERIES = 2;
 const PULSE_CACHE = new Map<string, { ts: number; result: PulseResult }>();
 const PULSE_TTL_MS = 8 * 60 * 1000; // 8 min (reduced from 10 for fresher data)
 
@@ -100,8 +101,10 @@ export async function runPulse(
       searchQueries.push(`${game} ${sig.subject} ${yyyy_mm}`);
     } else if (game) {
       searchQueries.push(`${game} latest news ${currentMonth} ${currentYear}`);
-      searchQueries.push(`${game} new update ${currentYear}`);
+      // The user's actual question second: only two queries run (see below),
+      // and "is gta 6 out" matters more than a generic "new update" variant.
       searchQueries.push(`${game} ${promptForSearch}`);
+      searchQueries.push(`${game} new update ${currentYear}`);
     } else {
       searchQueries.push(`${promptForSearch} ${currentYear}`);
       searchQueries.push(`${promptForSearch} latest`);
@@ -132,7 +135,10 @@ export async function runPulse(
   // Recency clamping only for temporal queries. Evergreen questions need the
   // full index — the best lore/build/boss guides are often years old.
   const searchResults = await Promise.allSettled(
-    uniqueQueries.slice(0, 4).map(q => multiWebSearch(q, 6, isTemporal))
+    // Two queries, not four. Each one is a billable call on every paid search
+    // backend, and the third and fourth variants returned mostly the same
+    // pages; two (a news angle and the user's own question) keep the recall.
+    uniqueQueries.slice(0, PULSE_MAX_QUERIES).map(q => multiWebSearch(q, 6, isTemporal))
   );
 
   // Collect all hits, dedup by URL
