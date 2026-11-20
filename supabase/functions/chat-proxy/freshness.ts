@@ -132,6 +132,11 @@ export function isReleaseStatusQuestion(prompt: string): boolean {
 // Wording that marks a date as still to come at the time of writing.
 const FUTURE_CUE_RX = /\b(?:set\s+to|scheduled\s+(?:to|for)|slated\s+(?:to|for)|will\s+(?:be\s+)?(?:release|launch|arrive|come|hit|drop|go\s+live|be\s+available|be\s+out)|(?:is|are)\s+(?:coming|due|expected|planned|launching|releasing|arriving)|coming\s+(?:out\s+)?(?:on|in)|due\s+(?:out\s+)?(?:on|in)|expected\s+(?:to|on|in)|planned\s+for|targeting|aims?\s+(?:to|for)|delayed\s+(?:to|until|into)|pushed\s+(?:back\s+)?(?:to|into|until)|moved\s+to|now\s+(?:set|launching|releasing|arriving)|launch(?:es|ing)?\s+(?:on|in)|releas(?:es|ing)\s+(?:on|in)|arriv(?:es|ing)\s+(?:on|in)|upcoming|pre-?orders?|countdown|until\s+(?:the\s+)?(?:release|launch)|ahead\s+of\s+(?:its\s+)?(?:release|launch))\b/i;
 
+// Present-tense verbs written directly before the date, "launches November 18".
+// Anchored to the end of the text before the date, and "launched" (past) does
+// not match because the verb must be followed only by an optional on/in.
+const FUTURE_CUE_END_RX = /\b(?:launch(?:es|ing)?|releas(?:es|ing)|arriv(?:es|ing)|drops?|goes\s+live|begins?|starts?|ends?|kicks?\s+off)(?:\s+(?:on|in|from))?\s*$/i;
+
 interface FoundDate { ms: number; endMs: number; text: string; index: number; precise: boolean; }
 
 const DMY_RX = new RegExp(String.raw`\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(${MONTH_ALT})\.?,?\s+(20\d\d)\b`, 'gi');
@@ -214,7 +219,7 @@ export function findElapsedFutureDates(text: string, todayISO: string, max = 6):
       text.lastIndexOf('. ', d.index), text.lastIndexOf('\n', d.index), d.index - 160,
     ) + 1;
     const before = text.slice(sentStart, d.index);
-    if (!FUTURE_CUE_RX.test(before)) continue;
+    if (!FUTURE_CUE_RX.test(before) && !FUTURE_CUE_END_RX.test(before)) continue;
     const iso = isoDay(d.endMs);
     const key = `${iso}|${before.slice(-60).toLowerCase()}`;
     if (seen.has(key)) continue;

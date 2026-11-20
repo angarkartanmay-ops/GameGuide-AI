@@ -117,6 +117,11 @@ for (const q of [
   eq('nothing to flag, no block', buildElapsedDatesBlock('A great game released on 17 September 2013.', TODAY), '');
 }
 
+// Not GTA-specific: any game, any phrasing.
+check('"Season 9 launches November 18, 2026" flagged', findElapsedFutureDates('Season 9 launches November 18, 2026 with a new map.', TODAY).length === 1);
+check('"launched on" (past tense) not flagged', findElapsedFutureDates('Season 8 launched on November 18, 2026 to praise.', TODAY).length === 0);
+check('"The expansion is coming on 12 October 2026" flagged', findElapsedFutureDates('The expansion is coming on 12 October 2026.', TODAY).length === 1);
+
 // ── 4. The date is always in the prompt ────────────────────────────────────
 {
   const short = buildDateGrounding(TODAY, { full: false });
